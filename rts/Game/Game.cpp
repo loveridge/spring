@@ -1104,6 +1104,9 @@ int CGame::KeyPressed(int keyCode, int scanCode, bool isRepeat)
 
 	lastActionList = keyBindings.GetActionList(curKeyCodeChain, curScanCodeChain);
 
+	if (RmlGui::ProcessKeyPressed(keyCode, scanCode, isRepeat))
+		return 0;
+
 	if (gameTextInput.ConsumePressedKey(keyCode, scanCode, lastActionList))
 		return 0;
 
@@ -1144,6 +1147,9 @@ int CGame::KeyPressed(int keyCode, int scanCode, bool isRepeat)
 int CGame::KeyReleased(int keyCode, int scanCode)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (RmlGui::ProcessKeyReleased(keyCode, scanCode))
+		return 0;
+
 	if (gameTextInput.ConsumeReleasedKey(keyCode, scanCode))
 		return 0;
 
@@ -1179,6 +1185,9 @@ int CGame::KeyMapChanged()
 int CGame::TextInput(const std::string& utf8Text)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	if (RmlGui::ProcessTextInput(utf8Text))
+		return 0;
+
 	if (eventHandler.TextInput(utf8Text))
 		return 0;
 
