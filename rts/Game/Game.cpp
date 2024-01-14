@@ -1569,6 +1569,7 @@ bool CGame::Draw() {
 		DrawInputReceivers();
 		DrawInputText();
 		DrawInterfaceWidgets();
+		RmlGui::RenderFrame();
 		mouse->DrawCursor();
 
 		eventHandler.DrawScreenPost();
@@ -1576,7 +1577,6 @@ bool CGame::Draw() {
 
 	glEnable(GL_DEPTH_TEST);
 	glLoadIdentity();
-	RmlGui::RenderFrame();
 
 	if (videoCapturing->AllowRecord()) {
 		videoCapturing->SetLastFrameTime(globalRendering->lastFrameTime = 1000.0f / GAME_SPEED);
