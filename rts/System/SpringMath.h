@@ -75,6 +75,16 @@ bool RayHitsSphere(const float4 sphere, const float3 p0, const float3 ray) _pure
  */
 bool RayAndPlaneIntersection(const float3& p0, const float3& p1, const float4& plane, bool directional, float3& px);
 
+/**
+ * @brief Returns the closest point of a ray intersection with a sphere
+ * @param ray float3 the start point of the ray
+ * @param direction float3 the direction of the ray
+ * @param center float3 the center of the sphere
+ * @param radius the radius of the sphere
+ * @param px the intersection point
+ * @return true if px is valid and the intersection point has been found, false otherwise
+ */
+bool RayAndSphereIntersection(const float3& ray, const float3& direction, const float4& center, float radius, float3& px);
 
 /**
  * @brief Returns the line result of the intersection of two planes

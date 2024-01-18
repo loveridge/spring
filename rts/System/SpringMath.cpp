@@ -269,6 +269,33 @@ bool RayAndPlaneIntersection(const float3& p0, const float3& p1, const float4& p
 	return true;
 }
 
+// https://cplusplus.com/forum/general/279409/
+bool RayAndSphereIntersection(const float3& ray, const float3& direction, const float4& center, float radius, float3& px)
+{
+	float3 distance = ray - center;
+	float a = direction.dot(direction);
+	float b = 2 * direction.dot(distance);
+	float c = distance.dot(distance) - radius * radius;
+	double discriminant = b * b - 4 * a * c;
+
+	if (discriminant < 0) {
+		return false;
+	}
+	else if ( discriminant > 0 ) {
+		double t = ( -b + std::sqrt(discriminant) ) / ( 2 * a );
+		double t2 = -b / a - t;
+		if ( std::abs(t2) < std::abs(t) ) {
+			t = t2;
+		}
+		px =  ray + t * direction;
+		return true;
+	}
+	else {
+		px = ray + (-0.5 * b / a) * direction;
+		return true;
+	}
+}
+
 bool ClampLineInMap(float3& start, float3& end)
 {
 	const float3 dir = end - start;
