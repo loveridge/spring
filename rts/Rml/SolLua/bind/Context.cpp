@@ -250,6 +250,9 @@ sol::table openDataModel(Rml::Context& self, const Rml::String& name, sol::objec
 	obj_table["__SetDirty"] = ([data](sol::object t, const std::string& key) {
 			data->Handle.DirtyVariable(key);
 		});
+	obj_table["__GetTable"] = ([data](sol::object t) {
+			return data->Table;
+		});
 	obj_table[sol::metatable_key] = obj_metatable;
 
 	return obj_table;
