@@ -222,7 +222,11 @@ void CIconHandler::Update()
 
 		//atlas.DumpTexture();
 		glDeleteTextures(1, &atlasTextureIDs[i]);
-		atlasTextureIDs[i] = atlas.DisownTexture();
+		atlasTextureIDs[i] = 0;
+
+		// only makes sense in case of valid atlas
+		if (res)
+			atlasTextureIDs[i] = atlas.DisownTexture();
 
 		atlasNeedsUpdate.reset(i);
 	}
