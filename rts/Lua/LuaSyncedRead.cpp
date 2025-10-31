@@ -1658,16 +1658,13 @@ int LuaSyncedRead::GetAllyTeamList(lua_State* L)
  */
 int LuaSyncedRead::GetTeamList(lua_State* L)
 {
-	const int args = lua_gettop(L); // number of arguments
-
-	if ((args != 0) && ((args != 1) || !lua_isnumber(L, 1)))
-		luaL_error(L, "Incorrect arguments to GetTeamList([allyTeamID])");
-
-
 	int allyTeamID = -1;
 
-	if (args == 1) {
-		allyTeamID = lua_toint(L, 1);
+	const int args = lua_gettop(L); // number of arguments
+
+	// peek the first argument, but gracefully ignore the rest
+	if (args >= 1) {
+		allyTeamID = luaL_checkinteger(L, 1);
 		if (!teamHandler.IsValidAllyTeam(allyTeamID))
 			return 0;
 	}
