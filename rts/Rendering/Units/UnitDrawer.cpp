@@ -397,9 +397,10 @@ void CUnitDrawerGLSL::DrawUnitMiniMapIcons() const
 	const auto myAllyTeam = gu->myAllyTeam;
 	const auto isFullView = gu->spectatingFullView;
 	const float ghostIconDimming = modelDrawerData->ghostIconDimming;
+	const auto defIconIdx = icon::iconHandler.GetDefaultIconIdx();
 
 	for (auto* unit : modelDrawerData->GetUnsortedObjects()) {
-		const size_t iconIndex = minimap->UseUnitIcons() ? unit->currentIconIndex : icon::iconHandler.GetDefaultIconIdx();
+		const size_t iconIndex = minimap->UseUnitIcons() ? unit->currentIconIndex : defIconIdx;
 
 		if (iconIndex == icon::INVALID_ICON_INDEX)
 			continue;
