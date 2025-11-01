@@ -1613,7 +1613,7 @@ int LuaSyncedRead::GetMapStartPositions(lua_State* L)
 		lua_pushnumber(L, pos.x); lua_rawseti(L, -2, 1);
 		lua_pushnumber(L, pos.y); lua_rawseti(L, -2, 2);
 		lua_pushnumber(L, pos.z); lua_rawseti(L, -2, 3);
-		lua_rawseti(L, -2, 1 + teamNum); // [i] = {x,y,z}
+		lua_rawseti(L, -2, teamNum); // [i] = {x,y,z}
 		return true;
 	});
 
