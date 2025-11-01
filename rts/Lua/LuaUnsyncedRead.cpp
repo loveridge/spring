@@ -4861,10 +4861,12 @@ int LuaUnsyncedRead::GetGroundDecalTextures(lua_State* L)
 	if (!lua_isnoneornil(L, 1))
 		isMainTex = luaL_checkboolean(L, 1);
 
+	const auto pushFileNames = luaL_optboolean(L, 2, false);
+
 	const auto& texNames = groundDecals->GetDecalTextures(isMainTex);
 	LuaUtils::PushStringVector(L, texNames);
 
-	if (!luaL_optboolean(L, 2, false))
+	if (!pushFileNames)
 		return 1;
 
 	const auto& texFileNames = groundDecals->GetDecalTextureFileNames(texNames);
