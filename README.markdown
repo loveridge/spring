@@ -1,6 +1,6 @@
 # Recoil is an open source real time strategy game engine
 
-Visit the [Official Website](https://beyond-all-reason.github.io/RecoilEngine/)
+Visit the [Official Website](https://recoilengine.org)
 
 ### Get the engine sources
 
