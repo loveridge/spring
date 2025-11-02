@@ -871,7 +871,8 @@ void CGroundDecalHandler::MoveSolidObject(const CSolidObject* object, const floa
 	const auto createFrame = static_cast<float>(std::max(gs->frameNum, 0));
 
 	if (const auto doIt = decalOwners.find(object); doIt != decalOwners.end()) {
-		auto& decal = decals.at(doIt->second);
+		assert(doIt->second < decals.size());
+		auto& decal = decals[doIt->second];
 		decal.posTL = posTL;
 		decal.posTR = posTR;
 		decal.posBR = posBR;
@@ -936,7 +937,8 @@ void CGroundDecalHandler::RemoveSolidObject(const CSolidObject* object, const Gh
 		return;
 	}
 
-	auto& decayingDecal = decals.at(pos);
+	assert(pos < decals.size());
+	auto& decayingDecal = decals[pos];
 
 	// we only care about DECAL_PLATE decals below
 	if (decayingDecal.info.type != static_cast<uint8_t>(GroundDecal::Type::DECAL_PLATE)) {
@@ -967,7 +969,8 @@ void CGroundDecalHandler::GhostDestroyed(const GhostSolidObject* gb) {
 	if (doIt == decalOwners.end())
 		return;
 
-	auto& decal = decals.at(doIt->second);
+	assert(doIt->second < decals.size());
+	auto& decal = decals[doIt->second];
 	// just in case
 	if (decal.info.type != static_cast<uint8_t>(GroundDecal::Type::DECAL_PLATE))
 		return;
@@ -1024,7 +1027,8 @@ bool CGroundDecalHandler::DeleteLuaDecal(uint32_t id)
 	if (it == idToPos.end())
 		return false;
 
-	auto& decal = decals.at(it->second);
+	assert(it->second < decals.size());
+	auto& decal = decals[it->second];
 	if (!decal.IsValid())
 		return false;
 
@@ -1044,7 +1048,8 @@ GroundDecal* CGroundDecalHandler::GetDecalById(uint32_t id)
 	if (it == idToPos.end())
 		return nullptr;
 
-	auto& decal = decals.at(it->second);
+	assert(it->second < decals.size());
+	auto& decal = decals[it->second];
 	if (!decal.IsValid())
 		return nullptr;
 
@@ -1059,7 +1064,8 @@ const GroundDecal* CGroundDecalHandler::GetDecalById(uint32_t id) const
 	if (it == idToPos.end())
 		return nullptr;
 
-	const auto& decal = decals.at(it->second);
+	assert(it->second < decals.size());
+	const auto& decal = decals[it->second];
 	if (!decal.IsValid())
 		return nullptr;
 
@@ -1073,7 +1079,8 @@ bool CGroundDecalHandler::SetDecalTexture(uint32_t id, const std::string& texNam
 	if (it == idToPos.end())
 		return false;
 
-	auto& decal = decals.at(it->second);
+	assert(it->second < decals.size());
+	auto& decal = decals[it->second];
 	if (!decal.IsValid())
 		return false;
 
@@ -1101,7 +1108,8 @@ std::string CGroundDecalHandler::GetDecalTexture(uint32_t id, bool mainTex) cons
 	if (it == idToPos.end())
 		return "";
 
-	const auto& decal = decals.at(it->second);
+	assert(it->second < decals.size());
+	const auto& decal = decals[it->second];
 	if (!decal.IsValid())
 		return "";
 
@@ -1172,12 +1180,13 @@ const CSolidObject* CGroundDecalHandler::GetDecalSolidObjectOwner(uint32_t id) c
 		if (!std::holds_alternative<const CSolidObject*>(owner))
 			continue;
 
-		const auto& decal = decals.at(pos);
+		assert(pos < decals.size());
+		const auto& decal = decals[pos];
 
 		if (!decal.IsValid())
 			continue;
 
-		if (id != decals.at(pos).info.id)
+		if (id != decals[pos].info.id)
 			continue;
 
 		return std::get<const CSolidObject*>(owner);
@@ -1314,7 +1323,8 @@ void CGroundDecalHandler::AddTrack(const CUnit* unit, const float3& newPos, bool
 	if (!forceEval && createFrameInt % TRACKS_UPDATE_RATE != 0)
 		return;
 
-	GroundDecal& oldDecal = decals.at(doIt->second);
+	assert(doIt->second < decals.size());
+	GroundDecal& oldDecal = decals[doIt->second];
 
 	// just updated
 	if (oldDecal.createFrameMax == createFrame)
@@ -1450,7 +1460,8 @@ void CGroundDecalHandler::CompactDecalsVector(int frameNum)
 
 	// Remove owners of expired items
 	for (const auto& [owner, pos] : decalOwners) {
-		if (const auto& decal = decals.at(pos); decal.IsValid()) {
+		assert(pos < decals.size());
+		if (const auto& decal = decals[pos]; decal.IsValid()) {
 			const uint32_t id = decal.info.id; //can't use bitfield directly below
 			tmpOwnerToId.emplace(id, owner);
 		}
@@ -1515,7 +1526,8 @@ void CGroundDecalHandler::UpdateDecalsVisibility()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	for (const auto& [owner, pos] : decalOwners) {
-		auto& decal = decals.at(pos);
+		assert(pos < decals.size());
+		auto& decal = decals[pos];
 
 		if (decal.info.type != static_cast<uint8_t>(GroundDecal::Type::DECAL_PLATE))
 			continue;
@@ -1567,7 +1579,9 @@ void CGroundDecalHandler::UpdateDecalsVisibility()
 			assert(false);
 			continue;
 		}
-		auto& decal = decals.at(it->second);
+
+		assert(it->second < decals.size());
+		auto& decal = decals[it->second];
 
 		const float currAlpha = decal.alpha - (curAdjustedFrame - decal.createFrameMax) * decal.alphaFalloff;
 		if (currAlpha <= 0.0f)
