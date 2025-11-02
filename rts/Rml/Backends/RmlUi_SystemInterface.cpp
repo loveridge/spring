@@ -119,7 +119,6 @@ void RmlSystemInterface::GetClipboardText(Rml::String& text)
 
 void RmlSystemInterface::JoinPath(Rml::String& translated_path, const Rml::String& document_path, const Rml::String& path)
 {
-
     Rml::SystemInterface::JoinPath(translated_path, document_path, path);
     this->documentPathRequests[document_path].emplace_back(translated_path);
 }
