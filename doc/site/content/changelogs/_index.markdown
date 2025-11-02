@@ -179,6 +179,11 @@ Numberless `animParams` used as a fallback.
 - add synced `Spring.SetPlayerReadyState(playerID, bool ready) -> bool ok`.
 - add unsynced `Spring.RequestStartPosition(x, y, z, bool? ready) -> nil`, sends a request to start at given position. Equivalent to the native picker.
 
+### RmlUi
+
+- added `RmlUi.GetDocumentPathRequests` which tracks all of the files opened by an RmlUi LoadDocument call
+- added `RmlUi.ClearDocumentPathRequests` to clear tracked LoadDocument files
+
 ### Misc
 
 - add a dimensionless Scale operator to unit scripts. No ancillaries such as WaitForScale though.
