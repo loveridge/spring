@@ -1083,7 +1083,13 @@ bool CGroundDecalHandler::SetDecalTexture(uint32_t id, const std::string& texNam
 	if (newOffset == AtlasedTexture::DefaultAtlasTexture)
 		return false;
 
-	offset = static_cast<float4>(newOffset);
+	const auto newOffsetf4 = static_cast<float4>(newOffset);
+
+	// micro optimization
+	if (newOffsetf4 == offset)
+		return true;
+
+	offset = newOffsetf4;
 	decalsUpdateList.SetUpdate(it->second);
 	return true;
 }
@@ -1101,7 +1107,8 @@ std::string CGroundDecalHandler::GetDecalTexture(uint32_t id, bool mainTex) cons
 
 	const auto& offset = mainTex ? decal.texMainOffsets : decal.texNormOffsets;
 
-	for (auto& [name, _] : atlasTex->GetAllocator()->GetEntries()) {
+	const auto& nameToUST = atlasTex->GetNameToUniqueSubTexMap();
+	for (auto& [name, _] : nameToUST) {
 		const auto at = static_cast<float4>(atlasTex->GetTexture(name));
 		if (at == offset)
 			return name;
@@ -1123,7 +1130,9 @@ const std::vector<std::string> CGroundDecalHandler::GetDecalTextures(const std::
 	};
 
 	std::vector<std::string> ret;
-	for (auto& [name, _] : atlasTex->GetAllocator()->GetEntries()) {
+
+	const auto& nameToUST = atlasTex->GetNameToUniqueSubTexMap();
+	for (const auto& [name, ust] : nameToUST) {
 		if (!mainTex.has_value()) {
 			ret.emplace_back(name);
 			continue;
