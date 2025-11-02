@@ -11,6 +11,8 @@ See [the 2025.04 page]({{% ref "changelogs/changelog-2025-04" %}}) for the upcom
 ## Caveats
 
 - unit shaders receive TRS transforms instead of matrices, breaking shaders. See the "Smooth script piece animations" section below.
+- non-turreted units now rotate themselves to face the target if needed. See below for details.
+- removed `^123` style texture referencing for unit def icons for `gl.Texture` and similar interfaces. There is a new set of icon-related callouts, see below.
 - removed Python bindings for AI. Apparently unmaintained and unused.
 - removed `UpdateWeaponVectorsMT`, `UpdateBoundingVolumeMT`, and `AnimationMT` springsettings. These were just in case, but MT seems safe enough after some time live testing.
 - removed `/AdvModelShading` command and the `AdvUnitShading` springsetting, the adv mode is now always on. In practice there wasn't any difference since GLSL became mandatory.
@@ -27,6 +29,8 @@ See [the 2025.04 page]({{% ref "changelogs/changelog-2025-04" %}}) for the upcom
 - area resurrect command now puts a leash on repair sub-commands (behaviour change, but also the repair subcommands now have 5 args instead of 1).
 - widgets can now sign up to receive the `widget:Explosion` callin. There are some arcane visibility rules that boil down to it revealing much more info than the existing `widget:ShockFront` callin.
 - removed the 10 mutator limit, can now have arbitrarily many (this may affect lobbies, autohosts etc who may have assumed the limit).
+- rmlUI textures use nearest pixel filtering instead of linear. The intended effect is crisper text with anti-aliasing.
+- `Spring.SetProjectileTarget` now errors on invalid args instead of silently ignoring.
 - fully removed support for 32-bit builds.
 
 ### Deprecation notice
@@ -41,6 +45,23 @@ See [the 2025.04 page]({{% ref "changelogs/changelog-2025-04" %}}) for the upcom
 - deprecated the `ghostedBuildings` engineoption. You can read it manually as a modoption and set every unitdef not to leave ghosts.
 
 ## Features
+
+### Non-turreted units rotate towards target
+
+A set of changes aimed to help develop melee units.
+
+- units with non-turreted weapons will try to face the target, if all other weapons fail to pass targeting checks. This happens both within the unit's range (frequently) and outside of it (less frequently).
+- angle fire tolerance checks won't apply in case the aimpoint is clipped inside the target (doesn't happen in all cases, so the tolerance is still something to be aware of of for CQB weapons / units).
+- non-turreted non-front oriented weapons won't be handled correctly by the change above for now.
+- there could be unknown side effects. It's a test change.
+
+### Icon atlases
+
+- `gl.Texture` and alike no longer supports referencing icon textures via `^123` (unit def ID).
+- icons atlas can now be specified right from `gamedata/icontypes.lua` (FIXME how?). This way the atlas is not built but loaded.
+- `Spring.AddUnitIcon` can now operate with sub coordinates in case of atlased input texture (args 6-9 are now u0, v0, u1, v1 respectively).
+- add `$icons` aka `$icons0`, and `$icons1` textures. They respectively represent the initial icons atlas as seen during the game load and a possible atlas that is created for some of the icons got replaced.
+- add `Spring.GetUnitIconData`, `Spring.GetIconData`, `Spring.GetAllIconData` to mostly get the atlas coordinates. See the API listing for details, the exact interface is still subject to change.
 
 ### Camera callins
 
@@ -136,6 +157,11 @@ Numberless `animParams` used as a fallback.
 - add `Script.SetWatchExplosion(weaponDefID, bool)`, and the corresponding Get, to unsynced.
 - widgets can now receive the `Explosion` callin, same arguments as the gadget one but can't use the return value to block the CEG. There are some arcane visibility rules (that include the visibility of the explosion's CEG) that boil down to it revealing a bit more info than the existing `widget:ShockFront` callin which used to fulfil a similar role.
 
+### Team unit limits
+
+- add `Spring.TransferTeamMaxUnits(fromTeam, toTeam, amount) -> bool success`, transfers max unit limit across teams.
+- add 4th optional boolean arg to `Spring.TransferUnit(unitID, teamID, bool? given, bool? transferLimit)`, default false. If true, also adjusts both teams' unit limit by 1, making it possible for the transfer to work even if both teams are at limit.
+
 ### Death metal
 
 - add `Spring.CreateUnitWreck(unitID, int? wreckLevel = 1, bool? emitSmoke = true) → featureID?`. Creates a wreck as if the unit died.
@@ -147,11 +173,22 @@ Numberless `animParams` used as a fallback.
 - add the corresponding getters (`Spring.GetFeatureFireTime`, `Spring.GetFeatureSmokeTime`) for the above.
 
 ### RmlUi
+
 - added `RmlUi.GetDocumentPathRequests(string docPath) -> {"filePath", "filePath", ...}` which tracks all of the files opened by an RmlUi LoadDocument call
 - added `RmlUi.ClearDocumentPathRequests(string docPath) -> nil` to clear tracked LoadDocument files
 
+### Pre-game phase control
+
+- add `system.useStartPositionSelecter` bool modrule. If false, engine won't eat clicks on startbox during the placement phase.
+- add synced `Spring.SetTeamStartPosition(teamID, x, y, z) -> bool ok`.
+- add synced `Spring.SetPlayerReadyState(playerID, bool ready) -> bool ok`.
+- add unsynced `Spring.RequestStartPosition(x, y, z, bool? ready) -> nil`, sends a request to start at given position. Equivalent to the native picker.
+
 ### Misc
 
+- add a dimensionless Scale operator to unit scripts. No ancillaries such as WaitForScale though.
+- add `Spring.GetPieceProjectileName(pieceProjectileID) -> string name`. Returns the name of the source piece for a piece projectile ("body", "turret" etc). Nil for non-piece projectiles.
+- add `Spring.GetAllProjectiles(bool excludeWeaponProjs = false, bool excludeWeaponProjs = false) -> { proID, proID, ...}`.
 - removed the 10 mutator limit, can now have arbitrarily many.
 - add `accurateLeading` numerical unit weapon tag (note, not weaponDef). Controls how many extra accuracy iterations are done when calculating shots.
 0: current behaviour (single iteration, fails to hit at large speed disparities and/or weird angles).
@@ -166,6 +203,7 @@ Note that the calculation always stops when 1-frame resolution accuracy is achie
 - `BeamLaser` and `LightningCannon` now obey ellipsoid and/or cylinder target volumes correctly.
 - immobile units that `canKamikaze` no longer disregard the `blocking` unit def tag.
 - add 'system.nativeExcessSharing' modrule, controls whether the resource sharing level (aka "red slider") applies. Note that this also prevents excess from flowing back to the allyteam. If you want excess to flow to allies and only block changing the share level, use the existing `gadget:AllowResourceLevel`.
+- add `Game.nativeExcessResource` to read back the above.
 - add `MiniMapDrawPings` boolean springsetting, defaults to true. Whether engine renders pulsating white squares on the minimap when a label is placed.
 - if a factory "changes" a build order into a build order of the same type (e.g. by using command insert) it no longer resets build progress.
 - `/group add N` no longer selects the entire group, just adds. `/groupN` (without space) unaffected. Feature support tag: `Engine.FeatureSupport.groupAddDoesntSelect`.
@@ -175,6 +213,7 @@ Note that the calculation always stops when 1-frame resolution accuracy is achie
 - add a second bool arg and an optional second return value to `Spring.GetGroundDecalTextures(bool? mainTex, bool? alsoFilenames = false) → string[] textures, string[]? filenames`.
 - add `mouse2` to `mouse10` "keys" for mousebuttons that can be bound, ditto `sc_mouse2-10` scancodes.
   LMB (`mouse1`/`sc_mouse1`) is planned to be made bindable later.
+- rmlUI textures use nearest pixel filtering instead of linear. The intended effect is crisper text with anti-aliasing.
 - added `DWMFlush` numerical springsetting, for Windows only. Forces Windows Desktop Compositors DWMFlush before each SDL_GL_SwapWindow,
 preventing dropped frames (use nVidias FrameView to validate dropped frames, or BARs Jitter Timer widget).
 Value of 1 does DWMFlush before SwapBuffers, value of 2 does DWMFlush after swapbuffers.
@@ -182,10 +221,20 @@ Value of 1 does DWMFlush before SwapBuffers, value of 2 does DWMFlush after swap
 - `/smoothmesh` renderer stays enabled even if you disable cheats.
 - trying to set a deprecated/nonexistent springsetting via Lua now produces a warning.
 - `/give` now gives a correct hint for @x,y,z usage.
+- `Spring.GetTeamList(allyTeamID?)` no longer crashes if it receives 2+ args (but still ignores them, you can't get the combined team list of multiple allyteams).
 - added `GL.TEXTURE_2D_ARRAY` Lua constant.
+- `Spring.SetProjectileTarget` now errors on invalid args.
 
 ## Fixes
 
+- fix the "no sound when removing bluetooth headphones" issue.
+- fix texture overrides for tex1 and tex2 for GLTF models not being read from `*.gltf.lua` metafile.
+- maybe fixed a rare bug of using an incorrect parser for model assets.
+- fix incorrect number of CPUs being detected on Linux with offline CPUs.
+- fix a crash when more than 2048 unit defs exist.
+- fix units who expected to path entirely within an exit-only zone but exited it getting confused.
+- probably fix an icons rendering related crash.
+- fix `Spring.GetMapStartPositions` returning teamIDs offset by 1.
 - fixed crashing aircraft sometimes bouncing off the ground without dying.
 - disabling cheats no longer disables debug airmesh view.
 - fix RmlUi crash when reloading stylesheets with documents containing scripts in head section.
