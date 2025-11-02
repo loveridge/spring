@@ -146,6 +146,10 @@ Numberless `animParams` used as a fallback.
 - add `Spring.SetFeatureSmokeTime(featureID, smokeTime)`, makes the feature emit smoke (similar to freshly killed wrecks) for that many seconds. Note that smoke size is proportional to time remaining.
 - add the corresponding getters (`Spring.GetFeatureFireTime`, `Spring.GetFeatureSmokeTime`) for the above.
 
+### RmlUi
+- added `RmlUi.GetDocumentPathRequests` which tracks all of the files opened by an RmlUi LoadDocument call
+- added `RmlUi.ClearDocumentPathRequests` to clear tracked LoadDocument files
+
 ### Misc
 
 - removed the 10 mutator limit, can now have arbitrarily many.
