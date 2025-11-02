@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <array>
 #include <optional>
 
 #include "Decals/GroundDecal.h"
@@ -26,6 +27,10 @@ public:
 	virtual void DumpAtlasTextures() = 0;
 
 	virtual void Draw() = 0;
+
+	virtual uint32_t GetTexID() const = 0;
+	virtual uint32_t GetTexTarget() const = 0;
+	virtual std::array<uint32_t, 3> GetTexSize() const = 0;
 
 	virtual uint32_t CreateLuaDecal() = 0;
 	virtual bool DeleteLuaDecal(uint32_t id) = 0;
@@ -66,6 +71,10 @@ public:
 	void DumpAtlasTextures() override {}
 
 	void Draw() override {}
+
+	uint32_t GetTexID() const override { return 0; }
+	uint32_t GetTexTarget() const override { return 0; }
+	std::array<uint32_t, 3> GetTexSize() const override { return std::array<uint32_t, 3>{0}; }
 
 	void AddSolidObject(const CSolidObject* object) override {}
 	void ForceRemoveSolidObject(const CSolidObject* object) override {}

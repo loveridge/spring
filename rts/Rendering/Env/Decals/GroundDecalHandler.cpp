@@ -814,6 +814,30 @@ void CGroundDecalHandler::Draw()
 	UnbindTextures();
 }
 
+std::array<uint32_t, 3> CGroundDecalHandler::GetTexSize() const
+{
+	if (!atlasTex)
+		return std::array<uint32_t, 3>{0};
+
+	const auto& flatSize = atlasTex->GetAtlasSize();
+	const auto numPages = atlasTex->GetAllocator()->GetNumPages();
+	return std::array<uint32_t, 3>{
+		static_cast<uint32_t>(flatSize.x),
+		static_cast<uint32_t>(flatSize.y),
+		numPages
+	};
+}
+
+uint32_t CGroundDecalHandler::GetTexID() const
+{
+	return atlasTex ? atlasTex->GetTexID() : 0;
+}
+
+uint32_t CGroundDecalHandler::GetTexTarget() const
+{
+	return atlasTex ? atlasTex->GetTexTarget() : 0;
+}
+
 void CGroundDecalHandler::AddSolidObject(const CSolidObject* object) { MoveSolidObject(object, object->pos); }
 void CGroundDecalHandler::MoveSolidObject(const CSolidObject* object, const float3& pos)
 {
