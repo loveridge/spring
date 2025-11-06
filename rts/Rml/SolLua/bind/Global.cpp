@@ -300,7 +300,7 @@
 		);
 		namespace_table.set_function(
 			/***
-			* Retrieve the list of paths requested by the loaded RML document
+			* Retrieve the list of paths requested by the loaded RML document since the most recent RmlUi.ClearDocumentPathRequests call.
 			*
 			* @function RmlUi.GetDocumentPathRequests
 			*
