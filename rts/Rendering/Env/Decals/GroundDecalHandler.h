@@ -200,7 +200,7 @@ private:
 	uint32_t GetDepthBufferTextureTarget() const;
 
 	void GenerateAtlasTexture();
-	void ReloadDecalShaders();
+	bool ReloadDecalShaders();
 
 	void AddTexToAtlas(const std::string& name, const std::string& filename, bool convertOldBMP, const std::string& errMsg);
 

@@ -418,16 +418,12 @@ void CGroundDecalHandler::GenerateAtlasTexture() {
 	}
 }
 
-void CGroundDecalHandler::ReloadDecalShaders() {
+bool CGroundDecalHandler::ReloadDecalShaders() {
 	if (shaderHandler->ReleaseProgramObjects("[GroundDecalHandler]"))
 		decalShader = nullptr;
 
-	const std::string ver = highQuality ? "#version 400 compatibility\n" : "#version 130\n";
-
 	decalShader = shaderHandler->CreateProgramObject("[GroundDecalHandler]", "DecalShaderGLSL");
-
-	decalShader->AttachShaderObject(shaderHandler->CreateShaderObject("GLSL/GroundDecalsVertProg.glsl",  "", GL_VERTEX_SHADER));
-	decalShader->AttachShaderObject(shaderHandler->CreateShaderObject("GLSL/GroundDecalsFragProg.glsl", ver, GL_FRAGMENT_SHADER));
+	decalShader->LoadFromLua("shaders/GLSL/groundDecals.lua");
 
 	decalShader->SetFlag("DEPTH_CLIP01", globalRendering->supportClipSpaceControl);
 	decalShader->SetFlag("HAVE_SHADOWS", true);
@@ -463,8 +459,8 @@ void CGroundDecalHandler::ReloadDecalShaders() {
 	decalShader->SetUniform("shadowColorTex" , 7);
 	decalShader->SetUniform("infoTex"        , 8);
 
-	decalShader->SetUniform("waterMinColor", 0.0f, 0.0f, 0.0f);
-	decalShader->SetUniform("waterBaseColor", 0.0f, 0.0f, 0.0f);
+	decalShader->SetUniform("waterMinColor"   , 0.0f, 0.0f, 0.0f);
+	decalShader->SetUniform("waterBaseColor"  , 0.0f, 0.0f, 0.0f);
 	decalShader->SetUniform("waterAbsorbColor", 0.0f, 0.0f, 0.0f);
 
 	decalShader->SetUniform("curAdjustedFrame", std::max(gs->frameNum, 0) + globalRendering->timeOffset);
@@ -478,7 +474,7 @@ void CGroundDecalHandler::ReloadDecalShaders() {
 	decalShader->Disable();
 	SunChanged();
 
-	decalShader->Validate();
+	return decalShader->Validate();
 }
 
 void CGroundDecalHandler::BindTextures()
@@ -1666,6 +1662,7 @@ void CGroundDecalHandler::GameFramePost(int frameNum)
 void CGroundDecalHandler::SunChanged()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+
 	auto enToken = decalShader->EnableScoped();
 	decalShader->SetUniform("groundAmbientColor", sunLighting->groundAmbientColor.x, sunLighting->groundAmbientColor.y, sunLighting->groundAmbientColor.z, sunLighting->groundShadowDensity);
 	decalShader->SetUniform("groundDiffuseColor", sunLighting->groundDiffuseColor.x, sunLighting->groundDiffuseColor.y, sunLighting->groundDiffuseColor.z);
@@ -1675,6 +1672,7 @@ void CGroundDecalHandler::SunChanged()
 void CGroundDecalHandler::ViewResize()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+
 	auto enToken = decalShader->EnableScoped();
 	decalShader->SetUniform("screenSizeInverse",
 		1.0f / globalRendering->viewSizeX,
