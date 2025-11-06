@@ -181,8 +181,8 @@ Numberless `animParams` used as a fallback.
 
 ### RmlUi
 
-- added `RmlUi.GetDocumentPathRequests` which tracks all of the files opened by an RmlUi LoadDocument call
-- added `RmlUi.ClearDocumentPathRequests` to clear tracked LoadDocument files
+- added `RmlUi.GetDocumentPathRequests(string docPath) -> {"filePath", "filePath", ...}` which tracks all of the files opened by an RmlUi LoadDocument call
+- added `RmlUi.ClearDocumentPathRequests(string docPath) -> nil` to clear tracked LoadDocument files
 
 ### Misc
 
