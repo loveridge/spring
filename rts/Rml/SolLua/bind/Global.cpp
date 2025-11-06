@@ -287,7 +287,8 @@
 		 );
 		namespace_table.set_function(
 			/***
-			* Clear the list of paths requested for a document
+			* Clear the list of paths requested for a document for the purpose of GetDocumentPathRequests.
+			* Does not clear anything else related to those requests themselves.
 			*
 			* @function RmlUi.ClearDocumentPathRequests
 			*
