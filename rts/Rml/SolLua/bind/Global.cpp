@@ -305,7 +305,7 @@
 			* @function RmlUi.GetDocumentPathRequests
 			*
 			* @param document_path string path of document
-			* @return array of paths requested by the document
+			* @return string[] array of paths requested by the document
 			*/
 			"GetDocumentPathRequests", [slp](const std::string& document_path) {
 				return sol::as_table(slp->systemInterface->GetDocumentPathRequests(document_path));
