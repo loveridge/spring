@@ -452,7 +452,7 @@ void CUnitDrawerGLSL::DrawUnitMiniMapIcons() const
 	}
 
 	if (!isFullView && ghostIconDimming > 0.0f) {
-		for (auto* ghost : modelDrawerData->GetDeadGhostBuildings()) {
+		for (auto* ghost : modelDrawerData->GetDeadGhostBuildings(gu->myAllyTeam)) {
 			if (minimap->UseSimpleColors())
 				currentColor = minimap->GetEnemyTeamIconColor();
 			else
@@ -701,7 +701,7 @@ void CUnitDrawerGLSL::DrawUnitIconsScreen() const
 	}
 	
 	if (!isFullView && ghostIconDimming > 0.0f) {
-		for (auto* ghost : modelDrawerData->GetDeadGhostBuildings()) {
+		for (auto* ghost : modelDrawerData->GetDeadGhostBuildings(gu->myAllyTeam)) {
 			float3 pos = ghost->midPos;
 
 			pos = camera->CalcViewPortCoordinates(pos);

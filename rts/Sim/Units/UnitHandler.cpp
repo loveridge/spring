@@ -157,6 +157,8 @@ void CUnitHandler::Kill()
 
 		activeUnits.clear();
 		unitsToBeRemoved.clear();
+		// must be cleaned here in case the game didn't actually start and UpdatePostFrame() never happened
+		unitsJustAdded.clear();
 
 		// only iterated by unsynced code, GetBuilderCAIs has no synced callers
 		builderCAIs.clear();

@@ -20,8 +20,6 @@ public:
 
 	static void Init();
 	static void FreeInstance();
-	static inline IGroundDecalDrawer* singleton = nullptr;
-
 public:
 	virtual void ReloadTextures() = 0;
 	virtual void DumpAtlasTextures() = 0;
@@ -95,5 +93,4 @@ public:
 	void SetUnitLeaveTracks(CUnit* unit, bool leaveTracks) override;
 };
 
-
-#define groundDecals IGroundDecalDrawer::singleton
+extern IGroundDecalDrawer* groundDecals;
