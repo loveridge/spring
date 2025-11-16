@@ -179,6 +179,15 @@ Numberless `animParams` used as a fallback.
 - add synced `Spring.SetPlayerReadyState(playerID, bool ready) -> bool ok`.
 - add unsynced `Spring.RequestStartPosition(x, y, z, bool? ready) -> nil`, sends a request to start at given position. Equivalent to the native picker.
 
+### RmlUi
+
+- add datamodel support for pairs: `pairs(dm_handle)`
+- add datamodel support for ipairs: `dm_handle:__ipairs()`
+- support for accessing the underlying datamodel table with `dm_handle.__raw()`
+- allow datamodel self-referential assignments such as `dm_handle.property = dm_handle.another_property`
+- fix datamodel array access
+- fix `data-value` binds in rml elements
+
 ### Misc
 
 - add a dimensionless Scale operator to unit scripts. No ancillaries such as WaitForScale though.
