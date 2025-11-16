@@ -185,6 +185,7 @@ Numberless `animParams` used as a fallback.
 - add datamodel support for ipairs: `dm_handle:__ipairs()`
 - support for accessing the underlying datamodel table with `dm_handle.__raw()`
 - allow datamodel self-referential assignments such as `dm_handle.property = dm_handle.another_property`
+- support for retrieving datamodel property length: `dm_handle.property.__len()`
 - fix datamodel array access
 - fix `data-value` binds in rml elements
 
