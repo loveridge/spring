@@ -229,6 +229,7 @@ createIndexFunction(std::shared_ptr<Rml::SolLua::SolLuaDataModel> data, const st
 			};
 
 			obj_table["__ipairs"] = obj_metatable[sol::meta_function::ipairs];
+			obj_table[sol::meta_function::length] = [prop] () { return prop.as<sol::table>().size(); };
 			obj_table["__raw"] = [prop] () { return prop; };
 			obj_table[sol::metatable_key] = obj_metatable;
 			return sol::make_object(s, obj_table);
@@ -317,6 +318,7 @@ sol::table openDataModel(Rml::Context& self, const Rml::String& name, sol::objec
 				};
 
 				obj_table["__ipairs"] = obj_metatable[sol::meta_function::ipairs];
+				obj_table[sol::meta_function::length] = [item] () { return item.as<sol::table>().size(); };
 				obj_table["__raw"] = [item] () { return item; };
 				obj_table[sol::metatable_key] = obj_metatable;
 				return sol::make_object(s, obj_table);
@@ -336,6 +338,7 @@ sol::table openDataModel(Rml::Context& self, const Rml::String& name, sol::objec
 	};
 
 	obj_table["__ipairs"] = obj_metatable[sol::meta_function::ipairs];
+	obj_table[sol::meta_function::length] = [&prop = data->Table] (sol::object o) { return prop.size(); };
 	obj_table["__SetDirty"] = ([data](sol::object t, const std::string& key) {
 			data->Handle.DirtyVariable(key);
 		});
