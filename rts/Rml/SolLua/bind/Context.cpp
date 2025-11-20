@@ -158,6 +158,15 @@ auto nextPair(sol::user<lua_iterator_state&> user_it_state, sol::this_state l)
 	return r;
 }
 
+auto createPairsFunction(sol::this_state s, bool ipairs = false)
+{
+	return ([s] (sol::object self) {
+			auto metatable = self.as<sol::table>();
+			auto rawtable = metatable.get<sol::function>("__raw").call<sol::table>();
+			return std::make_tuple(&nextPair, sol::user<lua_iterator_state>(rawtable, metatable, s, true), sol::lua_nil);
+		});
+}
+
 sol::object getFromTable(const sol::table& t, const std::vector<std::variant<int, std::string>>& keychain, int depth)
 {
 	sol::table item = t;
@@ -221,12 +230,8 @@ createIndexFunction(std::shared_ptr<Rml::SolLua::SolLuaDataModel> data, const st
 			sol::table obj_table = bindings.create_table();
 			obj_metatable[sol::meta_function::index] = createIndexFunction(data, kc, depth+1);
 			obj_metatable[sol::meta_function::new_index] = createNewIndexFunction(data, kc, depth+1);
-			obj_metatable[sol::meta_function::pairs] = [prop, obj_table, s] () {
-				return std::make_tuple(&nextPair, sol::user<lua_iterator_state>(prop, obj_table, s), sol::lua_nil);
-			};
-			obj_metatable[sol::meta_function::ipairs] = [prop, obj_table, s] () {
-				return std::make_tuple(&nextPair, sol::user<lua_iterator_state>(prop, obj_table, s, true), sol::lua_nil);
-			};
+			obj_metatable[sol::meta_function::pairs] = createPairsFunction(s);
+			obj_metatable[sol::meta_function::ipairs] = createPairsFunction(s, true);
 
 			obj_table["__ipairs"] = obj_metatable[sol::meta_function::ipairs];
 			obj_table[sol::meta_function::length] = [prop] () { return prop.as<sol::table>().size(); };
@@ -310,12 +315,8 @@ sol::table openDataModel(Rml::Context& self, const Rml::String& name, sol::objec
 				sol::table obj_table = bindings.create_table();
 				obj_metatable[sol::meta_function::new_index] = createNewIndexFunction(data, keychain, 1);
 				obj_metatable[sol::meta_function::index] = createIndexFunction(data, keychain, 1);
-				obj_metatable[sol::meta_function::pairs] = [item, obj_table, s] () {
-					return std::make_tuple(&nextPair,	sol::user<lua_iterator_state>(item, obj_table, s), sol::lua_nil);
-				};
-				obj_metatable[sol::meta_function::ipairs] = [item, obj_table, s] () {
-					return std::make_tuple(&nextPair,	sol::user<lua_iterator_state>(item, obj_table, s, true), sol::lua_nil);
-				};
+				obj_metatable[sol::meta_function::pairs] = createPairsFunction(s);
+				obj_metatable[sol::meta_function::ipairs] = createPairsFunction(s, true);
 
 				obj_table["__ipairs"] = obj_metatable[sol::meta_function::ipairs];
 				obj_table[sol::meta_function::length] = [item] () { return item.as<sol::table>().size(); };
@@ -330,12 +331,8 @@ sol::table openDataModel(Rml::Context& self, const Rml::String& name, sol::objec
 	sol::table obj_table = bindings.create_table();
 	obj_metatable[sol::meta_function::new_index] = new_index_func;
 	obj_metatable[sol::meta_function::index] = index_function;
-	obj_metatable[sol::meta_function::pairs] = [&prop = data->Table, obj_table, s] () {
-		return std::make_tuple(&nextPair,	sol::user<lua_iterator_state>(prop, obj_table, s), sol::lua_nil);
-	};
-	obj_metatable[sol::meta_function::ipairs] = [&prop = data->Table, obj_table, s] () {
-		return std::make_tuple(&nextPair,	sol::user<lua_iterator_state>(prop, obj_table, s, true), sol::lua_nil);
-	};
+	obj_metatable[sol::meta_function::pairs] = createPairsFunction(s);
+	obj_metatable[sol::meta_function::ipairs] = createPairsFunction(s, true);
 
 	obj_table["__ipairs"] = obj_metatable[sol::meta_function::ipairs];
 	obj_table[sol::meta_function::length] = [&prop = data->Table] (sol::object o) { return prop.size(); };
