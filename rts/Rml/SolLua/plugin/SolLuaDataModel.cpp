@@ -70,22 +70,31 @@ namespace Rml::SolLua
 		auto dv = static_cast<DataVariableReference*>(ptr);
 		sol::object obj = dv->getObject();
 
-		if (obj.is<bool>())
-			variant = obj.as<bool>();
-		else if (obj.is<std::string>())
-			variant = obj.as<std::string>();
-		else if (obj.is<Rml::Vector2i>())
-			variant = obj.as<Vector2i>();
-		else if (obj.is<Rml::Vector2f>())
-			variant = obj.as<Vector2f>();
-		else if (obj.is<Rml::Colourb>())
-			variant = obj.as<Rml::Colourb>();
-		else if (obj.is<Rml::Colourf>())
-			variant = obj.as<Rml::Colourf>();
-		else if (obj.is<lua_Number>())
-			variant = obj.as<lua_Number>();
-		else // if (obj->get_type() == sol::type::lua_nil)
-			variant = Rml::Variant{};
+		switch (obj.get_type()) {
+			case sol::type::boolean:
+				variant = obj.as<bool>();
+				break;
+			case sol::type::string:
+				variant = obj.as<std::string>();
+				break;
+			case sol::type::number:
+				variant = obj.as<lua_Number>();
+				break;
+			case sol::type::userdata:
+				if (obj.is<Rml::Vector2i>())
+					variant = obj.as<Vector2i>();
+				else if (obj.is<Rml::Vector2f>())
+					variant = obj.as<Vector2f>();
+				else if (obj.is<Rml::Colourb>())
+					variant = obj.as<Rml::Colourb>();
+				else if (obj.is<Rml::Colourf>())
+					variant = obj.as<Rml::Colourf>();
+				else
+					variant = Rml::Variant{};
+				break;
+			default: // sol::type::lua_nil or other unhandled types
+				variant = Rml::Variant{};
+		}
 
 		return true;
 	}
