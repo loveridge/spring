@@ -210,16 +210,14 @@ namespace Rml::SolLua
 			/***
 			 * @function RmlUi.ElementFormControlInput:SetSelection
 			 * Selects the text in the given character range.
-			 * @param selection_start The first character to be selected.
-			 * @param selection_end The first character *after* the selection.
+			 * @param selection_start integer The first character to be selected.
+			 * @param selection_end integer The first character *after* the selection.
 			 */
 			"SetSelection", &Rml::ElementFormControlInput::SetSelectionRange,
 			/***
 			 * @function RmlUi.ElementFormControlInput:GetSelection
 			 * Retrieves the selection range and text.
-			 * @param selection_start The first character selected.
-			 * @param selection_end The first character *after* the selection.
-			 * @param selected_text The selected text.
+			 * @return any selection_start The first character selected; selection_end The first character *after* the selection; selected_text The selected text.
 			 */
 			"GetSelection", &input::getSelection,
 
@@ -308,16 +306,14 @@ namespace Rml::SolLua
 			/***
 			 * @function RmlUi.ElementFormControlTextArea:SetSelection
 			 * Selects the text in the given character range.
-			 * @param selection_start The first character to be selected.
-			 * @param selection_end The first character *after* the selection.
+			 * @param selection_start integer The first character to be selected.
+			 * @param selection_end integer The first character *after* the selection.
 			 */
 			"SetSelection", &Rml::ElementFormControlTextArea::SetSelectionRange,
 			/***
 			 * @function RmlUi.ElementFormControlTextArea:GetSelection
 			 * Retrieves the selection range and text.
-			 * @param selection_start The first character selected.
-			 * @param selection_end The first character *after* the selection.
-			 * @param selected_text The selected text.
+			 * @return any selection_start The first character selected; selection_end The first character *after* the selection; selected_text The selected text.
 			 */
 			"GetSelection", &textarea::getSelection,
 
