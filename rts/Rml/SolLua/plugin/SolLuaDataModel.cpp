@@ -103,7 +103,11 @@ namespace Rml::SolLua
 	{
 		auto dv = static_cast<DataVariableReference*>(ptr);
 		auto v = makeObjectFromVariant(&variant, m_model->Lua);
-		dv->parent.raw_set(dv->key, v);
+		if (dv->arrayindex > -1) {
+			dv->parent.raw_set(dv->arrayindex, v);
+		} else {
+			dv->parent.raw_set(dv->key, v);
+		}
 
 		return true;
 	}
