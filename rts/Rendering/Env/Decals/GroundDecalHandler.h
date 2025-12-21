@@ -106,6 +106,7 @@ protected:
 	CSMFGroundDrawer* smfDrawer;
 
 	bool highQuality = false;
+	float ghostDimming = 1.0f;
 	ScopedDepthBufferCopy sdbc;
 };
 

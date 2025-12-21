@@ -104,6 +104,7 @@ CGroundDecalHandlerData::CGroundDecalHandlerData()
 	, decalsUpdateList{ }
 	, smfDrawer{ nullptr }
 	, highQuality{ configHandler->GetBool("HighQualityDecals") && (globalRendering->msaaLevel > 0) }
+	, ghostDimming{ configHandler->GetFloat("UnitGhostIconsDimming") }
 	, sdbc{ highQuality }
 {
 }
@@ -124,7 +125,7 @@ CGroundDecalHandler::CGroundDecalHandler()
 	eventHandler.AddClient(this);
 	CExplosionCreator::AddExplosionListener(this);
 
-	configHandler->NotifyOnChange(this, { "HighQualityDecals" });
+	configHandler->NotifyOnChange(this, { "HighQualityDecals", "UnitGhostIconsDimming" });
 
 	smfDrawer = dynamic_cast<CSMFGroundDrawer*>(readMap->GetGroundDrawer());
 
@@ -413,8 +414,8 @@ void CGroundDecalHandler::GenerateAtlasTexture() {
 	AddGroundTrackTextures();
 	AddFallbackTextures();
 
-	if (!atlasTex->Finalize()) {
-		LOG_L(L_ERROR, "Could not finalize %s texture atlas. Use fewer/smaller textures.", atlasTex->GetAtlasName().c_str());
+	if (!atlasTex->CalculateAtlas()) {
+		LOG_L(L_ERROR, "Could not calculate %s texture atlas. Use fewer/smaller textures.", atlasTex->GetAtlasName().c_str());
 	}
 }
 
@@ -749,7 +750,7 @@ void CGroundDecalHandler::Draw()
 	if (decals.empty())
 		return;
 
-	if (!atlasTex->IsValid())
+	if (!atlasTex->CreateAtlasTexture())
 		return;
 
 	UpdateDecalsVisibility();
@@ -798,6 +799,11 @@ void CGroundDecalHandler::Draw()
 	BindTextures();
 
 	const bool visWater = smfDrawer->GetReadMap()->HasVisibleWater();
+
+	if (decalShader->IsReloadRequested()) {
+		ReloadDecalShaders();
+		decalShader->SetReloadComplete();
+	}
 
 	decalShader->SetFlag("HAVE_SHADOWS", shadowHandler.ShadowsLoaded());
 	decalShader->SetFlag("HAVE_INFOTEX", infoTextureHandler->IsEnabled());
@@ -1550,13 +1556,19 @@ void CGroundDecalHandler::UpdateDecalsVisibility()
 				const bool decalOwnerInCurLOS = ((unit->losStatus[gu->myAllyTeam] &   LOS_INLOS) != 0);
 				const bool decalOwnerInPrvLOS = ((unit->losStatus[gu->myAllyTeam] & LOS_PREVLOS) != 0);
 
+#if 0
 				if (unit->GetIsIcon())
 					wantedMult = 0.0f;
+#endif
+				const bool isGhostNow = gameSetup->ghostedBuildings && decalOwnerInPrvLOS && !decalOwnerInCurLOS;
 
-				if (!gu->spectatingFullView && !decalOwnerInCurLOS && (!gameSetup->ghostedBuildings || !decalOwnerInPrvLOS))
-					wantedMult = 0.0f;
+				if (!gu->spectatingFullView)
+					if (isGhostNow)
+						wantedMult = ghostDimming;
+					else if (!decalOwnerInCurLOS)
+						wantedMult = 0.0f;
 
-				wantedMult = std::min(wantedMult, std::max(0.0f, unit->buildProgress));
+				wantedMult *= std::clamp(unit->buildProgress, 0.0f, 1.0f);
 			}
 			else {
 				const CFeature* feature = static_cast<const CFeature*>(so);
@@ -1705,14 +1717,14 @@ void CGroundDecalHandler::ExplosionOccurred(const CExplosionParams& event) {
 void CGroundDecalHandler::ConfigNotify(const std::string& key, const std::string& value)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	if (key != "HighQualityDecals")
-		return;
 
 	if (bool newHQ = configHandler->GetBool("HighQualityDecals") && (globalRendering->msaaLevel > 0); highQuality != newHQ) {
 		sdbc = ScopedDepthBufferCopy(newHQ);
 		highQuality = newHQ;
 		ReloadDecalShaders();
 	}
+
+	ghostDimming = configHandler->GetFloat("UnitGhostIconsDimming");
 }
 
 void CGroundDecalHandler::RenderUnitCreated(const CUnit* unit, int cloaked) { AddSolidObject(unit); }

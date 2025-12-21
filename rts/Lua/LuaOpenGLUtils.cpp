@@ -636,7 +636,7 @@ GLuint LuaMatTexture::GetTextureID() const
 		case LUATEX_DECALS_ATLAS: { texID = groundDecals->GetTexID(); } break;
 
 		case LUATEX_ICONS_ATLAS0: { texID = icon::iconHandler.GetAtlasTextureID(0); } break;
-		case LUATEX_ICONS_ATLAS1: { texID = icon::iconHandler.GetAtlasTextureID(0); } break;
+		case LUATEX_ICONS_ATLAS1: { texID = icon::iconHandler.GetAtlasTextureID(1); } break;
 
 		default: {
 			assert(false);

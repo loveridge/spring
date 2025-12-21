@@ -3,7 +3,7 @@ title = "Release 2025.04"
 aliases = ['/changelogs/changelog-2025-03']
 +++
 
-This is the changelog since version 2025.01 until **version 2025.04**, which is still in pre-release phase.
+This is the changelog since version 2025.01 until **version 2025.04.11**, which was released on 2025-08-16.
 
 # Caveats
 These are the entries which may require special attention when migrating:

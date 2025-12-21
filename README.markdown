@@ -19,7 +19,7 @@ You can use a pre-compiled binary, usually, you want to use an installer or a pa
 
 ### Compiling
 
-Detailed instructions for how to compile Recoil can be found [here](https://github.com/beyond-all-reason/RecoilEngine/wiki/Building-and-developing-engine-without-docker) or [here](https://github.com/beyond-all-reason/RecoilEngine/wiki/SpringRTS-Build-Environment-(Docker))
+Detailed instructions for how to compile Recoil can be found in the docker-build-v2 README (recommended, or [here](https://github.com/beyond-all-reason/RecoilEngine/wiki/Building-and-developing-engine-without-docker) or [here](https://github.com/beyond-all-reason/RecoilEngine/wiki/SpringRTS-Build-Environment-(Docker)) for legacy docker builds).
 
 Use `master` as the primary branch.
 
@@ -39,7 +39,7 @@ spring_bar_{BAR105}105.1.1-1050-g5075cc0
 If you aren't seeeing these (often, when you've cloned your fork of the repository and not the upstream version), try the following:
 
 ```bash
-git remote add upstream git@github.com:beyond-all-reason/RecoilEngine.git
+git remote add upstream https://github.com/beyond-all-reason/RecoilEngine
 git fetch --all --tags
 ```
 
