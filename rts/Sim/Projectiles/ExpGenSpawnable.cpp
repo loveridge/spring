@@ -35,7 +35,7 @@ CR_REG_METADATA(CExpGenSpawnable, (
 	CR_MEMBER(animProgress4),
 	CR_MEMBER_BEGINFLAG(CM_Config),
 		CR_MEMBER(rotParams),
-		CR_FAKE(animParams, float3),
+		CR_FAKE(animParams),
 		CR_MEMBER(animParams1),
 		CR_MEMBER(animParams2),
 		CR_MEMBER(animParams3),

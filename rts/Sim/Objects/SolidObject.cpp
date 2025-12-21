@@ -51,7 +51,7 @@ CR_REG_METADATA(CSolidObject,
 	CR_MEMBER(team),
 	CR_MEMBER(allyteam),
 
-	CR_MEMBER(prevFrameNeedsUpdate),
+	CR_MEMBER(creationFrame),
 
 	CR_MEMBER(pieceHitFrames),
 
@@ -84,6 +84,10 @@ CR_REG_METADATA(CSolidObject,
 	CR_POSTLOAD(PostLoad)
 ))
 
+
+CSolidObject::CSolidObject()
+	: creationFrame { gs->frameNum }
+{}
 
 void CSolidObject::PostLoad()
 {
@@ -146,11 +150,11 @@ void CSolidObject::Move(const float3& v, bool relative)
 {
 	const float3& dv = relative ? v : (v - pos);
 
-	pos += dv;
+	pos    += dv;
 	midPos += dv;
 	aimPos += dv;
 
-	prevFrameNeedsUpdate = true;
+	CondUpdatePrevTransform();
 }
 
 
@@ -438,6 +442,26 @@ void CSolidObject::UpdateDirVectors(const float3& uDir)
 	frontdir = quat * fDir;
 	rightdir = quat * rDir;
 	updir = uDir;
+}
+
+void CSolidObject::CondUpdatePrevTransform()
+{
+	// copy every transformation happening on the creation frame
+	// into PrevFrameTransform state
+	// skip otherwise
+	if likely(creationFrame != gs->frameNum)
+		return;
+
+	UpdatePrevFrameTransform();
+}
+
+void CSolidObject::UpdatePrevFrameTransform()
+{
+	for (auto& lmp : localModel.pieces) {
+		lmp.SavePrevModelSpaceTransform();
+	}
+
+	preFrameTra = Transform{ CQuaternion::MakeFrom(GetTransformMatrix(true)), pos };
 }
 
 void CSolidObject::ForcedSpin(const float3& zdir)

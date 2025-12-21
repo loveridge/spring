@@ -19,6 +19,8 @@ namespace GL {
 class GhostSolidObject {
 	CR_DECLARE_STRUCT(GhostSolidObject)
 public:
+	void IncRef() { (refCount++); }
+	bool DecRef() { return ((refCount--) > 1); }
 	const S3DModel* GetModel() const;
 	void PostLoad();
 public:
@@ -30,6 +32,7 @@ public:
 	float radius;
 	float iconRadius;
 
+	int refCount;
 	int facing; //FIXME replaced with dir-vector just legacy decal drawer uses this
 	uint8_t team;
 	size_t currentIconIndex;

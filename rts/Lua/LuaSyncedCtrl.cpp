@@ -12,6 +12,7 @@
 #include "LuaHashString.h"
 #include "LuaMetalMap.h"
 #include "LuaSyncedMoveCtrl.h"
+#include "LuaUI.h"
 #include "LuaUtils.h"
 #include "Game/Game.h"
 #include "Game/GameSetup.h"
@@ -141,6 +142,8 @@ bool LuaSyncedCtrl::PushEntries(lua_State* L)
 	REGISTER_LUA_CFUNC(AssignPlayerToTeam);
 	REGISTER_LUA_CFUNC(GameOver);
 	REGISTER_LUA_CFUNC(SetGlobalLos);
+	REGISTER_LUA_CFUNC(SetCheatingEnabled);
+	REGISTER_LUA_CFUNC(SetGodMode);
 
 	REGISTER_LUA_CFUNC(SetPlayerReadyState);
 	REGISTER_LUA_CFUNC(SetTeamStartPosition);
@@ -1024,6 +1027,40 @@ int LuaSyncedCtrl::SetGlobalLos(lua_State* L)
 	return 0;
 }
 
+/*** Changes whether activating cheats is allowed.
+ * Note that already activated cheats (e.g. god mode) stay active even if you disallow activating.
+ *
+ * @function Spring.SetCheatingEnabled
+ * @param cheatsEnabled boolean
+ * @return nil
+ */
+int LuaSyncedCtrl::SetCheatingEnabled(lua_State* L)
+{
+	gs->cheatEnabled = luaL_checkboolean(L, 1);
+	return 0;
+}
+
+/*** Toggles 'god mode', i.e. whether control of teams other than one's own is allowed.
+ * Affects all teams.
+ *
+ * @function Spring.SetGodMode
+ * @param controlAllies boolean?
+ * @param controlEnemies boolean?
+ * @return nil
+ */
+int LuaSyncedCtrl::SetGodMode(lua_State* L)
+{
+	const bool controlAllies  = luaL_optboolean(L, 1, (gs->godMode & GODMODE_ATC_BIT) != 0);
+	const bool controlEnemies = luaL_optboolean(L, 2, (gs->godMode & GODMODE_ETC_BIT) != 0);
+
+	gs->godMode = controlAllies  * GODMODE_ATC_BIT
+	            + controlEnemies * GODMODE_ETC_BIT;
+
+	CLuaUI::UpdateTeams();
+	CPlayer::UpdateControlledTeams();
+
+	return 0;
+}
 
 /***
  * Game End
