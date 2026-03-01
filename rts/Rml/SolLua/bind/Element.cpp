@@ -287,10 +287,7 @@ namespace Rml::SolLua
 			 * Gives input focus to this element.
 			 * @function RmlUi.Element:Focus
 			 */
-			"Focus", sol::overload(
-				&Rml::Element::Focus,
-				[](Rml::Element& self) { self.Focus(true); }
-			),
+			"Focus", &Rml::Element::Focus,
 			/***
 			 * Returns the value of the attribute named name. If no such attribute exists, the empty string will be returned.
 			 * @function RmlUi.Element:GetAttribute
