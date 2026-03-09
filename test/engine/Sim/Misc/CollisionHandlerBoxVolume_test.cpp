@@ -371,25 +371,25 @@ TEST_CASE("CollisionHandler_IntersectBoxVolume_ThinGeometries")
 	const CMatrix44f originMat = MakeTransform();
 
 	SECTION("plane vs plane (2D boxes)") {
-		const CollisionVolume planeA = MakeBoxVolume(float3(10.0f, 0.001f, 10.0f));
-		const CollisionVolume planeB = MakeBoxVolume(float3(10.0f, 0.001f, 10.0f));
+		const CollisionVolume planeA = MakeBoxVolume(float3(10.0f, 1.f, 10.0f));
+		const CollisionVolume planeB = MakeBoxVolume(float3(10.0f, 1.f, 10.0f));
 
 		CHECK(Intersects(planeA, originMat, planeB, originMat));
 
-		// Barely separated on the thin Y axis
-		const CMatrix44f sepMat = MakeTransform(float3(0.0f, 0.002f, 0.0f));
+		// Y-scale is clamped to 1.0, so separation starts just beyond 1.0 on Y.
+		const CMatrix44f sepMat = MakeTransform(float3(0.0f, 1.01f, 0.0f));
 		CHECK_FALSE(Intersects(planeA, originMat, planeB, sepMat));
 	}
 
 	SECTION("line vs line (1D boxes)") {
-		const CollisionVolume lineA = MakeBoxVolume(float3(10.0f, 0.001f, 0.001f));
+		const CollisionVolume lineA = MakeBoxVolume(float3(10.0f, 1.f, 0.001f));
 		// Perpendicular line
-		const CollisionVolume lineB = MakeBoxVolume(float3(0.001f, 10.0f, 0.001f));
+		const CollisionVolume lineB = MakeBoxVolume(float3(1.f, 10.0f, 1.f));
 
 		CHECK(Intersects(lineA, originMat, lineB, originMat));
 
-		// Move apart on the Z axis
-		const CMatrix44f sepMat = MakeTransform(float3(0.0f, 0.0f, 0.002f));
+		// Z-scale is clamped to 1.0, so separation starts just beyond 1.0 on Z.
+		const CMatrix44f sepMat = MakeTransform(float3(0.0f, 0.0f, 1.01f));
 		CHECK_FALSE(Intersects(lineA, originMat, lineB, sepMat));
 	}
 }
@@ -453,29 +453,150 @@ TEST_CASE("CollisionHandler_IntersectBoxVolume_CylinderEndCaps")
 
 TEST_CASE("CollisionHandler_IntersectBoxVolume_ExtremeEllipsoids")
 {
-	const CollisionVolume box = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f)); // Box half extents 1,1,1
+	const CollisionVolume box = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f)); // Box half extents 1, 1, 1
 	const CMatrix44f boxMat = MakeTransform();
 
+	// Input scale values must also be > 1.0f.
+	// We use a major axis of 100.0f, making the clamped minimum exactly 2.0f (radius 1.0f).
+
 	SECTION("pancake ellipsoid (highly squashed on Y)") {
-		// Radius X=10, Y=0.1, Z=10
-		const CollisionVolume pancake = MakeEllipsoidVolume(float3(20.0f, 0.2f, 20.0f));
+		// Scales: X=100.0, Y=2.0, Z=100.0 -> Radii: X=50.0, Y=1.0, Z=50.0
+		const CollisionVolume pancake = MakeEllipsoidVolume(float3(100.0f, 2.0f, 100.0f));
 
-		// Touching top face of the box
-		CHECK(Intersects(box, boxMat, pancake, MakeTransform(float3(0.0f, 1.1f, 0.0f))));
+		// Penetrating the top face (Center < 2.0)
+		CHECK(Intersects(box, boxMat, pancake, MakeTransform(float3(0.0f, 1.9f, 0.0f))));
 
-		// Barely lifted off the top face
-		CHECK_FALSE(Intersects(box, boxMat, pancake, MakeTransform(float3(0.0f, 1.12f, 0.0f))));
+		// Lifted just out of reach (Center > 2.0)
+		CHECK_FALSE(Intersects(box, boxMat, pancake, MakeTransform(float3(0.0f, 2.1f, 0.0f))));
 	}
 
 	SECTION("cigar ellipsoid (highly elongated on X)") {
-		// Radius X=10, Y=0.1, Z=0.1
-		const CollisionVolume cigar = MakeEllipsoidVolume(float3(20.0f, 0.2f, 0.2f));
+		// Scales: X=100.0, Y=2.0, Z=2.0 -> Radii: X=50.0, Y=1.0, Z=1.0
+		const CollisionVolume cigar = MakeEllipsoidVolume(float3(100.0f, 2.0f, 2.0f));
 
-		// Passing right next to the Z face
-		CHECK(Intersects(box, boxMat, cigar, MakeTransform(float3(0.0f, 0.0f, 1.1f))));
+		// Passing right next to the Z face, slightly intersecting (Center < 2.0)
+		CHECK(Intersects(box, boxMat, cigar, MakeTransform(float3(0.0f, 0.0f, 1.9f))));
 
-		// Move slightly away on Z
-		CHECK_FALSE(Intersects(box, boxMat, cigar, MakeTransform(float3(0.0f, 0.0f, 1.12f))));
+		// Moved slightly away on Z (Center > 2.0)
+		CHECK_FALSE(Intersects(box, boxMat, cigar, MakeTransform(float3(0.0f, 0.0f, 2.1f))));
 	}
 }
+TEST_CASE("CollisionHandler_IntersectBoxVolume_SphereVsRotatedBox")
+{
+	const CollisionVolume box = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f)); // Extents: [-1, 1]
+	const CollisionVolume sphere = MakeSphereVolume(1.0f);               // Radius: 1.0
+	const CMatrix44f sphereMat = MakeTransform(float3(2.2f, 0.0f, 0.0f));
 
+	SECTION("unrotated box misses the sphere") {
+		// Box face stops at X = 1.0. Sphere edge starts at X = 1.2. (Gap of 0.2)
+		const CMatrix44f boxMatUnrotated = MakeTransform();
+		CHECK_FALSE(Intersects(box, boxMatUnrotated, sphere, sphereMat));
+	}
+
+	SECTION("rotated box corner hits the sphere") {
+		// Rotating the box 45 degrees around Z turns its flat X-face into a pointing diamond.
+		// The corner now stretches to X = sqrt(1^2 + 1^2) = 1.414.
+		// Sphere edge is at X = 1.2. Because 1.414 > 1.2, the sharp corner pierces the sphere.
+		const CMatrix44f boxMatRotated = MakeTransform(ZeroVector, float3(0.0f, 0.0f, QUARTER_PI));
+		CHECK(Intersects(box, boxMatRotated, sphere, sphereMat));
+	}
+}
+TEST_CASE("CollisionHandler_IntersectBoxVolume_BoxVsRotatedEllipsoid")
+{
+	const CollisionVolume box = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f)); // Extents: [-1, 1]
+	const CMatrix44f boxMat = MakeTransform();
+
+	// Scales: X=10.0, Y=2.0, Z=2.0 -> Radii: X=5.0, Y=1.0, Z=1.0
+	// Satisfies the max scale 2% constraint (10.0 * 0.02 = 0.2 < 2.0)
+	const CollisionVolume ellipsoid = MakeEllipsoidVolume(float3(10.0f, 2.0f, 2.0f));
+
+	// Place ellipsoid off-center diagonally from the box corner
+	const float3 pos(4.0f, 4.0f, 0.0f);
+
+	SECTION("unrotated ellipsoid misses") {
+		// Unrotated, the long X-axis stretches from X=-1 to X=9.
+		// However, it remains at Y=4, which completely bypasses the Box's Y extents [-1, 1].
+		const CMatrix44f ellMatUnrotated = MakeTransform(pos);
+		CHECK_FALSE(Intersects(box, boxMat, ellipsoid, ellMatUnrotated));
+	}
+
+	SECTION("ellipsoid rotated perfectly toward box intersects") {
+		// Spring's positive Z rotation turns +X toward -Y, so -45 degrees points the major axis
+		// along the diagonal from (4, 4, 0) toward the box.
+		// Distance from (4,4,0) to box corner (1,1,0) is sqrt(3^2 + 3^2) ≈ 4.24.
+		// Since the rotated major radius (5.0) is greater than 4.24, it reaches the corner.
+		const CMatrix44f ellMatAimed = MakeTransform(pos, float3(0.0f, 0.0f, -QUARTER_PI));
+		CHECK(Intersects(box, boxMat, ellipsoid, ellMatAimed));
+	}
+
+	SECTION("ellipsoid rotated perpendicular to box misses") {
+		// +45 degrees leaves the major axis perpendicular to the diagonal back toward the box.
+		// Only the minor radius (1.0) faces the box, which is much less than the 4.24 distance.
+		const CMatrix44f ellMatAway = MakeTransform(pos, float3(0.0f, 0.0f, QUARTER_PI));
+		CHECK_FALSE(Intersects(box, boxMat, ellipsoid, ellMatAway));
+	}
+}
+TEST_CASE("CollisionHandler_IntersectBoxVolume_SlantedCylinder")
+{
+	const CollisionVolume box = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f)); // Extents [-1, 1]
+	const CMatrix44f boxMat = MakeTransform();
+
+	// Y-axis cylinder. Radius=1.0, Half-length=5.0
+	const CollisionVolume cylinder = MakeCylinderVolume(float3(2.0f, 10.0f, 2.0f), CollisionVolume::COLVOL_AXIS_Y);
+
+	SECTION("unrotated misses overhead") {
+		// Cylinder is suspended directly above the box. Lowest tip reaches Y = 4.0 - 5.0 = -1.0.
+		// But wait, Z is at 4.0. The box only covers Z up to 1.0. Misses completely.
+		const CMatrix44f cylMatUpright = MakeTransform(float3(0.0f, 4.0f, 4.0f));
+		CHECK_FALSE(Intersects(box, boxMat, cylinder, cylMatUpright));
+	}
+
+	SECTION("slanted towards box hits") {
+		// Spring's positive X rotation tilts +Y toward -Z, so -45 degrees slants the lower end-cap
+		// downward and inward toward the box.
+		// Tip travel is approx 5.0 * 0.707 = 3.53 units on Y and Z axes.
+		// New tip position: Y = 4.0 - 3.53 = 0.47, Z = 4.0 - 3.53 = 0.47.
+		// Since (0, 0.47, 0.47) is inside the box [-1, 1], it pierces the top face!
+		const CMatrix44f cylMatSlanted = MakeTransform(float3(0.0f, 4.0f, 4.0f), float3(-QUARTER_PI, 0.0f, 0.0f));
+		CHECK(Intersects(box, boxMat, cylinder, cylMatSlanted));
+	}
+
+	SECTION("slanted too far out misses") {
+		// Same 45 degree slant, but moved further out.
+		// Tip reaches Y = 6.0 - 3.53 = 2.47. Z = 6.0 - 3.53 = 2.47.
+		// Box max is 1.0, so it stops short.
+		const CMatrix44f cylMatSlantedFar = MakeTransform(float3(0.0f, 6.0f, 6.0f), float3(-QUARTER_PI, 0.0f, 0.0f));
+		CHECK_FALSE(Intersects(box, boxMat, cylinder, cylMatSlantedFar));
+	}
+}
+TEST_CASE("CollisionHandler_IntersectBoxVolume_MultiAxisObliqueBoxes")
+{
+	const CollisionVolume boxA = MakeBoxVolume(float3(4.0f, 4.0f, 4.0f)); // Extents: 2, 2, 2
+	const CollisionVolume boxB = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f)); // Extents: 1, 1, 1
+
+	const CMatrix44f matA = MakeTransform();
+
+	// Rotate boxB by 45 degrees on ALL three axes.
+	const float3 crazyRotation(QUARTER_PI, QUARTER_PI, QUARTER_PI);
+
+	SECTION("deep multi-axis overlap") {
+		const CMatrix44f matB_Hits = MakeTransform(float3(2.5f, 2.5f, 2.5f), crazyRotation);
+		CHECK(Intersects(boxA, matA, boxB, matB_Hits));
+	}
+
+	SECTION("glancing multi-axis corner touch") {
+		// For this specific three-axis rotation, the limiting SAT axes are the A.y x B.z and
+		// A.z x B.z cross-products, which separate at about 2.828 on each center coordinate.
+		// Keep boxB just inside that bound so this remains a true near-tangent overlap.
+		const CMatrix44f matB_Glance = MakeTransform(float3(2.82f, 2.82f, 2.82f), crazyRotation);
+		CHECK(Intersects(boxA, matA, boxB, matB_Glance));
+		const CMatrix44f matB_Far = MakeTransform(float3(2.89f, 2.89f, 2.89f), crazyRotation);
+		CHECK_FALSE(Intersects(boxA, matA, boxB, matB_Far));
+	}
+
+	SECTION("multi-axis separation") {
+		// Moved entirely out of the collision zone.
+		const CMatrix44f matB_Misses = MakeTransform(float3(4.5f, 4.5f, 4.5f), crazyRotation);
+		CHECK_FALSE(Intersects(boxA, matA, boxB, matB_Misses));
+	}
+}
