@@ -8,6 +8,7 @@
 #include "System/creg/STL_Map.h"
 
 #include "System/Misc/TracyDefs.h"
+#include <numeric>
 
 
 CR_BIND(SimObjectIDPool, )
@@ -145,4 +146,3 @@ bool SimObjectIDPool::HasID(uint32_t uid) const {
 
 	return (freeIDs.find(idx) != freeIDs.end());
 }
-

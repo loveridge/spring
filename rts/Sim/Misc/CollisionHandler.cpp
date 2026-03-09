@@ -14,6 +14,255 @@
 unsigned int CCollisionHandler::numDiscTests = 0;
 unsigned int CCollisionHandler::numContTests = 0;
 
+namespace {
+	struct GJKSimplex {
+		void PushFront(const float3& p) {
+			for (int i = std::min(size, 3); i > 0; --i)
+				points[i] = points[i - 1];
+
+			points[0] = p;
+			size = std::min(size + 1, 4);
+		}
+
+			void Assign(float3 a) {
+				points[0] = a;
+				size = 1;
+			}
+			void Assign(float3 a, float3 b) {
+				points[0] = a;
+				points[1] = b;
+				size = 2;
+			}
+			void Assign(float3 a, float3 b, float3 c) {
+				points[0] = a;
+				points[1] = b;
+				points[2] = c;
+				size = 3;
+		}
+
+		int size = 0;
+		float3 points[4] = {ZeroVector, ZeroVector, ZeroVector, ZeroVector};
+	};
+
+	static float3 TransformDirection(const CMatrix44f& m, const float3& d)
+	{
+		return (m.Mul(d) - m.Mul(ZeroVector));
+	}
+
+	static float3 TripleCross(const float3& a, const float3& b, const float3& c)
+	{
+		return (a.cross(b)).cross(c);
+	}
+
+	static float3 PerpendicularVector(const float3& v)
+	{
+		float3 p = (math::fabs(v.x) < math::fabs(v.y))? float3(0.0f, -v.z,  v.y): float3(-v.z, 0.0f,  v.x);
+
+		if (p.SqLength() < COLLISION_VOLUME_EPS)
+			p = float3(v.y, -v.x, 0.0f);
+
+		return p;
+	}
+
+	static float3 GetSupportPointLocal(const CollisionVolume* v, const float3& dir)
+	{
+		const float3& ahs = v->GetHScales();
+		float3 p = ZeroVector;
+
+		switch (v->GetVolumeType()) {
+			case CollisionVolume::COLVOL_TYPE_BOX: {
+				p.x = (dir.x >= 0.0f)? ahs.x: -ahs.x;
+				p.y = (dir.y >= 0.0f)? ahs.y: -ahs.y;
+				p.z = (dir.z >= 0.0f)? ahs.z: -ahs.z;
+			} break;
+
+			case CollisionVolume::COLVOL_TYPE_SPHERE: {
+				const float dirLen = dir.Length();
+				const float radius = ahs.x;
+
+				if (dirLen > COLLISION_VOLUME_EPS)
+					p = dir * (radius / dirLen);
+			} break;
+
+			case CollisionVolume::COLVOL_TYPE_ELLIPSOID: {
+				const float denom = math::sqrt(
+					(ahs.x * ahs.x * dir.x * dir.x) +
+					(ahs.y * ahs.y * dir.y * dir.y) +
+					(ahs.z * ahs.z * dir.z * dir.z)
+				);
+
+				if (denom > COLLISION_VOLUME_EPS) {
+					p.x = (ahs.x * ahs.x * dir.x) / denom;
+					p.y = (ahs.y * ahs.y * dir.y) / denom;
+					p.z = (ahs.z * ahs.z * dir.z) / denom;
+				}
+			} break;
+
+			case CollisionVolume::COLVOL_TYPE_CYLINDER: {
+				const int pAx  = v->GetPrimaryAxis();
+				const int sAx0 = v->GetSecondaryAxis(0);
+				const int sAx1 = v->GetSecondaryAxis(1);
+				const float denom = math::sqrt(
+					(ahs[sAx0] * ahs[sAx0] * dir[sAx0] * dir[sAx0]) +
+					(ahs[sAx1] * ahs[sAx1] * dir[sAx1] * dir[sAx1])
+				);
+
+				p[pAx] = (dir[pAx] >= 0.0f)? ahs[pAx]: -ahs[pAx];
+
+				if (denom > COLLISION_VOLUME_EPS) {
+					p[sAx0] = (ahs[sAx0] * ahs[sAx0] * dir[sAx0]) / denom;
+					p[sAx1] = (ahs[sAx1] * ahs[sAx1] * dir[sAx1]) / denom;
+				}
+			} break;
+		}
+
+		return p;
+	}
+
+	static float3 GetSupportPointBoxSpace(
+		const CollisionVolume* v,
+		const CMatrix44f& vMat,
+		const CMatrix44f& vInv,
+		const CMatrix44f& boxMat,
+		const CMatrix44f& boxInv,
+		const float3& dirBox
+	) {
+		const float3 dirWorld = TransformDirection(boxMat, dirBox);
+		const float3 dirLocal = TransformDirection(vInv, dirWorld);
+		const float3 pointLocal = GetSupportPointLocal(v, dirLocal);
+		return (boxInv.Mul(vMat.Mul(pointLocal)));
+	}
+
+	static float3 GetMinkowskiSupportPoint(
+		const CollisionVolume* box,
+		const CollisionVolume* vol,
+		const CMatrix44f& volMat,
+		const CMatrix44f& volInv,
+		const CMatrix44f& boxMat,
+		const CMatrix44f& boxInv,
+		const float3& dirBox
+	) {
+		const float3 pBox = GetSupportPointLocal(box, dirBox);
+		const float3 pVol = GetSupportPointBoxSpace(vol, volMat, volInv, boxMat, boxInv, -dirBox);
+		return (pBox - pVol);
+	}
+
+	static bool UpdateLineSimplex(GJKSimplex& simplex, float3& dir)
+	{
+		const float3& a = simplex.points[0];
+		const float3& b = simplex.points[1];
+		const float3 ao = -a;
+		const float3 ab = b - a;
+
+		if (ab.dot(ao) > 0.0f) {
+			dir = TripleCross(ab, ao, ab);
+
+			if (dir.SqLength() < COLLISION_VOLUME_EPS)
+				dir = PerpendicularVector(ab);
+		} else {
+			simplex.Assign(a);
+			dir = ao;
+		}
+
+		return false;
+	}
+
+	static bool UpdateTriangleSimplex(GJKSimplex& simplex, float3& dir)
+	{
+		const float3& a = simplex.points[0];
+		const float3& b = simplex.points[1];
+		const float3& c = simplex.points[2];
+		const float3 ao = -a;
+		const float3 ab = b - a;
+		const float3 ac = c - a;
+		const float3 abc = ab.cross(ac);
+
+		if ((abc.cross(ac)).dot(ao) > 0.0f) {
+			if (ac.dot(ao) > 0.0f) {
+				simplex.Assign(a, c);
+				dir = TripleCross(ac, ao, ac);
+			} else {
+				if (ab.dot(ao) > 0.0f) {
+					simplex.Assign(a, b);
+					dir = TripleCross(ab, ao, ab);
+				} else {
+					simplex.Assign(a);
+					dir = ao;
+				}
+			}
+
+			return false;
+		}
+
+		if ((ab.cross(abc)).dot(ao) > 0.0f) {
+			if (ab.dot(ao) > 0.0f) {
+				simplex.Assign(a, b);
+				dir = TripleCross(ab, ao, ab);
+			} else {
+				simplex.Assign(a);
+				dir = ao;
+			}
+
+			return false;
+		}
+
+		if (abc.dot(ao) > 0.0f) {
+			dir = abc;
+		} else {
+			simplex.Assign(a, c, b);
+			dir = -abc;
+		}
+
+		return false;
+	}
+
+	static bool UpdateTetrahedronSimplex(GJKSimplex& simplex, float3& dir)
+	{
+		const float3& a = simplex.points[0];
+		const float3& b = simplex.points[1];
+		const float3& c = simplex.points[2];
+		const float3& d = simplex.points[3];
+		const float3 ao = -a;
+		const float3 ab = b - a;
+		const float3 ac = c - a;
+		const float3 ad = d - a;
+		const float3 abc = ab.cross(ac);
+		const float3 acd = ac.cross(ad);
+		const float3 adb = ad.cross(ab);
+
+		if (abc.dot(ao) > 0.0f) {
+			simplex.Assign(a, b, c);
+			dir = abc;
+			return false;
+		}
+		if (acd.dot(ao) > 0.0f) {
+			simplex.Assign(a, c, d);
+			dir = acd;
+			return false;
+		}
+		if (adb.dot(ao) > 0.0f) {
+			simplex.Assign(a, d, b);
+			dir = adb;
+			return false;
+		}
+
+		return true;
+	}
+
+	static bool UpdateSimplex(GJKSimplex& simplex, float3& dir)
+	{
+		switch (simplex.size) {
+			case 2: return UpdateLineSimplex(simplex, dir);
+			case 3: return UpdateTriangleSimplex(simplex, dir);
+			case 4: return UpdateTetrahedronSimplex(simplex, dir);
+			default: {
+				dir = -simplex.points[0];
+				return false;
+			} break;
+		}
+	}
+}
+
 
 
 void CCollisionHandler::PrintStats()
@@ -801,3 +1050,51 @@ bool CCollisionHandler::IntersectBox(const CollisionVolume* v, const float3& pi0
 	return (b0 == CQ_POINT_ON_RAY || b1 == CQ_POINT_ON_RAY);
 }
 
+
+bool CCollisionHandler::IntersectBoxVolume(const CollisionVolume* box, const CMatrix44f& boxMat, const CollisionVolume* vol, const CMatrix44f& volMat)
+{
+	RECOIL_DETAILED_TRACY_ZONE;
+
+	if (box == nullptr || vol == nullptr)
+		return false;
+	if (box->GetVolumeType() != CollisionVolume::COLVOL_TYPE_BOX)
+		return false;
+
+	const float3 boxCtr = boxMat.Mul(ZeroVector);
+	const float3 volCtr = volMat.Mul(ZeroVector);
+	const float sumRadii = box->GetBoundingRadius() + vol->GetBoundingRadius();
+
+	if ((boxCtr - volCtr).SqLength() > (sumRadii * sumRadii))
+		return false;
+
+	const CMatrix44f boxInv = boxMat.InvertAffine();
+	const CMatrix44f volInv = volMat.InvertAffine();
+	float3 dir = boxInv.Mul(volCtr);
+
+	if (dir.SqLength() < COLLISION_VOLUME_EPS)
+		dir = float3(1.0f, 0.0f, 0.0f);
+
+	GJKSimplex simplex;
+	simplex.PushFront(GetMinkowskiSupportPoint(box, vol, volMat, volInv, boxMat, boxInv, dir));
+	dir = -simplex.points[0];
+
+	if (dir.SqLength() < COLLISION_VOLUME_EPS)
+		return true;
+
+	for (int n = 0; n < 32; ++n) {
+		const float3 support = GetMinkowskiSupportPoint(box, vol, volMat, volInv, boxMat, boxInv, dir);
+
+		if (support.dot(dir) < -COLLISION_VOLUME_EPS)
+			return false;
+
+		simplex.PushFront(support);
+
+		if (UpdateSimplex(simplex, dir))
+			return true;
+
+		if (dir.SqLength() < COLLISION_VOLUME_EPS)
+			return true;
+	}
+
+	return false;
+}

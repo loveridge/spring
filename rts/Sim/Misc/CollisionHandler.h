@@ -167,6 +167,15 @@ class CCollisionHandler {
 		static bool IntersectCylinder(const CollisionVolume* v, const float3& pi0, const float3& pi1, CollisionQuery* cq);
 		static bool IntersectBox(const CollisionVolume* v, const float3& pi0, const float3& pi1, CollisionQuery* cq);
 
+		/**
+		 * Test if a box volume intersects another collision volume.
+		 * @param box first volume, must be COLVOL_TYPE_BOX
+		 * @param boxMat box transformation matrix
+		 * @param vol second volume
+		 * @param volMat second volume transformation matrix
+		 */
+		static bool IntersectBoxVolume(const CollisionVolume* box, const CMatrix44f& boxMat, const CollisionVolume* vol, const CMatrix44f& volMat);
+
 	private:
 		static unsigned int numDiscTests; // number of discrete hit-tests executed
 		static unsigned int numContTests; // number of continuous hit-tests executed (inc. unsynced)

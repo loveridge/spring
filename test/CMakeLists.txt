@@ -1,4 +1,7 @@
 # See README.md for usage instructions
+# set(CMAKE_CXX_STANDARD 23)
+# set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# set(CMAKE_CXX_EXTENSIONS OFF)
 add_definitions(-DCATCH_AMALGAMATED_CUSTOM_MAIN)
 # defines spring_test_compile_fail macro
 include(${CMAKE_CURRENT_SOURCE_DIR}/tools/CompileFailTest/CompileFailTest.cmake)
@@ -170,6 +173,31 @@ endif()
 	set(test_name Float3)
 	set(test_src
 			"${CMAKE_CURRENT_SOURCE_DIR}/engine/System/testFloat3.cpp"
+			"${ENGINE_SOURCE_DIR}/System/float3.cpp"
+			"${ENGINE_SOURCE_DIR}/System/float4.cpp"
+			"${ENGINE_SOURCE_DIR}/System/Misc/SpringTime.cpp"
+			"${ENGINE_SOURCE_DIR}/System/TimeProfiler.cpp"
+			${sources_engine_System_Threading}
+			${test_Common_sources}
+		)
+
+	set(test_libs
+			${WINMM_LIBRARY}
+		)
+
+	add_spring_test(${test_name} "${test_src}" "${test_libs}" "-DNOT_USING_CREG -DNOT_USING_STREFLOP -DBUILDING_AI")
+
+################################################################################
+### CollisionHandler
+	set(test_name CollisionHandler)
+	set(test_src
+			"${CMAKE_CURRENT_SOURCE_DIR}/engine/Sim/Misc/CollisionHandlerBoxVolume_test.cpp"
+			# "${CMAKE_CURRENT_SOURCE_DIR}/engine/Sim/Misc/CollisionHandlerBoxVolumeSupport.cpp"
+			# "${CMAKE_CURRENT_SOURCE_DIR}/engine/Sim/Misc/CollisionVolumeTestSupport.cpp"
+			"${CMAKE_CURRENT_SOURCE_DIR}/engine/Sim/Misc/CollisionHandlerSupport.cpp"
+			"${ENGINE_SOURCE_DIR}/Sim/Misc/CollisionHandler.cpp"
+			"${ENGINE_SOURCE_DIR}/System/Matrix44f.cpp"
+			"${ENGINE_SOURCE_DIR}/System/Quaternion.cpp"
 			"${ENGINE_SOURCE_DIR}/System/float3.cpp"
 			"${ENGINE_SOURCE_DIR}/System/float4.cpp"
 			"${ENGINE_SOURCE_DIR}/System/Misc/SpringTime.cpp"
