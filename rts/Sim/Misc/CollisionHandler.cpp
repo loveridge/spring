@@ -394,88 +394,117 @@ static bool GetAxisAlignedMapping(const CMatrix44f& relMat, int axisMap[3], int 
 
 		return false;
 	}
+static bool UpdateTriangleSimplex(GJKSimplex& simplex, float3& dir)
+{
+	const float3& a = simplex.points[0];
+	const float3& b = simplex.points[1];
+	const float3& c = simplex.points[2];
 
-	static bool UpdateTriangleSimplex(GJKSimplex& simplex, float3& dir)
-	{
-		const float3& a = simplex.points[0];
-		const float3& b = simplex.points[1];
-		const float3& c = simplex.points[2];
-		const float3 ao = -a;
-		const float3 ab = b - a;
-		const float3 ac = c - a;
-		const float3 abc = ab.cross(ac);
+	const float3 ao = -a;
+	const float3 ab = b - a;
+	const float3 ac = c - a;
+	const float3 abc = ab.cross(ac);
 
-		if ((abc.cross(ac)).dot(ao) > 0.0f) {
-			if (ac.dot(ao) > 0.0f) {
-				simplex.Assign(a, c);
-				dir = TripleCross(ac, ao, ac);
-			} else {
-				if (ab.dot(ao) > 0.0f) {
-					simplex.Assign(a, b);
-					dir = TripleCross(ab, ao, ab);
-				} else {
-					simplex.Assign(a);
-					dir = ao;
-				}
-			}
-
-			return false;
+	if (abc.SqLength() < COLLISION_VOLUME_EPS) {
+		// Degenerate triangle: reduce to the more useful edge.
+		if (ab.SqLength() >= ac.SqLength()) {
+			simplex.Assign(a, b);
+		} else {
+			simplex.Assign(a, c);
 		}
+		return UpdateLineSimplex(simplex, dir);
+	}
 
-		if ((ab.cross(abc)).dot(ao) > 0.0f) {
+	if ((abc.cross(ac)).dot(ao) > 0.0f) {
+		if (ac.dot(ao) > 0.0f) {
+			simplex.Assign(a, c);
+			dir = TripleCross(ac, ao, ac);
+
+			if (dir.SqLength() < COLLISION_VOLUME_EPS)
+				dir = PerpendicularVector(ac);
+		} else {
 			if (ab.dot(ao) > 0.0f) {
 				simplex.Assign(a, b);
 				dir = TripleCross(ab, ao, ab);
+
+				if (dir.SqLength() < COLLISION_VOLUME_EPS)
+					dir = PerpendicularVector(ab);
 			} else {
 				simplex.Assign(a);
 				dir = ao;
 			}
-
-			return false;
 		}
-
-		if (abc.dot(ao) > 0.0f) {
-			dir = abc;
-		} else {
-			simplex.Assign(a, c, b);
-			dir = -abc;
-		}
-
 		return false;
 	}
 
-	static bool UpdateTetrahedronSimplex(GJKSimplex& simplex, float3& dir)
-	{
-		const float3& a = simplex.points[0];
-		const float3& b = simplex.points[1];
-		const float3& c = simplex.points[2];
-		const float3& d = simplex.points[3];
-		const float3 ao = -a;
-		const float3 ab = b - a;
-		const float3 ac = c - a;
-		const float3 ad = d - a;
-		const float3 abc = ab.cross(ac);
-		const float3 acd = ac.cross(ad);
-		const float3 adb = ad.cross(ab);
+	if ((ab.cross(abc)).dot(ao) > 0.0f) {
+		if (ab.dot(ao) > 0.0f) {
+			simplex.Assign(a, b);
+			dir = TripleCross(ab, ao, ab);
 
-		if (abc.dot(ao) > 0.0f) {
-			simplex.Assign(a, b, c);
-			dir = abc;
-			return false;
+			if (dir.SqLength() < COLLISION_VOLUME_EPS)
+				dir = PerpendicularVector(ab);
+		} else {
+			simplex.Assign(a);
+			dir = ao;
 		}
-		if (acd.dot(ao) > 0.0f) {
-			simplex.Assign(a, c, d);
-			dir = acd;
-			return false;
-		}
-		if (adb.dot(ao) > 0.0f) {
-			simplex.Assign(a, d, b);
-			dir = adb;
-			return false;
-		}
-
-		return true;
+		return false;
 	}
+
+	if (abc.dot(ao) > 0.0f) {
+		dir = abc;
+	} else {
+		simplex.Assign(a, c, b);
+		dir = -abc;
+	}
+
+	return false;
+}
+
+	static bool UpdateTetrahedronSimplex(GJKSimplex& simplex, float3& dir)
+{
+	const float3& a = simplex.points[0];
+	const float3& b = simplex.points[1];
+	const float3& c = simplex.points[2];
+	const float3& d = simplex.points[3];
+
+	const float3 ao = -a;
+	const float3 ab = b - a;
+	const float3 ac = c - a;
+	const float3 ad = d - a;
+
+	float3 abc = ab.cross(ac); // opposite vertex: d
+	if (abc.dot(ad) > 0.0f)
+		abc = -abc;
+
+	float3 acd = ac.cross(ad); // opposite vertex: b
+	if (acd.dot(ab) > 0.0f)
+		acd = -acd;
+
+	float3 adb = ad.cross(ab); // opposite vertex: c
+	if (adb.dot(ac) > 0.0f)
+		adb = -adb;
+
+	if (abc.dot(ao) > 0.0f) {
+		simplex.Assign(a, b, c);
+		dir = abc;
+		return false;
+	}
+
+	if (acd.dot(ao) > 0.0f) {
+		simplex.Assign(a, c, d);
+		dir = acd;
+		return false;
+	}
+
+	if (adb.dot(ao) > 0.0f) {
+		simplex.Assign(a, d, b);
+		dir = adb;
+		return false;
+	}
+
+	return true;
+}
 
 	static bool UpdateSimplex(GJKSimplex& simplex, float3& dir)
 	{
@@ -491,6 +520,173 @@ static bool GetAxisAlignedMapping(const CMatrix44f& relMat, int axisMap[3], int 
 				return false;
 			} break;
 		}
+	}
+
+	static bool HasSupportPoint(const GJKSimplex& simplex, const float3& point)
+	{
+		for (int i = 0; i < simplex.size; ++i) {
+			if ((simplex.points[i] - point).SqLength() <= COLLISION_VOLUME_EPS)
+				return true;
+		}
+
+		return false;
+	}
+
+	static bool PointInFrustumLocal(const CollisionVolume* frustum, const float3& point)
+	{
+		const float3 relPoint = point - frustum->GetOffsets();
+		const int primaryAxis = frustum->GetPrimaryAxis();
+		const int secondaryAxis0 = frustum->GetSecondaryAxis(0);
+		const int secondaryAxis1 = frustum->GetSecondaryAxis(1);
+		const float3& fruHScales = frustum->GetHScales();
+		const float h = fruHScales[primaryAxis];
+		const float u = relPoint[primaryAxis];
+
+		if (u < (-h - COLLISION_VOLUME_EPS) || u > (h + COLLISION_VOLUME_EPS))
+			return false;
+
+		const float extentScale = (u + h) / (2.0f * h);
+		const float extent0 = fruHScales[secondaryAxis0] * extentScale;
+		const float extent1 = fruHScales[secondaryAxis1] * extentScale;
+
+		return (
+			math::fabs(relPoint[secondaryAxis0]) <= (extent0 + COLLISION_VOLUME_EPS) &&
+			math::fabs(relPoint[secondaryAxis1]) <= (extent1 + COLLISION_VOLUME_EPS)
+		);
+	}
+
+	static float3 GetClosestPointOnFrustumLocal(const CollisionVolume* frustum, const float3& point)
+	{
+		const float3 relPoint = point - frustum->GetOffsets();
+		const int primaryAxis = frustum->GetPrimaryAxis();
+		const int secondaryAxis0 = frustum->GetSecondaryAxis(0);
+		const int secondaryAxis1 = frustum->GetSecondaryAxis(1);
+		const float3& fruHScales = frustum->GetHScales();
+		const float h  = fruHScales[primaryAxis];
+		const float h0 = fruHScales[secondaryAxis0];
+		const float h1 = fruHScales[secondaryAxis1];
+		const float p = relPoint[primaryAxis];
+		const float s0 = math::fabs(relPoint[secondaryAxis0]);
+		const float s1 = math::fabs(relPoint[secondaryAxis1]);
+		const float k0 = h0 / (2.0f * h);
+		const float k1 = h1 / (2.0f * h);
+		const float sign0 = (relPoint[secondaryAxis0] >= 0.0f) ? 1.0f : -1.0f;
+		const float sign1 = (relPoint[secondaryAxis1] >= 0.0f) ? 1.0f : -1.0f;
+
+		auto clampPrimary = [h](float x) {
+			return std::clamp(x, -h, h);
+		};
+		auto extent0At = [h0, h](float x) {
+			return h0 * ((x + h) / (2.0f * h));
+		};
+		auto extent1At = [h1, h](float x) {
+			return h1 * ((x + h) / (2.0f * h));
+		};
+
+		const float xBreak0 = clampPrimary((2.0f * h * s0 / h0) - h);
+		const float xBreak1 = clampPrimary((2.0f * h * s1 / h1) - h);
+
+		float xs[4] = {-h, xBreak0, xBreak1, h};
+
+		for (int i = 0; i < 4; ++i) {
+			for (int j = i + 1; j < 4; ++j) {
+				if (xs[j] < xs[i])
+					std::swap(xs[i], xs[j]);
+			}
+		}
+
+		float bestPrimary = clampPrimary(p);
+		float bestDistSq = std::numeric_limits<float>::max();
+
+		const auto updateBest = [&](float x) {
+			x = clampPrimary(x);
+
+			const float extent0 = extent0At(x);
+			const float extent1 = extent1At(x);
+			const float q0 = sign0 * std::min(s0, extent0);
+			const float q1 = sign1 * std::min(s1, extent1);
+			const float dp = x - p;
+			const float ds0 = q0 - relPoint[secondaryAxis0];
+			const float ds1 = q1 - relPoint[secondaryAxis1];
+			const float distSq = (dp * dp) + (ds0 * ds0) + (ds1 * ds1);
+
+			if (distSq < bestDistSq) {
+				bestDistSq = distSq;
+				bestPrimary = x;
+			}
+		};
+
+		updateBest(p);
+
+		for (int i = 0; i < 4; ++i)
+			updateBest(xs[i]);
+
+		for (int i = 0; i < 3; ++i) {
+			const float xl = xs[i + 0];
+			const float xr = xs[i + 1];
+
+			if ((xr - xl) <= COLLISION_VOLUME_EPS)
+				continue;
+
+			const float xm = (xl + xr) * 0.5f;
+			const bool active0 = (xm < xBreak0);
+			const bool active1 = (xm < xBreak1);
+
+			float denom = 1.0f;
+			float numer = p;
+
+			if (active0) {
+				denom += k0 * k0;
+				numer += k0 * s0 - k0 * k0 * h;
+			}
+			if (active1) {
+				denom += k1 * k1;
+				numer += k1 * s1 - k1 * k1 * h;
+			}
+
+			updateBest(std::clamp(numer / denom, xl, xr));
+		}
+
+		const float bestExtent0 = extent0At(bestPrimary);
+		const float bestExtent1 = extent1At(bestPrimary);
+		float3 closest = frustum->GetOffsets();
+
+		closest[primaryAxis] += bestPrimary;
+		closest[secondaryAxis0] += sign0 * std::min(s0, bestExtent0);
+		closest[secondaryAxis1] += sign1 * std::min(s1, bestExtent1);
+		return closest;
+	}
+
+	static bool IntersectRoundedVolumeFrustum(const CollisionVolume* frustum, const CMatrix44f& fruMat,
+	                                          const CMatrix44f& fruInv, const CollisionVolume* vol,
+	                                          const CMatrix44f& volMat, const CMatrix44f& volInv)
+	{
+		const float3 centerLocal = fruInv.Mul(volMat.Mul(vol->GetOffsets()));
+
+		if (PointInFrustumLocal(frustum, centerLocal))
+			return true;
+
+		const float3 closestLocal = GetClosestPointOnFrustumLocal(frustum, centerLocal);
+		const float3 dir = closestLocal - centerLocal;
+
+		if (dir.SqLength() <= COLLISION_VOLUME_EPS)
+			return true;
+
+		const float3 supportLocal = GetSupportPointBoxSpace(vol, volMat, volInv, fruMat, fruInv, dir);
+		return PointInFrustumLocal(frustum, supportLocal);
+	}
+
+	static bool IntersectSphereFrustum(const CollisionVolume* frustum, const CMatrix44f& fruInv,
+	                                   const CollisionVolume* sphere, const CMatrix44f& sphereMat)
+	{
+		const float3 centerLocal = fruInv.Mul(sphereMat.Mul(sphere->GetOffsets()));
+
+		if (PointInFrustumLocal(frustum, centerLocal))
+			return true;
+
+		const float3 closestLocal = GetClosestPointOnFrustumLocal(frustum, centerLocal);
+		const float radius = sphere->GetHScales().x;
+		return ((closestLocal - centerLocal).SqLength() <= ((radius * radius) + COLLISION_VOLUME_EPS));
 	}
 }  // namespace
 
@@ -1324,6 +1520,9 @@ bool CCollisionHandler::IntersectBoxVolume(const CollisionVolume* box, const CMa
 		if (support.dot(dir) < -COLLISION_VOLUME_EPS)
 			return false;
 
+		if (HasSupportPoint(simplex, support))
+			return false;
+
 		simplex.PushFront(support);
 
 		if (UpdateSimplex(simplex, dir))
@@ -1356,6 +1555,16 @@ bool CCollisionHandler::IntersectFrustumVolume(const CollisionVolume* frustum, c
 	const CMatrix44f fruInv = fruMat.InvertAffine();
 	const CMatrix44f volInv = volMat.InvertAffine();
 
+	switch (vol->GetVolumeType()) {
+		case CollisionVolume::COLVOL_TYPE_SPHERE:
+			return IntersectSphereFrustum(frustum, fruInv, vol, volMat);
+		case CollisionVolume::COLVOL_TYPE_ELLIPSOID:
+		case CollisionVolume::COLVOL_TYPE_CYLINDER:
+			return IntersectRoundedVolumeFrustum(frustum, fruMat, fruInv, vol, volMat, volInv);
+		default:
+			break;
+	}
+
 	// Initial search direction in frustum-local space.
 	float3 dir = fruInv.Mul(volCtr);
 
@@ -1376,6 +1585,9 @@ bool CCollisionHandler::IntersectFrustumVolume(const CollisionVolume* frustum, c
 			GetMinkowskiSupportPoint(frustum, vol, volMat, volInv, fruMat, fruInv, dir);
 
 		if (support.dot(dir) < -COLLISION_VOLUME_EPS)
+			return false;
+
+		if (HasSupportPoint(simplex, support))
 			return false;
 
 		simplex.PushFront(support);

@@ -881,11 +881,143 @@ TEST_CASE("CollisionHandler_IntersectFrustumVolume_FrustumVsCylinder")
 	SECTION("x-axis cylinder intersects near base but not near apex") {
 		const CollisionVolume cylinder = MakeCylinderVolume(float3(2.0f, 1.0f, 1.0f), CollisionVolume::COLVOL_AXIS_X);
 
-		CHECK(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(1.1f, 0.0f, 1.0f))));
-		CHECK_FALSE(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(1.1f, 0.0f, -1.0f))));
+		CHECK(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(2.1f, 0.0f, 1.0f))));
+		CHECK_FALSE(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(2.1f, 0.0f, -1.0f))));
+	}
+
+	SECTION("z-axis cylinder centered at apex still intersects") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(0.5f, 0.5f, 1.0f), CollisionVolume::COLVOL_AXIS_Z);
+		CHECK(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(0.0f, 0.0f, -1.5f))));
+	}
+
+	SECTION("z-axis cylinder completely below apex is separated") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(0.5f, 0.5f, 0.5f), CollisionVolume::COLVOL_AXIS_Z);
+		CHECK_FALSE(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(0.0f, 0.0f, -2.6f))));
+	}
+
+	SECTION("z-axis cylinder tangent to positive x side plane counts as intersecting") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.0f, 1.0f, 1.0f), CollisionVolume::COLVOL_AXIS_Z);
+		CHECK(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(2.0f, 0.0f, 1.5f))));
+	}
+
+	SECTION("z-axis cylinder outside positive x side plane is separated") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.0f, 1.0f, 1.0f), CollisionVolume::COLVOL_AXIS_Z);
+		CHECK_FALSE(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(3.1f, 0.0f, 1.5f))));
+	}
+
+	SECTION("z-axis cylinder tangent to negative x side plane counts as intersecting") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.0f, 1.0f, 1.0f), CollisionVolume::COLVOL_AXIS_Z);
+		CHECK(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(-2.0f, 0.0f, 1.5f))));
+	}
+
+	SECTION("z-axis cylinder outside negative x side plane is separated") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.0f, 1.0f, 1.0f), CollisionVolume::COLVOL_AXIS_Z);
+		CHECK_FALSE(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(-3.1f, 0.0f, 1.5f))));
+	}
+
+	SECTION("z-axis cylinder tangent to positive y side plane counts as intersecting") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.0f, 1.0f, 1.0f), CollisionVolume::COLVOL_AXIS_Z);
+		CHECK(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(0.0f, 2.0f, 1.5f))));
+	}
+
+	SECTION("z-axis cylinder outside positive y side plane is separated") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.0f, 1.0f, 1.0f), CollisionVolume::COLVOL_AXIS_Z);
+		CHECK_FALSE(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(0.0f, 3.1f, 1.5f))));
+	}
+
+	SECTION("z-axis cylinder tangent to negative y side plane counts as intersecting") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.0f, 1.0f, 1.0f), CollisionVolume::COLVOL_AXIS_Z);
+		CHECK(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(0.0f, -2.0f, 1.5f))));
+	}
+
+	SECTION("z-axis cylinder outside negative y side plane is separated") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.0f, 1.0f, 1.0f), CollisionVolume::COLVOL_AXIS_Z);
+		CHECK_FALSE(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(0.0f, -3.1f, 1.5f))));
+	}
+
+	SECTION("z-axis cylinder near frustum corner still intersects") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(0.75f, 0.75f, 1.0f), CollisionVolume::COLVOL_AXIS_Z);
+		CHECK(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(1.8f, 1.8f, 1.75f))));
+	}
+
+	SECTION("z-axis cylinder beyond frustum corner is separated") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(0.75f, 0.75f, 1.0f), CollisionVolume::COLVOL_AXIS_Z);
+		CHECK_FALSE(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(3.0f, 3.0f, 1.75f))));
+	}
+
+	SECTION("large z-axis cylinder enclosing frustum intersects") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(8.0f, 8.0f, 8.0f), CollisionVolume::COLVOL_AXIS_Z);
+		CHECK(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform()));
+	}
+
+	SECTION("thin tall z-axis cylinder passing through frustum axis intersects") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(0.2f, 0.2f, 8.0f), CollisionVolume::COLVOL_AXIS_Z);
+		CHECK(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform()));
+	}
+
+	SECTION("thin tall z-axis cylinder offset from axis misses frustum") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(0.2f, 0.2f, 8.0f), CollisionVolume::COLVOL_AXIS_Z);
+		CHECK_FALSE(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(3.0f, 0.0f, 0.0f))));
+	}
+
+	SECTION("x-axis cylinder crossing the frustum center intersects") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(3.0f, 0.5f, 0.5f), CollisionVolume::COLVOL_AXIS_X);
+		CHECK(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(0.0f, 0.0f, 1.0f))));
+	}
+
+	SECTION("x-axis cylinder fully to the side is separated") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(3.0f, 0.5f, 0.5f), CollisionVolume::COLVOL_AXIS_X);
+		CHECK_FALSE(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(0.0f, 3.0f, 1.0f))));
+	}
+
+	SECTION("y-axis cylinder crossing the frustum center intersects") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(0.5f, 3.0f, 0.5f), CollisionVolume::COLVOL_AXIS_Y);
+		CHECK(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(0.0f, 0.0f, 1.0f))));
+	}
+
+	SECTION("y-axis cylinder fully to the side is separated") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(0.5f, 3.0f, 0.5f), CollisionVolume::COLVOL_AXIS_Y);
+		CHECK_FALSE(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(3.0f, 0.0f, 1.0f))));
+	}
+
+	SECTION("x-axis cylinder tangent to base face counts as intersecting") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.5f, 0.5f, 0.5f), CollisionVolume::COLVOL_AXIS_X);
+		CHECK(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(0.0f, 0.0f, 2.5f))));
+	}
+
+	SECTION("x-axis cylinder beyond base face is separated") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.5f, 0.5f, 0.5f), CollisionVolume::COLVOL_AXIS_X);
+		CHECK_FALSE(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(0.0f, 0.0f, 2.6f))));
+	}
+
+	// SECTION("rotated z-axis cylinder intersects when tilted through frustum") {
+	// 	const CollisionVolume cylinder = MakeCylinderVolume(float3(0.75f, 0.75f, 2.0f), CollisionVolume::COLVOL_AXIS_Z);
+	// 	const CMatrix44f cylMat = MakeTransform(float3(0.5f, 0.0f, 1.0f), EulerAnglesToMatrix33(float3(0.0f, math::HALFPI * 0.5f, 0.0f)));
+	// 	CHECK(IntersectsFrustum(frustum, frustumMat, cylinder, cylMat));
+	// }
+
+	// SECTION("rotated z-axis cylinder separated when tilted and offset away") {
+	// 	const CollisionVolume cylinder = MakeCylinderVolume(float3(0.75f, 0.75f, 2.0f), CollisionVolume::COLVOL_AXIS_Z);
+	// 	const CMatrix44f cylMat = MakeTransform(float3(3.0f, 0.0f, 1.0f), EulerAnglesToMatrix33(float3(0.0f, math::HALFPI * 0.5f, 0.0f)));
+	// 	CHECK_FALSE(IntersectsFrustum(frustum, frustumMat, cylinder, cylMat));
+	// }
+
+	SECTION("frustum transformed and cylinder still intersects in world space") {
+		const CMatrix44f movedFrustumMat = MakeTransform(float3(10.0f, -2.0f, 3.0f));
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.0f, 1.0f, 2.0f), CollisionVolume::COLVOL_AXIS_Z);
+		const CMatrix44f cylMat = MakeTransform(float3(10.5f, -2.0f, 3.5f));
+
+		CHECK(IntersectsFrustum(frustum, movedFrustumMat, cylinder, cylMat));
+	}
+
+	SECTION("frustum transformed and cylinder separated in world space") {
+		const CMatrix44f movedFrustumMat = MakeTransform(float3(10.0f, -2.0f, 3.0f));
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.0f, 1.0f, 2.0f), CollisionVolume::COLVOL_AXIS_Z);
+		const CMatrix44f cylMat = MakeTransform(float3(14.0f, -2.0f, 3.5f));
+
+		CHECK_FALSE(IntersectsFrustum(frustum, movedFrustumMat, cylinder, cylMat));
 	}
 }
-
 TEST_CASE("CollisionHandler_IntersectFrustumVolume_FrustumVsFrustum")
 {
 	const CollisionVolume frustumA = MakeFrustumVolume(float3(4.0f, 4.0f, 4.0f), CollisionVolume::COLVOL_AXIS_Z);
