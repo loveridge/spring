@@ -177,13 +177,13 @@ class CCollisionHandler {
 		static bool IntersectBoxVolume(const CollisionVolume* box, const CMatrix44f& boxMat, const CollisionVolume* vol, const CMatrix44f& volMat);
 
 		/**
-		 * Test if a box volume intersects another collision volume.
-		 * @param frustum first volume, must be COLVOL_TYPE_FRUSTUM
-		 * @param fruMat frustum transformation matrix
+		 * Test if a pyramid volume intersects another collision volume.
+		 * @param pyramid first volume, must be COLVOL_TYPE_PYRAMID
+		 * @param pyrMat pyramid transformation matrix
 		 * @param vol second volume
 		 * @param volMat second volume transformation matrix
 		 */
-		static bool IntersectFrustumVolume(const CollisionVolume* frustum, const CMatrix44f& fruMat, const CollisionVolume* vol, const CMatrix44f& volMat);
+		static bool IntersectPyramidVolume(const CollisionVolume* pyramid, const CMatrix44f& pyrMat, const CollisionVolume* vol, const CMatrix44f& volMat);
 
 
 	private:

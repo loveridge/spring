@@ -71,12 +71,12 @@ CollisionVolume::CollisionVolume(
 		case 'E': case 'e': { cvType = COLVOL_TYPE_ELLIPSOID; } break; // "[E|e]ll..."
 		case 'C': case 'c': { cvType = COLVOL_TYPE_CYLINDER;  } break; // "[C|c]yl..."
 		case 'B': case 'b': { cvType = COLVOL_TYPE_BOX;       } break; // "[B|b]ox"
-		case 'F': case 'f': { cvType = COLVOL_TYPE_FRUSTUM;   } break; // "[F|f]rustum"
+		case 'P': case 'p': { cvType = COLVOL_TYPE_PYRAMID;   } break; // "[F|f]rustum"
 		case 'S': case 's': { cvType = COLVOL_TYPE_SPHERE;    } break; // "[S|s]ph..."
 		default           : {                                 } break;
 	}
 
-	if (cvType == COLVOL_TYPE_CYLINDER || cvType == COLVOL_TYPE_FRUSTUM) {
+	if (cvType == COLVOL_TYPE_CYLINDER || cvType == COLVOL_TYPE_PYRAMID) {
 		switch (cvAxisChar) {
 			case 'X': case 'x': { cvAxis = COLVOL_AXIS_X; } break;
 			case 'Y': case 'y': { cvAxis = COLVOL_AXIS_Y; } break;
@@ -153,7 +153,7 @@ void CollisionVolume::SetBoundingRadius() {
 	//   a call to SetAxisScales or to RescaleAxes
 	switch (volumeType) {
 		case COLVOL_TYPE_BOX:
-		case COLVOL_TYPE_FRUSTUM: {
+		case COLVOL_TYPE_PYRAMID: {
 			// for frusta, this is the max distance from the local origin
 			// to the base corners; for boxes it is the usual corner radius
 			volumeBoundingRadiusSq = halfAxisScalesSqr.x + halfAxisScalesSqr.y + halfAxisScalesSqr.z;
@@ -225,7 +225,7 @@ void CollisionVolume::FixTypeAndScale(float3& scales) {
 			scales[volumeAxes[2]] =          scales[volumeAxes[1]];
 		} break;
 
-		case COLVOL_TYPE_FRUSTUM: {
+		case COLVOL_TYPE_PYRAMID: {
 			// no extra normalization; the primary axis is height and the
 			// secondary axes are the wide-end extents of the rectangular base
 		} break;
@@ -329,11 +329,11 @@ float CollisionVolume::GetPointSurfaceDistance(const CMatrix44f& mv, const float
 			d = GetEllipsoidDistance(pv);
 		} break;
 
-		case COLVOL_TYPE_FRUSTUM: {
+		case COLVOL_TYPE_PYRAMID: {
 			switch (volumeAxes[0]) {
-				case COLVOL_AXIS_X: { d = GetFrustumDistance(pv, 0, 1, 2); } break;
-				case COLVOL_AXIS_Y: { d = GetFrustumDistance(pv, 1, 0, 2); } break;
-				case COLVOL_AXIS_Z: { d = GetFrustumDistance(pv, 2, 0, 1); } break;
+				case COLVOL_AXIS_X: { d = GetPyramidDistance(pv, 0, 1, 2); } break;
+				case COLVOL_AXIS_Y: { d = GetPyramidDistance(pv, 1, 0, 2); } break;
+				case COLVOL_AXIS_Z: { d = GetPyramidDistance(pv, 2, 0, 1); } break;
 			}
 		} break;
 
@@ -373,11 +373,11 @@ float CollisionVolume::GetCylinderDistance(const float3& pv, size_t axisA, size_
 	return d;
 }
 
-float CollisionVolume::GetFrustumDistance(const float3& pv, size_t axisA, size_t axisB, size_t axisC) const
+float CollisionVolume::GetPyramidDistance(const float3& pv, size_t axisA, size_t axisB, size_t axisC) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 
-	// The frustum is represented as a rectangular pyramid:
+	// The rectangular pyramid is represented by:
 	//   primary axis in [-h, +h]
 	//   apex at primary = -h
 	//   rectangular base at primary = +h with half-extents {b, c}

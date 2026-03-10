@@ -2333,7 +2333,7 @@ static void BuildPerspectiveSelectionFrustum(
 	// so the world-space volume origin is the midpoint between them.
 	const float3 fruPos = camPos + (fruFwd * (fruHeight * 0.5f));
 
-	fruVol.SetVolumeType(CollisionVolume::COLVOL_TYPE_FRUSTUM);
+	fruVol.SetVolumeType(CollisionVolume::COLVOL_TYPE_PYRAMID);
 	fruVol.SetOffsets(ZeroVector);
 	fruVol.SetAxisScales(fruScales);
 	fruVol.SetBoundingRadius();
@@ -2396,7 +2396,7 @@ static void BuildPerspectiveSelectionFrustum(
 	}
 
 	BuildPerspectiveSelectionFrustum(cam, l, t, r, b, selVol, selMat);
-	return CCollisionHandler::IntersectFrustumVolume(&selVol, selMat, unitVol, unitMat);
+	return CCollisionHandler::IntersectPyramidVolume(&selVol, selMat, unitVol, unitMat);
 }
 
 	template<typename V>

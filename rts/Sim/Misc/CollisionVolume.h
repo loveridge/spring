@@ -26,7 +26,7 @@ public:
 		COLVOL_TYPE_ELLIPSOID =  0,
 		COLVOL_TYPE_CYLINDER  =  1,
 		COLVOL_TYPE_BOX       =  2,
-		COLVOL_TYPE_FRUSTUM   =  3,
+		COLVOL_TYPE_PYRAMID   =  3, // Rectangular pyramid
 		COLVOL_TYPE_SPHERE    =  4,
 	};
 	enum {
@@ -135,7 +135,7 @@ private:
 
 	float GetCylinderDistance(const float3& pv, size_t axisA = 0, size_t axisB = 1, size_t axisC = 2) const;
 	float GetEllipsoidDistance(const float3& pv) const;
-	float GetFrustumDistance(const float3& pv, size_t axisA = 0, size_t axisB = 1, size_t axisC = 2) const;
+	float GetPyramidDistance(const float3& pv, size_t axisA = 0, size_t axisB = 1, size_t axisC = 2) const;
 
 private:
 	float3 fullAxisScales    = OnesVector * 2.0f;  ///< full-length axis scales

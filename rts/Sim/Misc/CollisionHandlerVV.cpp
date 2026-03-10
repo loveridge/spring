@@ -115,14 +115,14 @@ namespace
 				}
 			} break;
 
-			case CollisionVolume::COLVOL_TYPE_FRUSTUM: {
+			case CollisionVolume::COLVOL_TYPE_PYRAMID: {
 				const int pAx = v->GetPrimaryAxis();
 				const int sAx0 = v->GetSecondaryAxis(0);
 				const int sAx1 = v->GetSecondaryAxis(1);
 
 				const float h = ahs[pAx];
 
-				// Support of the rectangular pyramid/frustum:
+				// Support of the rectangular pyramid:
 				// maximize d·x over either apex or base rectangle.
 				const float baseCoeff = dir[pAx] +
 				                        (math::fabs(dir[sAx0]) * ahs[sAx0]) / (2.0f * h) +
@@ -231,26 +231,26 @@ namespace
 		return weightedSqDist;
 	}
 
-	static bool IntersectAxisAlignedBoxFrustum(const float3& boxCenter, const float3& boxHScales,
-	                                           const float3& fruCenter, const float3& fruHScales,
+	static bool IntersectAxisAlignedBoxPyramid(const float3& boxCenter, const float3& boxHScales,
+	                                           const float3& pyrCenter, const float3& pyrHScales,
 	                                           int primaryAxis, int secondaryAxis0,
 	                                           int secondaryAxis1, int primarySign)
 	{
-		const float h = fruHScales[primaryAxis];
-		const float hb = fruHScales[secondaryAxis0];
-		const float hc = fruHScales[secondaryAxis1];
+		const float h = pyrHScales[primaryAxis];
+		const float hb = pyrHScales[secondaryAxis0];
+		const float hc = pyrHScales[secondaryAxis1];
 
 		assert(h > 0.0f);
 		assert(hb > 0.0f);
 		assert(hc > 0.0f);
 
-		// Express the box's primary-axis interval in the frustum's local-primary coordinate u,
-		// where the frustum occupies u in [-h, +h], apex is at -h, base at +h.
+		// Express the box's primary-axis interval in the pyramid's local-primary coordinate u,
+		// where the pyramid occupies u in [-h, +h], apex is at -h, base at +h.
 		const float boxMinP = boxCenter[primaryAxis] - boxHScales[primaryAxis];
 		const float boxMaxP = boxCenter[primaryAxis] + boxHScales[primaryAxis];
 
-		const float u0 = primarySign * (boxMinP - fruCenter[primaryAxis]);
-		const float u1 = primarySign * (boxMaxP - fruCenter[primaryAxis]);
+		const float u0 = primarySign * (boxMinP - pyrCenter[primaryAxis]);
+		const float u1 = primarySign * (boxMaxP - pyrCenter[primaryAxis]);
 
 		const float overlapUMin = std::max(std::min(u0, u1), -h);
 		const float overlapUMax = std::min(std::max(u0, u1), h);
@@ -258,17 +258,17 @@ namespace
 		if (overlapUMin > overlapUMax)
 			return false;
 
-		// In any slice u, the frustum cross-section rectangle is centered at fruCenter on the
+		// In any slice u, the pyramid cross-section rectangle is centered at pyrCenter on the
 		// secondary axes, with half-extents that grow linearly from 0 at the apex to hb/hc at the
 		// base.
-		const float deltaB = math::fabs(boxCenter[secondaryAxis0] - fruCenter[secondaryAxis0]);
-		const float deltaC = math::fabs(boxCenter[secondaryAxis1] - fruCenter[secondaryAxis1]);
+		const float deltaB = math::fabs(boxCenter[secondaryAxis0] - pyrCenter[secondaryAxis0]);
+		const float deltaC = math::fabs(boxCenter[secondaryAxis1] - pyrCenter[secondaryAxis1]);
 
-		// Required frustum half-width/half-height beyond the box's own half-scales.
+		// Required pyramid half-width/half-height beyond the box's own half-scales.
 		const float needB = std::max(deltaB - boxHScales[secondaryAxis0], 0.0f);
 		const float needC = std::max(deltaC - boxHScales[secondaryAxis1], 0.0f);
 
-		// Solve for the earliest u at which the frustum slice is wide enough on each secondary
+		// Solve for the earliest u at which the pyramid slice is wide enough on each secondary
 		// axis:
 		//   hb * ((u + h) / (2h)) >= needB
 		//   hc * ((u + h) / (2h)) >= needC
@@ -348,7 +348,7 @@ namespace
 				return (sqDist <= (radius * radius));
 			} break;
 
-			case CollisionVolume::COLVOL_TYPE_FRUSTUM: {
+			case CollisionVolume::COLVOL_TYPE_PYRAMID: {
 				const int primaryAxis = axisMap[vol->GetPrimaryAxis()];
 				const int secondaryAxis0 = axisMap[vol->GetSecondaryAxis(0)];
 				const int secondaryAxis1 = axisMap[vol->GetSecondaryAxis(1)];
@@ -356,7 +356,7 @@ namespace
 
 				const float3 volHScales = GetAlignedHalfScales(vol, axisMap);
 
-				return IntersectAxisAlignedBoxFrustum(boxCenter, boxHScales, volCenter, volHScales,
+				return IntersectAxisAlignedBoxPyramid(boxCenter, boxHScales, volCenter, volHScales,
 				                                      primaryAxis, secondaryAxis0, secondaryAxis1,
 				                                      primarySign);
 			} break;
@@ -521,37 +521,37 @@ namespace
 		return false;
 	}
 
-	static bool PointInFrustumLocal(const CollisionVolume* frustum, const float3& point)
+	static bool PointInPyramidLocal(const CollisionVolume* pyramid, const float3& point)
 	{
-		const float3 relPoint = point - frustum->GetOffsets();
-		const int primaryAxis = frustum->GetPrimaryAxis();
-		const int secondaryAxis0 = frustum->GetSecondaryAxis(0);
-		const int secondaryAxis1 = frustum->GetSecondaryAxis(1);
-		const float3& fruHScales = frustum->GetHScales();
-		const float h = fruHScales[primaryAxis];
+		const float3 relPoint = point - pyramid->GetOffsets();
+		const int primaryAxis = pyramid->GetPrimaryAxis();
+		const int secondaryAxis0 = pyramid->GetSecondaryAxis(0);
+		const int secondaryAxis1 = pyramid->GetSecondaryAxis(1);
+		const float3& pyrHScales = pyramid->GetHScales();
+		const float h = pyrHScales[primaryAxis];
 		const float u = relPoint[primaryAxis];
 
 		if (u < (-h - COLLISION_VOLUME_EPS) || u > (h + COLLISION_VOLUME_EPS))
 			return false;
 
 		const float extentScale = (u + h) / (2.0f * h);
-		const float extent0 = fruHScales[secondaryAxis0] * extentScale;
-		const float extent1 = fruHScales[secondaryAxis1] * extentScale;
+		const float extent0 = pyrHScales[secondaryAxis0] * extentScale;
+		const float extent1 = pyrHScales[secondaryAxis1] * extentScale;
 
 		return (math::fabs(relPoint[secondaryAxis0]) <= (extent0 + COLLISION_VOLUME_EPS) &&
 		        math::fabs(relPoint[secondaryAxis1]) <= (extent1 + COLLISION_VOLUME_EPS));
 	}
 
-	static float3 GetClosestPointOnFrustumLocal(const CollisionVolume* frustum, const float3& point)
+	static float3 GetClosestPointOnPyramidLocal(const CollisionVolume* pyramid, const float3& point)
 	{
-		const float3 relPoint = point - frustum->GetOffsets();
-		const int primaryAxis = frustum->GetPrimaryAxis();
-		const int secondaryAxis0 = frustum->GetSecondaryAxis(0);
-		const int secondaryAxis1 = frustum->GetSecondaryAxis(1);
-		const float3& fruHScales = frustum->GetHScales();
-		const float h = fruHScales[primaryAxis];
-		const float h0 = fruHScales[secondaryAxis0];
-		const float h1 = fruHScales[secondaryAxis1];
+		const float3 relPoint = point - pyramid->GetOffsets();
+		const int primaryAxis = pyramid->GetPrimaryAxis();
+		const int secondaryAxis0 = pyramid->GetSecondaryAxis(0);
+		const int secondaryAxis1 = pyramid->GetSecondaryAxis(1);
+		const float3& pyrHScales = pyramid->GetHScales();
+		const float h = pyrHScales[primaryAxis];
+		const float h0 = pyrHScales[secondaryAxis0];
+		const float h1 = pyrHScales[secondaryAxis1];
 		const float p = relPoint[primaryAxis];
 		const float s0 = math::fabs(relPoint[secondaryAxis0]);
 		const float s1 = math::fabs(relPoint[secondaryAxis1]);
@@ -630,7 +630,7 @@ namespace
 
 		const float bestExtent0 = extent0At(bestPrimary);
 		const float bestExtent1 = extent1At(bestPrimary);
-		float3 closest = frustum->GetOffsets();
+		float3 closest = pyramid->GetOffsets();
 
 		closest[primaryAxis] += bestPrimary;
 		closest[secondaryAxis0] += sign0 * std::min(s0, bestExtent0);
@@ -638,36 +638,36 @@ namespace
 		return closest;
 	}
 
-	static bool IntersectRoundedVolumeFrustum(const CollisionVolume* frustum,
-	                                          const CMatrix44f& fruMat, const CMatrix44f& fruInv,
+	static bool IntersectRoundedVolumePyramid(const CollisionVolume* pyramid,
+	                                          const CMatrix44f& pyrMat, const CMatrix44f& pyrInv,
 	                                          const CollisionVolume* vol, const CMatrix44f& volMat,
 	                                          const CMatrix44f& volInv)
 	{
-		const float3 centerLocal = fruInv.Mul(volMat.Mul(vol->GetOffsets()));
+		const float3 centerLocal = pyrInv.Mul(volMat.Mul(vol->GetOffsets()));
 
-		if (PointInFrustumLocal(frustum, centerLocal))
+		if (PointInPyramidLocal(pyramid, centerLocal))
 			return true;
 
-		const float3 closestLocal = GetClosestPointOnFrustumLocal(frustum, centerLocal);
+		const float3 closestLocal = GetClosestPointOnPyramidLocal(pyramid, centerLocal);
 		const float3 dir = closestLocal - centerLocal;
 
 		if (dir.SqLength() <= COLLISION_VOLUME_EPS)
 			return true;
 
 		const float3 supportLocal =
-			GetSupportPointBoxSpace(vol, volMat, volInv, fruMat, fruInv, dir);
-		return PointInFrustumLocal(frustum, supportLocal);
+			GetSupportPointBoxSpace(vol, volMat, volInv, pyrMat, pyrInv, dir);
+		return PointInPyramidLocal(pyramid, supportLocal);
 	}
 
-	static bool IntersectSphereFrustum(const CollisionVolume* frustum, const CMatrix44f& fruInv,
+	static bool IntersectSpherePyramid(const CollisionVolume* pyramid, const CMatrix44f& pyrInv,
 	                                   const CollisionVolume* sphere, const CMatrix44f& sphereMat)
 	{
-		const float3 centerLocal = fruInv.Mul(sphereMat.Mul(sphere->GetOffsets()));
+		const float3 centerLocal = pyrInv.Mul(sphereMat.Mul(sphere->GetOffsets()));
 
-		if (PointInFrustumLocal(frustum, centerLocal))
+		if (PointInPyramidLocal(pyramid, centerLocal))
 			return true;
 
-		const float3 closestLocal = GetClosestPointOnFrustumLocal(frustum, centerLocal);
+		const float3 closestLocal = GetClosestPointOnPyramidLocal(pyramid, centerLocal);
 		const float radius = sphere->GetHScales().x;
 		return ((closestLocal - centerLocal).SqLength() <=
 		        ((radius * radius) + COLLISION_VOLUME_EPS));
@@ -736,47 +736,47 @@ bool CCollisionHandler::IntersectBoxVolume(const CollisionVolume* box, const CMa
 	return false;
 }
 
-bool CCollisionHandler::IntersectFrustumVolume(const CollisionVolume* frustum,
-                                               const CMatrix44f& fruMat, const CollisionVolume* vol,
+bool CCollisionHandler::IntersectPyramidVolume(const CollisionVolume* pyramid,
+                                               const CMatrix44f& pyrMat, const CollisionVolume* vol,
                                                const CMatrix44f& volMat)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 
-	if (frustum == nullptr || vol == nullptr)
+	if (pyramid == nullptr || vol == nullptr)
 		return false;
-	if (frustum->GetVolumeType() != CollisionVolume::COLVOL_TYPE_FRUSTUM)
+	if (pyramid->GetVolumeType() != CollisionVolume::COLVOL_TYPE_PYRAMID)
 		return false;
 
-	const float3 fruCtr = fruMat.Mul(frustum->GetOffsets());
+	const float3 pyrCtr = pyrMat.Mul(pyramid->GetOffsets());
 	const float3 volCtr = volMat.Mul(vol->GetOffsets());
-	const float sumRadii = frustum->GetBoundingRadius() + vol->GetBoundingRadius();
+	const float sumRadii = pyramid->GetBoundingRadius() + vol->GetBoundingRadius();
 
-	if ((fruCtr - volCtr).SqLength() > (sumRadii * sumRadii))
+	if ((pyrCtr - volCtr).SqLength() > (sumRadii * sumRadii))
 		return false;
 
-	const CMatrix44f fruInv = fruMat.InvertAffine();
+	const CMatrix44f pyrInv = pyrMat.InvertAffine();
 	const CMatrix44f volInv = volMat.InvertAffine();
 
 	switch (vol->GetVolumeType()) {
 		case CollisionVolume::COLVOL_TYPE_SPHERE:
-			return IntersectSphereFrustum(frustum, fruInv, vol, volMat);
+			return IntersectSpherePyramid(pyramid, pyrInv, vol, volMat);
 		case CollisionVolume::COLVOL_TYPE_ELLIPSOID:
 		case CollisionVolume::COLVOL_TYPE_CYLINDER:
-			return IntersectRoundedVolumeFrustum(frustum, fruMat, fruInv, vol, volMat, volInv);
+			return IntersectRoundedVolumePyramid(pyramid, pyrMat, pyrInv, vol, volMat, volInv);
 		default:
 			break;
 	}
 
-	// Initial search direction in frustum-local space.
-	float3 dir = fruInv.Mul(volCtr);
+	// Initial search direction in pyramid-local space.
+	float3 dir = pyrInv.Mul(volCtr);
 
 	if (dir.SqLength() < COLLISION_VOLUME_EPS) {
 		dir = ZeroVector;
-		dir[frustum->GetPrimaryAxis()] = 1.0f;
+		dir[pyramid->GetPrimaryAxis()] = 1.0f;
 	}
 
 	GJKSimplex simplex;
-	simplex.PushFront(GetMinkowskiSupportPoint(frustum, vol, volMat, volInv, fruMat, fruInv, dir));
+	simplex.PushFront(GetMinkowskiSupportPoint(pyramid, vol, volMat, volInv, pyrMat, pyrInv, dir));
 	dir = -simplex.points[0];
 
 	if (dir.SqLength() < COLLISION_VOLUME_EPS)
@@ -784,7 +784,7 @@ bool CCollisionHandler::IntersectFrustumVolume(const CollisionVolume* frustum,
 
 	for (int n = 0; n < 32; ++n) {
 		const float3 support =
-			GetMinkowskiSupportPoint(frustum, vol, volMat, volInv, fruMat, fruInv, dir);
+			GetMinkowskiSupportPoint(pyramid, vol, volMat, volInv, pyrMat, pyrInv, dir);
 
 		if (support.dot(dir) < -COLLISION_VOLUME_EPS)
 			return false;
