@@ -49,6 +49,8 @@
 #include "Sim/Features/Feature.h"
 #include "Sim/Features/FeatureDef.h"
 #include "Sim/Features/FeatureHandler.h"
+#include "Sim/Misc/CollisionHandler.h"
+#include "Sim/Misc/CollisionVolume.h"
 #include "Sim/Misc/LosHandler.h"
 #include "Sim/Misc/ModInfo.h"
 #include "Sim/Misc/TeamHandler.h"
@@ -83,6 +85,7 @@
 
 #include <cctype>
 #include <algorithm>
+#include <cmath>
 
 #include <SDL_keyboard.h>
 #include <SDL_clipboard.h>
@@ -2206,6 +2209,104 @@ int LuaUnsyncedRead::GetVisibleProjectiles(lua_State* L)
 }
 
 namespace {
+	static float GetScreenRectPerspCoeffX(const CCamera* cam, float x)
+	{
+		const int vsy = std::max(1, globalRendering->viewSizeY);
+		const float xMid = globalRendering->viewSizeX * 0.5f;
+
+		return ((x - xMid) / vsy) * (cam->GetTanHalfFov() * 2.0f);
+	}
+
+	static float GetScreenRectPerspCoeffY(const CCamera* cam, float y)
+	{
+		const int vsy = std::max(1, globalRendering->viewSizeY);
+		const float yMid = globalRendering->viewSizeY * 0.5f;
+
+		// viewport coordinates use a bottom-left origin, unlike CalcPixelDir
+		return ((y - yMid) / vsy) * (cam->GetTanHalfFov() * 2.0f);
+	}
+
+	static float GetScreenRectOrthoCoord(float p, float size, float scale)
+	{
+		return (((p / size) * 2.0f) - 1.0f) * scale;
+	}
+
+	static bool IntersectUnitSelectionVolumeInScreenRect(const CUnit* unit, const CCamera* cam, float l, float t, float r, float b)
+	{
+		static constexpr float SCREEN_RECT_BOX_EPS = 1e-3f;
+		const CollisionVolume* unitVol = &unit->collisionVolume;
+		CMatrix44f unitMat(unit->GetTransformMatrix(false));
+		unitMat.Translate(unit->relMidPos);
+
+		const float3 unitVolCtr = unitMat.Mul(unitVol->GetOffsets());
+		const float3 camToVolCtr = (unitVolCtr - cam->GetPos());
+		const float depth = cam->GetForward().dot(camToVolCtr);
+		const float volRadius = unitVol->GetBoundingRadius();
+
+		if ((depth + volRadius) < cam->GetNearPlaneDist())
+			return false;
+		if ((depth - volRadius) > cam->GetFarPlaneDist())
+			return false;
+
+		CollisionVolume rectVol;
+		CMatrix44f rectMat;
+
+		if (cam->GetProjType() == CCamera::PROJTYPE_ORTHO) {
+			const float4& scales = cam->GetFrustumScales();
+			const float x0 = GetScreenRectOrthoCoord(l, globalRendering->viewSizeX, scales.x);
+			const float x1 = GetScreenRectOrthoCoord(r, globalRendering->viewSizeX, scales.x);
+			const float y0 = GetScreenRectOrthoCoord(t, globalRendering->viewSizeY, scales.y);
+			const float y1 = GetScreenRectOrthoCoord(b, globalRendering->viewSizeY, scales.y);
+			const float z0 = cam->GetNearPlaneDist();
+			const float z1 = cam->GetFarPlaneDist();
+
+			const float3 rectScales(
+				std::max(std::fabs(x1 - x0), SCREEN_RECT_BOX_EPS),
+				std::max(std::fabs(y1 - y0), SCREEN_RECT_BOX_EPS),
+				std::max(std::fabs(z1 - z0), SCREEN_RECT_BOX_EPS)
+			);
+			const float3 rectPos =
+				cam->GetPos() +
+				cam->GetRight()   * ((x0 + x1) * 0.5f) +
+				cam->GetUp()      * ((y0 + y1) * 0.5f) +
+				cam->GetForward() * ((z0 + z1) * 0.5f);
+
+			rectVol.SetVolumeType(CollisionVolume::COLVOL_TYPE_BOX);
+			rectVol.SetOffsets(ZeroVector);
+			rectVol.SetAxisScales(rectScales);
+			rectVol.SetBoundingRadius();
+			rectMat = CMatrix44f(rectPos, cam->GetRight(), cam->GetUp(), cam->GetForward());
+		} else {
+			if (depth <= 0.0f)
+				return false;
+
+			const float x0 = GetScreenRectPerspCoeffX(cam, l) * depth;
+			const float x1 = GetScreenRectPerspCoeffX(cam, r) * depth;
+			const float y0 = GetScreenRectPerspCoeffY(cam, t) * depth;
+			const float y1 = GetScreenRectPerspCoeffY(cam, b) * depth;
+			const float zPad = std::max(volRadius * 2.0f, SCREEN_RECT_BOX_EPS);
+
+			const float3 rectScales(
+				std::max(std::fabs(x1 - x0), SCREEN_RECT_BOX_EPS),
+				std::max(std::fabs(y1 - y0), SCREEN_RECT_BOX_EPS),
+				zPad
+			);
+			const float3 rectPos =
+				cam->GetPos() +
+				cam->GetRight()   * ((x0 + x1) * 0.5f) +
+				cam->GetUp()      * ((y0 + y1) * 0.5f) +
+				cam->GetForward() * depth;
+
+			rectVol.SetVolumeType(CollisionVolume::COLVOL_TYPE_BOX);
+			rectVol.SetOffsets(ZeroVector);
+			rectVol.SetAxisScales(rectScales);
+			rectVol.SetBoundingRadius();
+			rectMat = CMatrix44f(rectPos, cam->GetRight(), cam->GetUp(), cam->GetForward());
+		}
+
+		return CCollisionHandler::IntersectBoxVolume(&rectVol, rectMat, unitVol, unitMat);
+	}
+
 	template<typename V>
 	static int GetRenderObjects(lua_State* L, const V& renderObjects, const char* func) {
 		const int  drawMask = luaL_optint(L, 1, 0);
@@ -2449,18 +2550,20 @@ int LuaUnsyncedRead::GetUnitsInScreenRectangle(lua_State* L)
 				unit->tempNum = tempNum;
 
 				const float3 vpPos = camera->CalcViewPortCoordinates(unit->drawPos);
-
-				if (vpPos.x > r || vpPos.x < l)
-					continue;
-
-				if (vpPos.y > b || vpPos.y < t)
-					continue;
-
-				if (vpPos.z > 1.0f || vpPos.z < 0.0f)
-					continue;
-
-				lua_pushnumber(L, unit->id);
-				lua_rawseti(L, -2, ++count);
+				bool inRect = false;
+				// fast check with center point
+				if (vpPos.x <= r && vpPos.x >= l && vpPos.y <= b && vpPos.y >= t && vpPos.z <= 1.0f &&
+				    vpPos.z >= 0.0f) {
+					inRect = true;
+				}
+				// slow check with collision volume
+				if (!inRect && IntersectUnitSelectionVolumeInScreenRect(unit, camera, l, t, r, b)) {
+					inRect = true;
+				}
+				if (inRect) {
+					lua_pushnumber(L, unit->id);
+					lua_rawseti(L, -2, ++count);
+				}
 			}
 		}
 	};
@@ -2987,7 +3090,7 @@ int LuaUnsyncedRead::GetCameraDirection(lua_State* L)
 }
 
 /*** Get camera rotation in radians.
- * 
+ *
  * @function Spring.GetCameraRotation
  * @return number rotX Rotation around X axis in radians.
  * @return number rotY Rotation around Y axis in radians.
@@ -3655,9 +3758,9 @@ int LuaUnsyncedRead::GetCmdDescIndex(lua_State* L)
 
 /***
  * Facing direction represented as an integer only.
- * 
+ *
  * @see Facing
- * 
+ *
  * @alias FacingInteger
  * | 0 # South
  * | 1 # East
