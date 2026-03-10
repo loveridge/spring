@@ -50,6 +50,7 @@
 #include "Sim/Features/FeatureDef.h"
 #include "Sim/Features/FeatureHandler.h"
 #include "Sim/Misc/LosHandler.h"
+#include "Sim/Misc/CollisionHandler.h"
 #include "Sim/Misc/ModInfo.h"
 #include "Sim/Misc/TeamHandler.h"
 #include "Sim/Misc/QuadField.h"
@@ -2430,6 +2431,72 @@ int LuaUnsyncedRead::GetUnitsInScreenRectangle(lua_State* L)
 	const int readATeam = CLuaHandle::GetHandleReadAllyTeam(L);
 
 	const int allegiance = LuaUtils::ParseAllegiance(L, __func__, 5);
+	const float3& camPos = camera->GetPos();
+	const float3& camDir = camera->GetDir();
+	const float3& camRight = camera->GetRight();
+	const float3& camUp = camera->GetUp();
+
+	struct FrustumPlane {
+		float3 normal;
+		float3 point;
+	};
+
+	std::array<FrustumPlane, 6> frustumPlanes;
+	if (camera->GetProjType() == CCamera::PROJTYPE_PERSP) {
+		const float viewSizeX = std::max(1, globalRendering->viewSizeX) * 1.0f;
+		const float viewSizeY = std::max(1, globalRendering->viewSizeY) * 1.0f;
+		const float aspect = viewSizeX / viewSizeY;
+		const float xScale = camera->GetTanHalfFov() * aspect;
+		const float yScale = camera->GetTanHalfFov();
+
+		const auto calcCoeff = [](float value, float viewSize, float axisScale) {
+			return (((value / viewSize) * 2.0f) - 1.0f) * axisScale;
+		};
+
+		const float xMin = calcCoeff(l, viewSizeX, xScale);
+		const float xMax = calcCoeff(r, viewSizeX, xScale);
+		const float yMin = calcCoeff(t, viewSizeY, yScale);
+		const float yMax = calcCoeff(b, viewSizeY, yScale);
+		const float xCtr = (xMin + xMax) * 0.5f;
+		const float yCtr = (yMin + yMax) * 0.5f;
+		const float3 dirL = (camDir + camRight * xMin).SafeANormalize();
+		const float3 dirR = (camDir + camRight * xMax).SafeANormalize();
+		const float3 dirT = (camDir + camUp    * yMax).SafeANormalize();
+		const float3 dirB = (camDir + camUp    * yMin).SafeANormalize();
+
+		frustumPlanes[0] = {camUp.cross(dirL).SafeANormalize(), camPos};
+		frustumPlanes[1] = {dirR.cross(camUp).SafeANormalize(), camPos};
+		frustumPlanes[2] = {camRight.cross(dirT).SafeANormalize(), camPos};
+		frustumPlanes[3] = {dirB.cross(camRight).SafeANormalize(), camPos};
+
+		const float3 nearCenter = camPos + (camDir + camRight * xCtr + camUp * yCtr) * camera->GetNearPlaneDist();
+		const float3 farCenter  = camPos + (camDir + camRight * xCtr + camUp * yCtr) * camera->GetFarPlaneDist();
+
+		frustumPlanes[4] = { camDir, nearCenter};
+		frustumPlanes[5] = {-camDir, farCenter};
+	} else {
+		const float viewSizeX = std::max(1, globalRendering->viewSizeX) * 1.0f;
+		const float viewSizeY = std::max(1, globalRendering->viewSizeY) * 1.0f;
+		const float4 frustumScales = camera->GetFrustumScales();
+
+		const auto calcOffset = [](float value, float viewSize, float axisScale) {
+			return (((value / viewSize) * 2.0f) - 1.0f) * axisScale;
+		};
+
+		const float xMin = calcOffset(l, viewSizeX, frustumScales.x);
+		const float xMax = calcOffset(r, viewSizeX, frustumScales.x);
+		const float yMin = calcOffset(t, viewSizeY, frustumScales.y);
+		const float yMax = calcOffset(b, viewSizeY, frustumScales.y);
+		const float xCtr = (xMin + xMax) * 0.5f;
+		const float yCtr = (yMin + yMax) * 0.5f;
+
+		frustumPlanes[0] = { camRight, camPos + camRight * xMin};
+		frustumPlanes[1] = {-camRight, camPos + camRight * xMax};
+		frustumPlanes[2] = {-camUp   , camPos + camUp    * yMax};
+		frustumPlanes[3] = { camUp   , camPos + camUp    * yMin};
+		frustumPlanes[4] = { camDir  , camPos + camRight * xCtr + camUp * yCtr + camDir * camera->GetNearPlaneDist()};
+		frustumPlanes[5] = {-camDir  , camPos + camRight * xCtr + camUp * yCtr + camDir * camera->GetFarPlaneDist()};
+	}
 
 	// Even though we're in unsynced it's ok to use gs->tempNum since its exact value
 	// doesn't matter
@@ -2437,6 +2504,20 @@ int LuaUnsyncedRead::GetUnitsInScreenRectangle(lua_State* L)
 	lua_createtable(L, unitQuadIter.GetObjectCount(), 0);
 
 	auto runLoop = [&](auto disqualifier) {
+		const auto toVolumePlane = [](const CMatrix44f& invMat, const FrustumPlane& plane) {
+			const float4 localNormal4 = invMat.Mul(float4(plane.normal, 0.0f));
+			float3 localNormal(localNormal4.x, localNormal4.y, localNormal4.z);
+			const float localNormalSqLen = localNormal.SqLength();
+
+			if (localNormalSqLen <= COLLISION_VOLUME_EPS)
+				return float4();
+
+			localNormal /= math::sqrt(localNormalSqLen);
+
+			const float3 localPoint = invMat.Mul(plane.point);
+			return float4(localNormal, -localNormal.dot(localPoint));
+		};
+
 		uint32_t count = 0;
 		for (auto visUnitList : unitQuadIter.GetObjectLists()) {
 			for (CUnit* unit : *visUnitList) {
@@ -2449,15 +2530,27 @@ int LuaUnsyncedRead::GetUnitsInScreenRectangle(lua_State* L)
 				unit->tempNum = tempNum;
 
 				const float3 vpPos = camera->CalcViewPortCoordinates(unit->drawPos);
+				const bool drawPosHit = (vpPos.x >= l && vpPos.x <= r && vpPos.y >= t && vpPos.y <= b && vpPos.z >= 0.0f && vpPos.z <= 1.0f);
 
-				if (vpPos.x > r || vpPos.x < l)
-					continue;
+				if (!drawPosHit) {
+					CMatrix44f volMat = unit->GetTransformMatrix(false, true);
+					volMat.Translate(unit->relMidPos);
+					volMat.Translate(unit->collisionVolume.GetOffsets());
 
-				if (vpPos.y > b || vpPos.y < t)
-					continue;
+					const CMatrix44f volInvMat = volMat.InvertAffine();
 
-				if (vpPos.z > 1.0f || vpPos.z < 0.0f)
-					continue;
+					if (!CCollisionHandler::IntersectFrustum(
+						&unit->collisionVolume,
+						toVolumePlane(volInvMat, frustumPlanes[0]),
+						toVolumePlane(volInvMat, frustumPlanes[1]),
+						toVolumePlane(volInvMat, frustumPlanes[2]),
+						toVolumePlane(volInvMat, frustumPlanes[3]),
+						toVolumePlane(volInvMat, frustumPlanes[4]),
+						toVolumePlane(volInvMat, frustumPlanes[5])
+					)) {
+						continue;
+					}
+				}
 
 				lua_pushnumber(L, unit->id);
 				lua_rawseti(L, -2, ++count);

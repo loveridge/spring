@@ -801,3 +801,99 @@ bool CCollisionHandler::IntersectBox(const CollisionVolume* v, const float3& pi0
 	return (b0 == CQ_POINT_ON_RAY || b1 == CQ_POINT_ON_RAY);
 }
 
+bool CCollisionHandler::IntersectFrustum(
+	const CollisionVolume* v,
+	const float4& lPlane,
+	const float4& rPlane,
+	const float4& tPlane,
+	const float4& bPlane,
+	const float4& nPlane,
+	const float4& fPlane
+) {
+	RECOIL_DETAILED_TRACY_ZONE;
+
+	const auto supportPoint = [v](const float3& dir) {
+		if (dir.SqLength() <= COLLISION_VOLUME_EPS)
+			return ZeroVector;
+
+		switch (v->GetVolumeType()) {
+			case CollisionVolume::COLVOL_TYPE_SPHERE: {
+				return (dir / dir.Length()) * v->GetHScales().x;
+			}
+			case CollisionVolume::COLVOL_TYPE_ELLIPSOID: {
+				const float3& ahsq = v->GetHSqScales();
+				const float denom = math::sqrt(
+					(dir.x * dir.x * ahsq.x) +
+					(dir.y * dir.y * ahsq.y) +
+					(dir.z * dir.z * ahsq.z)
+				);
+
+				if (denom <= COLLISION_VOLUME_EPS)
+					return ZeroVector;
+
+				return float3(
+					(ahsq.x * dir.x) / denom,
+					(ahsq.y * dir.y) / denom,
+					(ahsq.z * dir.z) / denom
+				);
+			}
+			case CollisionVolume::COLVOL_TYPE_CYLINDER: {
+				const int pAx = v->GetPrimaryAxis();
+				const int sAx0 = v->GetSecondaryAxis(0);
+				const int sAx1 = v->GetSecondaryAxis(1);
+				const float3& ahs = v->GetHScales();
+				const float3& ahsq = v->GetHSqScales();
+
+				float3 p;
+				p[pAx] = std::copysign(ahs[pAx], dir[pAx]);
+
+				const float radialDenom = math::sqrt(
+					(dir[sAx0] * dir[sAx0] * ahsq[sAx0]) +
+					(dir[sAx1] * dir[sAx1] * ahsq[sAx1])
+				);
+
+				if (radialDenom > COLLISION_VOLUME_EPS) {
+					p[sAx0] = (ahsq[sAx0] * dir[sAx0]) / radialDenom;
+					p[sAx1] = (ahsq[sAx1] * dir[sAx1]) / radialDenom;
+				}
+
+				return p;
+			}
+			case CollisionVolume::COLVOL_TYPE_BOX: {
+				const float3& ahs = v->GetHScales();
+
+				return float3(
+					std::copysign(ahs.x, dir.x),
+					std::copysign(ahs.y, dir.y),
+					std::copysign(ahs.z, dir.z)
+				);
+			}
+		}
+
+		return ZeroVector;
+	};
+
+	const auto separatedByPlane = [&](const float4& plane) {
+		const float3 planeNormal(plane.x, plane.y, plane.z);
+
+		if (planeNormal.SqLength() <= COLLISION_VOLUME_EPS)
+			return false;
+
+		return (float4(supportPoint(planeNormal), 1.0f).dot4(plane) < 0.0f);
+	};
+
+	if (separatedByPlane(lPlane))
+		return false;
+	if (separatedByPlane(rPlane))
+		return false;
+	if (separatedByPlane(tPlane))
+		return false;
+	if (separatedByPlane(bPlane))
+		return false;
+	if (separatedByPlane(nPlane))
+		return false;
+	if (separatedByPlane(fPlane))
+		return false;
+
+	return true;
+}

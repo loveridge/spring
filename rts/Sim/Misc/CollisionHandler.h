@@ -5,6 +5,7 @@
 
 #include "System/creg/creg_cond.h"
 #include "System/float3.h"
+#include "System/float4.h"
 #include "System/Matrix44f.h"
 
 #include <algorithm>
@@ -166,6 +167,16 @@ class CCollisionHandler {
 		static bool IntersectEllipsoid(const CollisionVolume* v, const float3& pi0, const float3& pi1, CollisionQuery* cq);
 		static bool IntersectCylinder(const CollisionVolume* v, const float3& pi0, const float3& pi1, CollisionQuery* cq);
 		static bool IntersectBox(const CollisionVolume* v, const float3& pi0, const float3& pi1, CollisionQuery* cq);
+
+		static bool IntersectFrustum(
+			const CollisionVolume* v,
+			const float4& lPlane,
+			const float4& rPlane,
+			const float4& tPlane,
+			const float4& bPlane,
+			const float4& nPlane,
+			const float4& fPlane
+		);
 
 	private:
 		static unsigned int numDiscTests; // number of discrete hit-tests executed
