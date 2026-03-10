@@ -154,7 +154,7 @@ void CollisionVolume::SetBoundingRadius() {
 	switch (volumeType) {
 		case COLVOL_TYPE_BOX:
 		case COLVOL_TYPE_PYRAMID: {
-			// for frusta, this is the max distance from the local origin
+			// for rectangular pyramids, this is the max distance from the local origin
 			// to the base corners; for boxes it is the usual corner radius
 			volumeBoundingRadiusSq = halfAxisScalesSqr.x + halfAxisScalesSqr.y + halfAxisScalesSqr.z;
 			volumeBoundingRadius = math::sqrt(volumeBoundingRadiusSq);
