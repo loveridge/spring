@@ -176,6 +176,16 @@ class CCollisionHandler {
 		 */
 		static bool IntersectBoxVolume(const CollisionVolume* box, const CMatrix44f& boxMat, const CollisionVolume* vol, const CMatrix44f& volMat);
 
+		/**
+		 * Test if a box volume intersects another collision volume.
+		 * @param frustum first volume, must be COLVOL_TYPE_FRUSTUM
+		 * @param fruMat frustum transformation matrix
+		 * @param vol second volume
+		 * @param volMat second volume transformation matrix
+		 */
+		static bool IntersectFrustumVolume(const CollisionVolume* frustum, const CMatrix44f& fruMat, const CollisionVolume* vol, const CMatrix44f& volMat);
+
+
 	private:
 		static unsigned int numDiscTests; // number of discrete hit-tests executed
 		static unsigned int numContTests; // number of continuous hit-tests executed (inc. unsynced)

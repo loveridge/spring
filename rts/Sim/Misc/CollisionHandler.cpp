@@ -70,55 +70,80 @@ namespace {
 	}
 
 	static float3 GetSupportPointLocal(const CollisionVolume* v, const float3& dir)
-	{
-		const float3& ahs = v->GetHScales();
-		float3 p = v->GetOffsets();
+{
+	const float3& ahs = v->GetHScales();
+	float3 p = v->GetOffsets();
 
-		switch (v->GetVolumeType()) {
-			case CollisionVolume::COLVOL_TYPE_BOX: {
-				p.x += (dir.x >= 0.0f) ? ahs.x : -ahs.x;
-				p.y += (dir.y >= 0.0f) ? ahs.y : -ahs.y;
-				p.z += (dir.z >= 0.0f) ? ahs.z : -ahs.z;
-			} break;
+	switch (v->GetVolumeType()) {
+		case CollisionVolume::COLVOL_TYPE_BOX: {
+			p.x += (dir.x >= 0.0f) ? ahs.x : -ahs.x;
+			p.y += (dir.y >= 0.0f) ? ahs.y : -ahs.y;
+			p.z += (dir.z >= 0.0f) ? ahs.z : -ahs.z;
+		} break;
 
-			case CollisionVolume::COLVOL_TYPE_SPHERE: {
-				const float dirLen = dir.Length();
-				const float radius = ahs.x;
+		case CollisionVolume::COLVOL_TYPE_SPHERE: {
+			const float dirLen = dir.Length();
+			const float radius = ahs.x;
 
-				if (dirLen > COLLISION_VOLUME_EPS)
-					p += dir * (radius / dirLen);
-			} break;
+			if (dirLen > COLLISION_VOLUME_EPS)
+				p += dir * (radius / dirLen);
+		} break;
 
-			case CollisionVolume::COLVOL_TYPE_ELLIPSOID: {
-				const float denom =
-					math::sqrt((ahs.x * ahs.x * dir.x * dir.x) + (ahs.y * ahs.y * dir.y * dir.y) +
-				               (ahs.z * ahs.z * dir.z * dir.z));
+		case CollisionVolume::COLVOL_TYPE_ELLIPSOID: {
+			const float denom =
+				math::sqrt((ahs.x * ahs.x * dir.x * dir.x) + (ahs.y * ahs.y * dir.y * dir.y) +
+				           (ahs.z * ahs.z * dir.z * dir.z));
 
-				if (denom > COLLISION_VOLUME_EPS) {
-					p.x += (ahs.x * ahs.x * dir.x) / denom;
-					p.y += (ahs.y * ahs.y * dir.y) / denom;
-					p.z += (ahs.z * ahs.z * dir.z) / denom;
-				}
-			} break;
+			if (denom > COLLISION_VOLUME_EPS) {
+				p.x += (ahs.x * ahs.x * dir.x) / denom;
+				p.y += (ahs.y * ahs.y * dir.y) / denom;
+				p.z += (ahs.z * ahs.z * dir.z) / denom;
+			}
+		} break;
 
-			case CollisionVolume::COLVOL_TYPE_CYLINDER: {
-				const int pAx = v->GetPrimaryAxis();
-				const int sAx0 = v->GetSecondaryAxis(0);
-				const int sAx1 = v->GetSecondaryAxis(1);
-				const float denom = math::sqrt((ahs[sAx0] * ahs[sAx0] * dir[sAx0] * dir[sAx0]) +
-				                               (ahs[sAx1] * ahs[sAx1] * dir[sAx1] * dir[sAx1]));
+		case CollisionVolume::COLVOL_TYPE_CYLINDER: {
+			const int pAx = v->GetPrimaryAxis();
+			const int sAx0 = v->GetSecondaryAxis(0);
+			const int sAx1 = v->GetSecondaryAxis(1);
+			const float denom = math::sqrt((ahs[sAx0] * ahs[sAx0] * dir[sAx0] * dir[sAx0]) +
+			                               (ahs[sAx1] * ahs[sAx1] * dir[sAx1] * dir[sAx1]));
 
-				p[pAx] += (dir[pAx] >= 0.0f) ? ahs[pAx] : -ahs[pAx];
+			p[pAx] += (dir[pAx] >= 0.0f) ? ahs[pAx] : -ahs[pAx];
 
-				if (denom > COLLISION_VOLUME_EPS) {
-					p[sAx0] += (ahs[sAx0] * ahs[sAx0] * dir[sAx0]) / denom;
-					p[sAx1] += (ahs[sAx1] * ahs[sAx1] * dir[sAx1]) / denom;
-				}
-			} break;
-		}
+			if (denom > COLLISION_VOLUME_EPS) {
+				p[sAx0] += (ahs[sAx0] * ahs[sAx0] * dir[sAx0]) / denom;
+				p[sAx1] += (ahs[sAx1] * ahs[sAx1] * dir[sAx1]) / denom;
+			}
+		} break;
 
-		return p;
+		case CollisionVolume::COLVOL_TYPE_FRUSTUM: {
+			const int pAx = v->GetPrimaryAxis();
+			const int sAx0 = v->GetSecondaryAxis(0);
+			const int sAx1 = v->GetSecondaryAxis(1);
+
+			const float h = ahs[pAx];
+
+			// Support of the rectangular pyramid/frustum:
+			// maximize d·x over either apex or base rectangle.
+			const float baseCoeff =
+				dir[pAx] +
+				(math::fabs(dir[sAx0]) * ahs[sAx0]) / (2.0f * h) +
+				(math::fabs(dir[sAx1]) * ahs[sAx1]) / (2.0f * h);
+
+			if (baseCoeff >= 0.0f) {
+				// one of the 4 base corners
+				p[pAx]  +=  h;
+				p[sAx0] += (dir[sAx0] >= 0.0f) ? ahs[sAx0] : -ahs[sAx0];
+				p[sAx1] += (dir[sAx1] >= 0.0f) ? ahs[sAx1] : -ahs[sAx1];
+			} else {
+				// apex
+				p[pAx] -= h;
+			}
+		} break;
 	}
+
+	return p;
+}
 
 	static float3 GetSupportPointBoxSpace(const CollisionVolume* v, const CMatrix44f& vMat,
 	                                      const CMatrix44f& vInv, const CMatrix44f& boxMat,
@@ -139,44 +164,46 @@ namespace {
 		const float3 pVol = GetSupportPointBoxSpace(vol, volMat, volInv, boxMat, boxInv, -dirBox);
 		return (pBox - pVol);
 	}
+static bool GetAxisAlignedMapping(const CMatrix44f& relMat, int axisMap[3], int axisSign[3])
+{
+	constexpr float axisEps = 1.0f - 1e-4f;
+	constexpr float orthoEps = 1e-4f;
+	const float3 basis[3] = {
+		float3(1.0f, 0.0f, 0.0f),
+		float3(0.0f, 1.0f, 0.0f),
+		float3(0.0f, 0.0f, 1.0f),
+	};
+	bool usedAxes[3] = {false, false, false};
 
-	static bool GetAxisAlignedMapping(const CMatrix44f& relMat, int axisMap[3])
-	{
-		constexpr float axisEps = 1.0f - 1e-4f;
-		constexpr float orthoEps = 1e-4f;
-		const float3 basis[3] = {float3(1.0f, 0.0f, 0.0f), float3(0.0f, 1.0f, 0.0f),
-		                         float3(0.0f, 0.0f, 1.0f)};
-		bool usedAxes[3] = {false, false, false};
+	for (int i = 0; i < 3; ++i) {
+		const float3 axis = TransformDirection(relMat, basis[i]);
+		const float3 absAxis = float3::fabs(axis);
 
-		for (int i = 0; i < 3; ++i) {
-			const float3 axis = TransformDirection(relMat, basis[i]);
-			const float3 absAxis = float3::fabs(axis);
+		int majorAxis = 0;
+		if (absAxis.y > absAxis[majorAxis])
+			majorAxis = 1;
+		if (absAxis.z > absAxis[majorAxis])
+			majorAxis = 2;
 
-			int majorAxis = 0;
-			if (absAxis.y > absAxis[majorAxis])
-				majorAxis = 1;
-			if (absAxis.z > absAxis[majorAxis])
-				majorAxis = 2;
+		if (usedAxes[majorAxis])
+			return false;
+		if (absAxis[majorAxis] < axisEps)
+			return false;
 
-			if (usedAxes[majorAxis])
+		for (int j = 0; j < 3; ++j) {
+			if (j == majorAxis)
+				continue;
+			if (absAxis[j] > orthoEps)
 				return false;
-			if (absAxis[majorAxis] < axisEps)
-				return false;
-
-			for (int j = 0; j < 3; ++j) {
-				if (j == majorAxis)
-					continue;
-				if (absAxis[j] > orthoEps)
-					return false;
-			}
-
-			usedAxes[majorAxis] = true;
-			axisMap[i] = majorAxis;
 		}
 
-		return true;
+		usedAxes[majorAxis] = true;
+		axisMap[i] = majorAxis;
+		axisSign[i] = (axis[majorAxis] >= 0.0f) ? 1 : -1;
 	}
 
+	return true;
+}
 	static float3 GetAlignedHalfScales(const CollisionVolume* vol, const int axisMap[3])
 	{
 		float3 alignedHScales = ZeroVector;
@@ -206,77 +233,148 @@ namespace {
 		return weightedSqDist;
 	}
 
-	static bool IntersectAxisAlignedBoxVolume(const CollisionVolume* box, const CMatrix44f& boxMat,
-	                                          const CollisionVolume* vol, const CMatrix44f& volMat,
-	                                          const CMatrix44f& boxInv, bool& handled)
-	{
-		const CMatrix44f relMat = boxInv * volMat;
-		int axisMap[3] = {0, 1, 2};
+	static bool IntersectAxisAlignedBoxFrustum(const float3& boxCenter,
+                                           const float3& boxHScales,
+                                           const float3& fruCenter,
+                                           const float3& fruHScales,
+                                           int primaryAxis,
+                                           int secondaryAxis0,
+                                           int secondaryAxis1,
+                                           int primarySign)
+{
+	const float h  = fruHScales[primaryAxis];
+	const float hb = fruHScales[secondaryAxis0];
+	const float hc = fruHScales[secondaryAxis1];
 
-		handled = GetAxisAlignedMapping(relMat, axisMap);
+	assert(h  > 0.0f);
+	assert(hb > 0.0f);
+	assert(hc > 0.0f);
 
-		if (!handled)
-			return false;
+	// Express the box's primary-axis interval in the frustum's local-primary coordinate u,
+	// where the frustum occupies u in [-h, +h], apex is at -h, base at +h.
+	const float boxMinP = boxCenter[primaryAxis] - boxHScales[primaryAxis];
+	const float boxMaxP = boxCenter[primaryAxis] + boxHScales[primaryAxis];
 
-		const float3 boxCenter = box->GetOffsets();
-		const float3 boxHScales = box->GetHScales();
-		const float3 volCenter = boxInv.Mul(volMat.Mul(vol->GetOffsets()));
+	const float u0 = primarySign * (boxMinP - fruCenter[primaryAxis]);
+	const float u1 = primarySign * (boxMaxP - fruCenter[primaryAxis]);
 
-		switch (vol->GetVolumeType()) {
-			case CollisionVolume::COLVOL_TYPE_BOX: {
-				const float3 volHScales = GetAlignedHalfScales(vol, axisMap);
-				const float3 centerDelta = float3::fabs(volCenter - boxCenter);
-				return (centerDelta.x <= (boxHScales.x + volHScales.x) &&
-				        centerDelta.y <= (boxHScales.y + volHScales.y) &&
-				        centerDelta.z <= (boxHScales.z + volHScales.z));
-			} break;
+	const float overlapUMin = std::max(std::min(u0, u1), -h);
+	const float overlapUMax = std::min(std::max(u0, u1),  h);
 
-			case CollisionVolume::COLVOL_TYPE_SPHERE: {
-				const float radius = vol->GetHScales().x;
-				const float3 invRadiusSq = OnesVector / (radius * radius);
-				return (GetWeightedSqDistToBox(volCenter, boxCenter, boxHScales, invRadiusSq) <=
-				        1.0f);
-			} break;
-
-			case CollisionVolume::COLVOL_TYPE_ELLIPSOID: {
-				const float3 radii = GetAlignedHalfScales(vol, axisMap);
-				const float3 invRadiiSq(1.0f / (radii.x * radii.x), 1.0f / (radii.y * radii.y),
-				                        1.0f / (radii.z * radii.z));
-				return (GetWeightedSqDistToBox(volCenter, boxCenter, boxHScales, invRadiiSq) <=
-				        1.0f);
-			} break;
-
-			case CollisionVolume::COLVOL_TYPE_CYLINDER: {
-				const int primaryAxis = axisMap[vol->GetPrimaryAxis()];
-				const float3 volHScales = GetAlignedHalfScales(vol, axisMap);
-				const float radius =
-					std::max(volHScales[(primaryAxis + 1) % 3], volHScales[(primaryAxis + 2) % 3]);
-
-				if (math::fabs(volCenter[primaryAxis] - boxCenter[primaryAxis]) >
-				    (volHScales[primaryAxis] + boxHScales[primaryAxis]))
-					return false;
-
-				float sqDist = 0.0f;
-				for (int axis = 0; axis < 3; ++axis) {
-					if (axis == primaryAxis)
-						continue;
-
-					const float boxMin = boxCenter[axis] - boxHScales[axis];
-					const float boxMax = boxCenter[axis] + boxHScales[axis];
-					const float d = (volCenter[axis] < boxMin)   ? (boxMin - volCenter[axis])
-					                : (volCenter[axis] > boxMax) ? (volCenter[axis] - boxMax)
-					                                             : 0.0f;
-
-					sqDist += (d * d);
-				}
-
-				return (sqDist <= (radius * radius));
-			} break;
-		}
-
+	if (overlapUMin > overlapUMax)
 		return false;
+
+	// In any slice u, the frustum cross-section rectangle is centered at fruCenter on the
+	// secondary axes, with half-extents that grow linearly from 0 at the apex to hb/hc at the base.
+	const float deltaB = math::fabs(boxCenter[secondaryAxis0] - fruCenter[secondaryAxis0]);
+	const float deltaC = math::fabs(boxCenter[secondaryAxis1] - fruCenter[secondaryAxis1]);
+
+	// Required frustum half-width/half-height beyond the box's own half-scales.
+	const float needB = std::max(deltaB - boxHScales[secondaryAxis0], 0.0f);
+	const float needC = std::max(deltaC - boxHScales[secondaryAxis1], 0.0f);
+
+	// Solve for the earliest u at which the frustum slice is wide enough on each secondary axis:
+	//   hb * ((u + h) / (2h)) >= needB
+	//   hc * ((u + h) / (2h)) >= needC
+	const float reqUB = -h + ((2.0f * h * needB) / hb);
+	const float reqUC = -h + ((2.0f * h * needC) / hc);
+	const float reqU  = std::max(reqUB, reqUC);
+
+	// There is an intersection iff the overlapping primary interval reaches a slice that is wide enough.
+	return (reqU <= (overlapUMax + COLLISION_VOLUME_EPS));
+}
+	static bool IntersectAxisAlignedBoxVolume(const CollisionVolume* box, const CMatrix44f& boxMat,
+                                          const CollisionVolume* vol, const CMatrix44f& volMat,
+                                          const CMatrix44f& boxInv, bool& handled)
+{
+	const CMatrix44f relMat = boxInv * volMat;
+	int axisMap[3] = {0, 1, 2};
+	int axisSign[3] = {1, 1, 1};
+
+	handled = GetAxisAlignedMapping(relMat, axisMap, axisSign);
+
+	if (!handled)
+		return false;
+
+	const float3 boxCenter = box->GetOffsets();
+	const float3 boxHScales = box->GetHScales();
+	const float3 volCenter = boxInv.Mul(volMat.Mul(vol->GetOffsets()));
+
+	switch (vol->GetVolumeType()) {
+		case CollisionVolume::COLVOL_TYPE_BOX: {
+			const float3 volHScales = GetAlignedHalfScales(vol, axisMap);
+			const float3 centerDelta = float3::fabs(volCenter - boxCenter);
+			return (centerDelta.x <= (boxHScales.x + volHScales.x) &&
+			        centerDelta.y <= (boxHScales.y + volHScales.y) &&
+			        centerDelta.z <= (boxHScales.z + volHScales.z));
+		} break;
+
+		case CollisionVolume::COLVOL_TYPE_SPHERE: {
+			const float radius = vol->GetHScales().x;
+			const float3 invRadiusSq = OnesVector / (radius * radius);
+			return (GetWeightedSqDistToBox(volCenter, boxCenter, boxHScales, invRadiusSq) <= 1.0f);
+		} break;
+
+		case CollisionVolume::COLVOL_TYPE_ELLIPSOID: {
+			const float3 radii = GetAlignedHalfScales(vol, axisMap);
+			const float3 invRadiiSq(
+				1.0f / (radii.x * radii.x),
+				1.0f / (radii.y * radii.y),
+				1.0f / (radii.z * radii.z)
+			);
+			return (GetWeightedSqDistToBox(volCenter, boxCenter, boxHScales, invRadiiSq) <= 1.0f);
+		} break;
+
+		case CollisionVolume::COLVOL_TYPE_CYLINDER: {
+			const int primaryAxis = axisMap[vol->GetPrimaryAxis()];
+			const float3 volHScales = GetAlignedHalfScales(vol, axisMap);
+			const float radius =
+				std::max(volHScales[(primaryAxis + 1) % 3], volHScales[(primaryAxis + 2) % 3]);
+
+			if (math::fabs(volCenter[primaryAxis] - boxCenter[primaryAxis]) >
+			    (volHScales[primaryAxis] + boxHScales[primaryAxis]))
+				return false;
+
+			float sqDist = 0.0f;
+			for (int axis = 0; axis < 3; ++axis) {
+				if (axis == primaryAxis)
+					continue;
+
+				const float boxMin = boxCenter[axis] - boxHScales[axis];
+				const float boxMax = boxCenter[axis] + boxHScales[axis];
+				const float d = (volCenter[axis] < boxMin)   ? (boxMin - volCenter[axis])
+				                : (volCenter[axis] > boxMax) ? (volCenter[axis] - boxMax)
+				                                             : 0.0f;
+
+				sqDist += (d * d);
+			}
+
+			return (sqDist <= (radius * radius));
+		} break;
+
+		case CollisionVolume::COLVOL_TYPE_FRUSTUM: {
+			const int primaryAxis    = axisMap [vol->GetPrimaryAxis()];
+			const int secondaryAxis0 = axisMap [vol->GetSecondaryAxis(0)];
+			const int secondaryAxis1 = axisMap [vol->GetSecondaryAxis(1)];
+			const int primarySign    = axisSign[vol->GetPrimaryAxis()];
+
+			const float3 volHScales = GetAlignedHalfScales(vol, axisMap);
+
+			return IntersectAxisAlignedBoxFrustum(
+				boxCenter,
+				boxHScales,
+				volCenter,
+				volHScales,
+				primaryAxis,
+				secondaryAxis0,
+				secondaryAxis1,
+				primarySign
+			);
+		} break;
 	}
 
+	return false;
+}
 	static bool UpdateLineSimplex(GJKSimplex& simplex, float3& dir)
 	{
 		const float3& a = simplex.points[0];
@@ -1222,6 +1320,60 @@ bool CCollisionHandler::IntersectBoxVolume(const CollisionVolume* box, const CMa
 
 	for (int n = 0; n < 32; ++n) {
 		const float3 support = GetMinkowskiSupportPoint(box, vol, volMat, volInv, boxMat, boxInv, dir);
+
+		if (support.dot(dir) < -COLLISION_VOLUME_EPS)
+			return false;
+
+		simplex.PushFront(support);
+
+		if (UpdateSimplex(simplex, dir))
+			return true;
+
+		if (dir.SqLength() < COLLISION_VOLUME_EPS)
+			return true;
+	}
+
+	return false;
+}
+
+bool CCollisionHandler::IntersectFrustumVolume(const CollisionVolume* frustum, const CMatrix44f& fruMat,
+                                               const CollisionVolume* vol, const CMatrix44f& volMat)
+{
+	RECOIL_DETAILED_TRACY_ZONE;
+
+	if (frustum == nullptr || vol == nullptr)
+		return false;
+	if (frustum->GetVolumeType() != CollisionVolume::COLVOL_TYPE_FRUSTUM)
+		return false;
+
+	const float3 fruCtr = fruMat.Mul(frustum->GetOffsets());
+	const float3 volCtr = volMat.Mul(vol->GetOffsets());
+	const float sumRadii = frustum->GetBoundingRadius() + vol->GetBoundingRadius();
+
+	if ((fruCtr - volCtr).SqLength() > (sumRadii * sumRadii))
+		return false;
+
+	const CMatrix44f fruInv = fruMat.InvertAffine();
+	const CMatrix44f volInv = volMat.InvertAffine();
+
+	// Initial search direction in frustum-local space.
+	float3 dir = fruInv.Mul(volCtr);
+
+	if (dir.SqLength() < COLLISION_VOLUME_EPS) {
+		dir = ZeroVector;
+		dir[frustum->GetPrimaryAxis()] = 1.0f;
+	}
+
+	GJKSimplex simplex;
+	simplex.PushFront(GetMinkowskiSupportPoint(frustum, vol, volMat, volInv, fruMat, fruInv, dir));
+	dir = -simplex.points[0];
+
+	if (dir.SqLength() < COLLISION_VOLUME_EPS)
+		return true;
+
+	for (int n = 0; n < 32; ++n) {
+		const float3 support =
+			GetMinkowskiSupportPoint(frustum, vol, volMat, volInv, fruMat, fruInv, dir);
 
 		if (support.dot(dir) < -COLLISION_VOLUME_EPS)
 			return false;

@@ -26,7 +26,8 @@ public:
 		COLVOL_TYPE_ELLIPSOID =  0,
 		COLVOL_TYPE_CYLINDER  =  1,
 		COLVOL_TYPE_BOX       =  2,
-		COLVOL_TYPE_SPHERE    =  3,
+		COLVOL_TYPE_FRUSTUM   =  3,
+		COLVOL_TYPE_SPHERE    =  4,
 	};
 	enum {
 		COLVOL_AXIS_X = 0,
@@ -120,7 +121,7 @@ public:
 	bool DefaultToFootPrint() const { return defaultToFootPrint; }
 	bool DefaultToPieceTree() const { return defaultToPieceTree; }
 
-	bool HasCustomType() const { return (volumeType < COLVOL_TYPE_SPHERE); }
+	bool HasCustomType() const { return (volumeType != COLVOL_TYPE_SPHERE); }
 	bool HasCustomProp(float r) const { return (axisOffsets.SqLength() >= 1.0f || math::fabs(volumeBoundingRadius - r) >= 1.0f); }
 
 	float3 GetWorldSpacePos(const CSolidObject* o, const float3& extOffsets = ZeroVector) const;
@@ -134,6 +135,7 @@ private:
 
 	float GetCylinderDistance(const float3& pv, size_t axisA = 0, size_t axisB = 1, size_t axisC = 2) const;
 	float GetEllipsoidDistance(const float3& pv) const;
+	float GetFrustumDistance(const float3& pv, size_t axisA = 0, size_t axisB = 1, size_t axisC = 2) const;
 
 private:
 	float3 fullAxisScales    = OnesVector * 2.0f;  ///< full-length axis scales
@@ -159,4 +161,3 @@ private:
 };
 
 #endif
-

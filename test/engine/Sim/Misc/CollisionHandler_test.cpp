@@ -60,6 +60,19 @@ static CollisionVolume MakeCylinderVolume(const float3& scales, const int axis, 
 	return v;
 }
 
+static CollisionVolume MakeFrustumVolume(const float3& scales, const int axis, const float3& offsets = ZeroVector)
+{
+	CollisionVolume v;
+	v.InitShape(
+		scales,
+		offsets,
+		CollisionVolume::COLVOL_TYPE_FRUSTUM,
+		CollisionVolume::COLVOL_HITTEST_CONT,
+		axis
+	);
+	return v;
+}
+
 static CMatrix44f MakeTransform(const float3& pos = ZeroVector, const float3& rotXYZ = ZeroVector)
 {
 	CMatrix44f m;
@@ -82,6 +95,15 @@ static bool Intersects(
 	const CMatrix44f& otherMat
 ) {
 	return CCollisionHandler::IntersectBoxVolume(&boxVol, boxMat, &otherVol, otherMat);
+}
+
+static bool IntersectsFrustum(
+	const CollisionVolume& frustumVol,
+	const CMatrix44f& frustumMat,
+	const CollisionVolume& otherVol,
+	const CMatrix44f& otherMat
+) {
+	return CCollisionHandler::IntersectFrustumVolume(&frustumVol, frustumMat, &otherVol, otherMat);
 }
 
 } // namespace
@@ -255,6 +277,80 @@ TEST_CASE("CollisionHandler_IntersectBoxVolume_BoxVsCylinder")
 
 		// Distance from box corner (2, 2) to cylinder core (2.8, 2.8) is ~1.13 > radius 1.0 (AABB separates)
 		CHECK_FALSE(Intersects(box, boxMat, cylinder, MakeTransform(float3(2.8f, 2.8f, 0.0f))));
+	}
+}
+TEST_CASE("CollisionHandler_IntersectBoxVolume_BoxVsFrustum")
+{
+	// Box is 1x1x1 => half-scales 0.5
+	const CollisionVolume box = MakeBoxVolume(float3(1.0f, 1.0f, 1.0f));
+
+	// Frustum is represented as:
+	//   primary axis in [-2, +2]
+	//   apex at -2
+	//   base at +2
+	//   base half-extents 2 on the secondary axes
+	const CollisionVolume frustumZ = MakeFrustumVolume(float3(4.0f, 4.0f, 4.0f), CollisionVolume::COLVOL_AXIS_Z);
+
+	const CMatrix44f boxMat = MakeTransform();
+	const CMatrix44f frustumMat = MakeTransform();
+
+	SECTION("containment near base") {
+		// Box spans z in [0.5, 1.5]. At z=0.5 the frustum half-width is already 1.25.
+		const CMatrix44f movedBoxMat = MakeTransform(float3(0.0f, 0.0f, 1.0f));
+		CHECK(Intersects(box, movedBoxMat, frustumZ, frustumMat));
+	}
+
+	SECTION("touching base face counts as intersecting") {
+		// Box spans z in [2.0, 3.0], so it touches the base plane at z=2.
+		const CMatrix44f movedBoxMat = MakeTransform(float3(0.0f, 0.0f, 2.5f));
+		CHECK(Intersects(box, movedBoxMat, frustumZ, frustumMat));
+	}
+
+	SECTION("separated beyond base plane") {
+		// Box spans z in [2.01, 3.01], entirely beyond the base plane.
+		const CMatrix44f movedBoxMat = MakeTransform(float3(0.0f, 0.0f, 2.51f));
+		CHECK_FALSE(Intersects(box, movedBoxMat, frustumZ, frustumMat));
+	}
+
+	SECTION("touching apex counts as intersecting") {
+		// Box spans z in [-3.0, -2.0], touching the apex point at z=-2.
+		const CMatrix44f movedBoxMat = MakeTransform(float3(0.0f, 0.0f, -2.5f));
+		CHECK(Intersects(box, movedBoxMat, frustumZ, frustumMat));
+	}
+
+	SECTION("same lateral offset separates near apex but intersects near base") {
+		// Near apex: box spans z in [-1.5, -0.5], frustum half-width there is at most 0.75.
+		// Box x interval is [0.8, 1.8], so this should separate.
+		CHECK_FALSE(Intersects(box, MakeTransform(float3(1.3f, 0.0f, -1.0f)), frustumZ, frustumMat));
+
+		// Near base: box spans z in [0.5, 1.5], frustum half-width is at least 1.25.
+		// Same x interval [0.8, 1.8] now overlaps.
+		CHECK(Intersects(box, MakeTransform(float3(1.3f, 0.0f, 1.0f)), frustumZ, frustumMat));
+	}
+
+	SECTION("sign-flipped primary axis is handled") {
+		// Rotate the frustum 180 degrees around Y so its local +Z points toward world -Z.
+		const CMatrix44f flippedFrustumMat = MakeTransform(ZeroVector, float3(0.0f, 2.0f * HALF_PI, 0.0f));
+
+		// Same lateral offset, but now the wide end is on negative world-Z.
+		CHECK(Intersects(box, MakeTransform(float3(1.3f, 0.0f, -1.0f)), frustumZ, flippedFrustumMat));
+		CHECK_FALSE(Intersects(box, MakeTransform(float3(1.3f, 0.0f,  1.0f)), frustumZ, flippedFrustumMat));
+	}
+
+	SECTION("non-Z primary axis") {
+		const CollisionVolume frustumY = MakeFrustumVolume(float3(4.0f, 4.0f, 4.0f), CollisionVolume::COLVOL_AXIS_Y);
+
+		// Wide end is at +Y, apex at -Y.
+		CHECK(Intersects(box, MakeTransform(float3(1.3f,  1.0f, 0.0f)), frustumY, MakeTransform()));
+		CHECK_FALSE(Intersects(box, MakeTransform(float3(1.3f, -1.0f, 0.0f)), frustumY, MakeTransform()));
+	}
+
+	SECTION("offset frustum") {
+		const CollisionVolume offsetFrustum =
+			MakeFrustumVolume(float3(4.0f, 4.0f, 4.0f), CollisionVolume::COLVOL_AXIS_Z, float3(3.0f, 0.0f, 0.0f));
+
+		CHECK(Intersects(box, MakeTransform(float3(4.3f, 0.0f, 1.0f)), offsetFrustum, MakeTransform()));
+		CHECK_FALSE(Intersects(box, MakeTransform(float3(4.3f, 0.0f, -1.0f)), offsetFrustum, MakeTransform()));
 	}
 }
 
@@ -605,74 +701,216 @@ TEST_CASE("CollisionHandler_IntersectBoxVolume_MultiAxisObliqueBoxes")
 	}
 }
 
-TEST_CASE("CollisionHandler_IntersectBoxVolume_AxisAligned_Performance")
+// TEST_CASE("CollisionHandler_IntersectBoxVolume_AxisAligned_Performance")
+// {
+// 	SKIP("performance");
+// 	const CollisionVolume box = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f));
+// 	const CollisionVolume cylinder = MakeCylinderVolume(float3(2.0f, 2.0f, 6.0f), CollisionVolume::COLVOL_AXIS_Z);
+// 	const CMatrix44f boxMat = MakeTransform();
+
+// 	std::array<CMatrix44f, 64> hitMats;
+// 	std::array<CMatrix44f, 64> missMats;
+
+// 	for (std::size_t i = 0; i < hitMats.size(); ++i) {
+// 		const float x = 0.75f + ((i % 8) * 0.05f);
+// 		hitMats[i] = MakeTransform(float3(x, 2.0f, 4.0f));
+// 		missMats[i] = MakeTransform(float3(x, 2.2f, 4.0f));
+// 	}
+
+// 	const std::int64_t iterations = 10000000;
+// 	volatile std::int64_t sink = 0;
+
+// 	LOG("CollisionHandler axis-aligned box-volume:");
+// 	{
+// 		ScopedOnceTimer timer(" axis-aligned box vs cylinder (intersecting)");
+// 		for (std::int64_t j = iterations; j > 0; --j) {
+// 			sink ^= static_cast<std::int64_t>(Intersects(box, boxMat, cylinder, hitMats[j % hitMats.size()])) * j;
+// 		}
+// 	}
+// 	{
+// 		ScopedOnceTimer timer(" axis-aligned box vs cylinder (separated)");
+// 		for (std::int64_t j = iterations; j > 0; --j) {
+// 			sink ^= static_cast<std::int64_t>(Intersects(box, boxMat, cylinder, missMats[j % missMats.size()])) * j;
+// 		}
+// 	}
+
+// 	CHECK((sink | 1) != 0);
+// }
+
+// TEST_CASE("CollisionHandler_IntersectBoxVolume_Rotated_Performance")
+// {
+// 	SKIP("performance");
+// 	const CollisionVolume box = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f));
+// 	const CollisionVolume cylinder = MakeCylinderVolume(float3(2.0f, 2.0f, 6.0f), CollisionVolume::COLVOL_AXIS_Z);
+// 	const CMatrix44f boxMat = MakeTransform(ZeroVector, float3(0.0f, QUARTER_PI, 0.0f));
+
+// 	std::array<CMatrix44f, 64> hitMats;
+// 	std::array<CMatrix44f, 64> missMats;
+
+// 	for (std::size_t i = 0; i < hitMats.size(); ++i) {
+// 		const float y = 0.75f + ((i % 8) * 0.05f);
+// 		hitMats[i] = MakeTransform(float3(2.75f, y, 0.0f), float3(HALF_PI, 0.0f, 0.0f));
+// 		missMats[i] = MakeTransform(float3(3.6f, y, 0.0f), float3(HALF_PI, 0.0f, 0.0f));
+// 	}
+
+// 	const std::int64_t iterations = 10000000;
+// 	volatile std::int64_t sink = 0;
+
+// 	LOG("CollisionHandler rotated box-volume:");
+// 	{
+// 		ScopedOnceTimer timer(" rotated box vs cylinder (intersecting)");
+// 		for (std::int64_t j = iterations; j > 0; --j) {
+// 			sink ^= static_cast<std::int64_t>(Intersects(box, boxMat, cylinder, hitMats[j % hitMats.size()])) * j;
+// 		}
+// 	}
+// 	{
+// 		ScopedOnceTimer timer(" rotated box vs cylinder (separated)");
+// 		for (std::int64_t j = iterations; j > 0; --j) {
+// 			sink ^= static_cast<std::int64_t>(Intersects(box, boxMat, cylinder, missMats[j % missMats.size()])) * j;
+// 		}
+// 	}
+
+// 	CHECK((sink | 1) != 0);
+// }
+TEST_CASE("CollisionHandler_IntersectFrustumVolume_FrustumVsBox")
 {
-	SKIP("performance");
-	const CollisionVolume box = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f));
-	const CollisionVolume cylinder = MakeCylinderVolume(float3(2.0f, 2.0f, 6.0f), CollisionVolume::COLVOL_AXIS_Z);
-	const CMatrix44f boxMat = MakeTransform();
+	// Frustum:
+	//   primary axis Z in [-2, +2]
+	//   apex at z = -2
+	//   base at z = +2
+	//   base half-extents 2 on X/Y
+	const CollisionVolume frustum = MakeFrustumVolume(float3(4.0f, 4.0f, 4.0f), CollisionVolume::COLVOL_AXIS_Z);
+	const CollisionVolume box = MakeBoxVolume(float3(1.0f, 1.0f, 1.0f));
+	const CMatrix44f frustumMat = MakeTransform();
 
-	std::array<CMatrix44f, 64> hitMats;
-	std::array<CMatrix44f, 64> missMats;
-
-	for (std::size_t i = 0; i < hitMats.size(); ++i) {
-		const float x = 0.75f + ((i % 8) * 0.05f);
-		hitMats[i] = MakeTransform(float3(x, 2.0f, 4.0f));
-		missMats[i] = MakeTransform(float3(x, 2.2f, 4.0f));
+	SECTION("box intersects near the wide end") {
+		CHECK(IntersectsFrustum(frustum, frustumMat, box, MakeTransform(float3(1.3f, 0.0f, 1.0f))));
 	}
 
-	const std::int64_t iterations = 10000000;
-	volatile std::int64_t sink = 0;
-
-	LOG("CollisionHandler axis-aligned box-volume:");
-	{
-		ScopedOnceTimer timer(" axis-aligned box vs cylinder (intersecting)");
-		for (std::int64_t j = iterations; j > 0; --j) {
-			sink ^= static_cast<std::int64_t>(Intersects(box, boxMat, cylinder, hitMats[j % hitMats.size()])) * j;
-		}
-	}
-	{
-		ScopedOnceTimer timer(" axis-aligned box vs cylinder (separated)");
-		for (std::int64_t j = iterations; j > 0; --j) {
-			sink ^= static_cast<std::int64_t>(Intersects(box, boxMat, cylinder, missMats[j % missMats.size()])) * j;
-		}
+	SECTION("same box placement separates near the apex") {
+		CHECK_FALSE(IntersectsFrustum(frustum, frustumMat, box, MakeTransform(float3(1.3f, 0.0f, -1.0f))));
 	}
 
-	CHECK((sink | 1) != 0);
+	SECTION("touching apex counts as intersecting") {
+		CHECK(IntersectsFrustum(frustum, frustumMat, box, MakeTransform(float3(0.0f, 0.0f, -2.5f))));
+	}
+
+	SECTION("sign-flipped frustum primary axis is handled") {
+		const CMatrix44f flippedFrustumMat = MakeTransform(ZeroVector, float3(0.0f, 2.0f * HALF_PI, 0.0f));
+
+		CHECK(IntersectsFrustum(frustum, flippedFrustumMat, box, MakeTransform(float3(1.3f, 0.0f, -1.0f))));
+		CHECK_FALSE(IntersectsFrustum(frustum, flippedFrustumMat, box, MakeTransform(float3(1.3f, 0.0f, 1.0f))));
+	}
 }
 
-TEST_CASE("CollisionHandler_IntersectBoxVolume_Rotated_Performance")
+TEST_CASE("CollisionHandler_IntersectFrustumVolume_FrustumVsSphere")
 {
-	SKIP("performance");
-	const CollisionVolume box = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f));
-	const CollisionVolume cylinder = MakeCylinderVolume(float3(2.0f, 2.0f, 6.0f), CollisionVolume::COLVOL_AXIS_Z);
-	const CMatrix44f boxMat = MakeTransform(ZeroVector, float3(0.0f, QUARTER_PI, 0.0f));
+	const CollisionVolume frustum = MakeFrustumVolume(float3(4.0f, 4.0f, 4.0f), CollisionVolume::COLVOL_AXIS_Z);
+	const CMatrix44f frustumMat = MakeTransform();
 
-	std::array<CMatrix44f, 64> hitMats;
-	std::array<CMatrix44f, 64> missMats;
-
-	for (std::size_t i = 0; i < hitMats.size(); ++i) {
-		const float y = 0.75f + ((i % 8) * 0.05f);
-		hitMats[i] = MakeTransform(float3(2.75f, y, 0.0f), float3(HALF_PI, 0.0f, 0.0f));
-		missMats[i] = MakeTransform(float3(3.6f, y, 0.0f), float3(HALF_PI, 0.0f, 0.0f));
+	SECTION("sphere contained") {
+		const CollisionVolume sphere = MakeSphereVolume(0.5f);
+		CHECK(IntersectsFrustum(frustum, frustumMat, sphere, MakeTransform(float3(0.0f, 0.0f, 0.0f))));
 	}
 
-	const std::int64_t iterations = 10000000;
-	volatile std::int64_t sink = 0;
-
-	LOG("CollisionHandler rotated box-volume:");
-	{
-		ScopedOnceTimer timer(" rotated box vs cylinder (intersecting)");
-		for (std::int64_t j = iterations; j > 0; --j) {
-			sink ^= static_cast<std::int64_t>(Intersects(box, boxMat, cylinder, hitMats[j % hitMats.size()])) * j;
-		}
-	}
-	{
-		ScopedOnceTimer timer(" rotated box vs cylinder (separated)");
-		for (std::int64_t j = iterations; j > 0; --j) {
-			sink ^= static_cast<std::int64_t>(Intersects(box, boxMat, cylinder, missMats[j % missMats.size()])) * j;
-		}
+	SECTION("sphere tangent to base face counts as intersecting") {
+		const CollisionVolume sphere = MakeSphereVolume(0.5f);
+		CHECK(IntersectsFrustum(frustum, frustumMat, sphere, MakeTransform(float3(0.0f, 0.0f, 2.5f))));
 	}
 
-	CHECK((sink | 1) != 0);
+	SECTION("sphere separated beyond base face") {
+		const CollisionVolume sphere = MakeSphereVolume(0.5f);
+		CHECK_FALSE(IntersectsFrustum(frustum, frustumMat, sphere, MakeTransform(float3(0.0f, 0.0f, 2.6f))));
+	}
+
+	SECTION("sphere near apex separates while same radius fits near base") {
+		const CollisionVolume sphere = MakeSphereVolume(0.3f);
+
+		CHECK_FALSE(IntersectsFrustum(frustum, frustumMat, sphere, MakeTransform(float3(0.9f, 0.0f, -1.0f))));
+		CHECK(IntersectsFrustum(frustum, frustumMat, sphere, MakeTransform(float3(0.9f, 0.0f, 1.0f))));
+	}
+}
+
+TEST_CASE("CollisionHandler_IntersectFrustumVolume_FrustumVsEllipsoid")
+{
+	const CollisionVolume frustum = MakeFrustumVolume(float3(4.0f, 4.0f, 4.0f), CollisionVolume::COLVOL_AXIS_Z);
+	const CMatrix44f frustumMat = MakeTransform();
+
+	SECTION("ellipsoid contained") {
+		const CollisionVolume ellipsoid = MakeEllipsoidVolume(float3(2.0f, 1.0f, 1.0f));
+		CHECK(IntersectsFrustum(frustum, frustumMat, ellipsoid, MakeTransform(float3(0.0f, 0.0f, 0.5f))));
+	}
+
+	SECTION("ellipsoid tangent to base face counts as intersecting") {
+		const CollisionVolume ellipsoid = MakeEllipsoidVolume(float3(2.0f, 2.0f, 1.0f));
+		CHECK(IntersectsFrustum(frustum, frustumMat, ellipsoid, MakeTransform(float3(0.0f, 0.0f, 2.5f))));
+	}
+
+	SECTION("ellipsoid separated beyond base face") {
+		const CollisionVolume ellipsoid = MakeEllipsoidVolume(float3(2.0f, 2.0f, 1.0f));
+		CHECK_FALSE(IntersectsFrustum(frustum, frustumMat, ellipsoid, MakeTransform(float3(0.0f, 0.0f, 2.6f))));
+	}
+
+	SECTION("rotated ellipsoid still intersects when centered in frustum") {
+		const CollisionVolume ellipsoid = MakeEllipsoidVolume(float3(3.0f, 1.0f, 1.0f));
+		const CMatrix44f ellipsoidMat = MakeTransform(float3(0.0f, 0.0f, 0.5f), float3(0.0f, HALF_PI, 0.0f));
+		CHECK(IntersectsFrustum(frustum, frustumMat, ellipsoid, ellipsoidMat));
+	}
+}
+
+TEST_CASE("CollisionHandler_IntersectFrustumVolume_FrustumVsCylinder")
+{
+	const CollisionVolume frustum = MakeFrustumVolume(float3(4.0f, 4.0f, 4.0f), CollisionVolume::COLVOL_AXIS_Z);
+	const CMatrix44f frustumMat = MakeTransform();
+
+	SECTION("z-axis cylinder contained") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.0f, 1.0f, 2.0f), CollisionVolume::COLVOL_AXIS_Z);
+		CHECK(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(0.0f, 0.0f, 0.5f))));
+	}
+
+	SECTION("z-axis cylinder tangent to base face counts as intersecting") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.0f, 1.0f, 1.0f), CollisionVolume::COLVOL_AXIS_Z);
+		CHECK(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(0.0f, 0.0f, 2.5f))));
+	}
+
+	SECTION("z-axis cylinder separated beyond base face") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.0f, 1.0f, 1.0f), CollisionVolume::COLVOL_AXIS_Z);
+		CHECK_FALSE(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(0.0f, 0.0f, 2.6f))));
+	}
+
+	SECTION("x-axis cylinder intersects near base but not near apex") {
+		const CollisionVolume cylinder = MakeCylinderVolume(float3(2.0f, 1.0f, 1.0f), CollisionVolume::COLVOL_AXIS_X);
+
+		CHECK(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(1.1f, 0.0f, 1.0f))));
+		CHECK_FALSE(IntersectsFrustum(frustum, frustumMat, cylinder, MakeTransform(float3(1.1f, 0.0f, -1.0f))));
+	}
+}
+
+TEST_CASE("CollisionHandler_IntersectFrustumVolume_FrustumVsFrustum")
+{
+	const CollisionVolume frustumA = MakeFrustumVolume(float3(4.0f, 4.0f, 4.0f), CollisionVolume::COLVOL_AXIS_Z);
+	const CollisionVolume frustumB = MakeFrustumVolume(float3(4.0f, 4.0f, 4.0f), CollisionVolume::COLVOL_AXIS_Z);
+	const CMatrix44f frustumAMat = MakeTransform();
+
+	SECTION("identical frustums intersect") {
+		CHECK(IntersectsFrustum(frustumA, frustumAMat, frustumB, MakeTransform()));
+	}
+
+	SECTION("base-to-apex touching counts as intersecting") {
+		// A base plane is at z=+2, B apex is at z=+2 when centered at z=4.
+		CHECK(IntersectsFrustum(frustumA, frustumAMat, frustumB, MakeTransform(float3(0.0f, 0.0f, 4.0f))));
+	}
+
+	SECTION("separated along primary axis") {
+		CHECK_FALSE(IntersectsFrustum(frustumA, frustumAMat, frustumB, MakeTransform(float3(0.0f, 0.0f, 4.1f))));
+	}
+
+	SECTION("oppositely oriented frustums overlap") {
+		const CMatrix44f frustumBMat = MakeTransform(float3(0.0f, 0.0f, 2.0f), float3(0.0f, 2.0f * HALF_PI, 0.0f));
+		CHECK(IntersectsFrustum(frustumA, frustumAMat, frustumB, frustumBMat));
+	}
+
+	SECTION("offset frustums separate laterally") {
+		CHECK_FALSE(IntersectsFrustum(frustumA, frustumAMat, frustumB, MakeTransform(float3(5.0f, 0.0f, 0.0f))));
+	}
 }
