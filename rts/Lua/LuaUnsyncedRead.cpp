@@ -2361,11 +2361,13 @@ static void BuildPerspectiveSelectionFrustum(
 	fruMat = CMatrix44f(fruPos, fruRgt, fruUp, fruFwd);
 }
 
-	static bool IntersectUnitSelectionVolumeInScreenRect(const CUnit* unit, const CCamera* cam, float l, float t, float r, float b)
+	static bool IntersectUnitSelectionVolumeInScreenRect(const CUnit* unit, const CCamera* cam, float l, float t, float r, float b, int selectionPrimitive)
 {
-
 	const CollisionVolume* unitVol = &unit->collisionVolume;
-	// const CollisionVolume* unitVol = &unit->unitDef->selectionVolume;
+	if (selectionPrimitive == 2)
+		unitVol = &unit->selectionVolume;
+	if (selectionPrimitive == 3)
+		unitVol = &unit->unitDef->selectionVolume;
 	CMatrix44f unitMat(unit->GetTransformMatrix(false));
 	unitMat.Translate(unit->relMidPos);
 
@@ -2598,6 +2600,7 @@ int LuaUnsyncedRead::ClearFeaturesPreviousDrawFlag(lua_State* L)
  * @param right number
  * @param bottom number
  * @param allegiance number? (Default: `-1`) teamID when > 0, when < 0 one of AllUnits = -1, MyUnits = -2, AllyUnits = -3, EnemyUnits = -4
+ * @param selectionPrimitive number? (Default: `0`) 0 - drawPos, 1 - collisionVolume, 2 - selectionVolume, 3 - UnitDef selectionVolume
  * @return number[]? unitIDs
  */
 int LuaUnsyncedRead::GetUnitsInScreenRectangle(lua_State* L)
@@ -2606,6 +2609,7 @@ int LuaUnsyncedRead::GetUnitsInScreenRectangle(lua_State* L)
 	float t = luaL_checkfloat(L, 2);
 	float r = luaL_checkfloat(L, 3);
 	float b = luaL_checkfloat(L, 4);
+	const int selectionPrimitive = luaL_optint(L, 6, 0);
 
 	if (l > r) std::swap(l, r);
 	if (t > b) std::swap(t, b);
@@ -2645,7 +2649,7 @@ int LuaUnsyncedRead::GetUnitsInScreenRectangle(lua_State* L)
 					inRect = true;
 				}
 				// slow check with collision volume
-				if (!inRect && IntersectUnitSelectionVolumeInScreenRect(unit, camera, l, t, r, b)) {
+				if (selectionPrimitive && !inRect && IntersectUnitSelectionVolumeInScreenRect(unit, camera, l, t, r, b, selectionPrimitive)) {
 					inRect = true;
 				}
 				if (inRect) {
