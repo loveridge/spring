@@ -220,38 +220,6 @@ namespace
 
 		return p;
 	}
-	static float3 GetFrustumSupportPoint(const SelectionFrustum& frustum, const float3& dirWorld)
-	{
-		float bestDot = -std::numeric_limits<float>::infinity();
-		float3 bestPt = frustum.corners[0];
-
-		for (const float3& p : frustum.corners) {
-			const float dp = p.dot(dirWorld);
-			if (dp > bestDot) {
-				bestDot = dp;
-				bestPt = p;
-			}
-		}
-
-		return bestPt;
-	}
-	static float3 GetMinkowskiSupportPointVolumeFrustum(const CollisionVolume* vol,
-	                                                    const SelectionFrustum& frustum,
-	                                                    const CMatrix44f& worldToVol,
-	                                                    const CMatrix44f& volToWorld,
-	                                                    const float3& dirVol)
-	{
-		// support(vol - frustumInVol, d)
-		const float3 pVol = GetSupportPointLocal(vol, dirVol);
-
-		// Need frustum support in world-space direction corresponding to -dirVol
-		const float3 dirWorld = TransformDirection(volToWorld, -dirVol);
-		const float3 pFrustumWorld = GetFrustumSupportPoint(frustum, dirWorld);
-		const float3 pFrustumVol = worldToVol.Mul(pFrustumWorld);
-
-		return (pVol - pFrustumVol);
-	}
-
 	static float3 GetSupportPointInReferenceSpace(const CollisionVolume* v,
 	                                              const CMatrix44f& vToRef,
 	                                              const CMatrix44f& refToV, const float3& dirRef)
