@@ -2213,7 +2213,6 @@ namespace {
 	{
 		const int vsy = std::max(1, globalRendering->viewSizeY);
 		const float xMid = globalRendering->viewSizeX * 0.5f;
-
 		return ((x - xMid) / vsy) * (cam->GetTanHalfFov() * 2.0f);
 	}
 
@@ -2230,38 +2229,38 @@ namespace {
 	{
 		return (((p / size) * 2.0f) - 1.0f) * scale;
 	}
+
 	static float3 NormalizeOrFallback(const float3& v, const float3& fallback)
-{
-	const float sqLen = v.SqLength();
+	{
+		const float sqLen = v.SqLength();
+		if (sqLen > 1e-4f)
+			return (v / math::sqrt(sqLen));
+		return fallback;
+	}
 
-	if (sqLen > COLLISION_VOLUME_EPS)
-		return (v / math::sqrt(sqLen));
+	static void BuildOrthographicSelectionFrustum(const CCamera* cam, float l, float t, float r,
+	                                              float b, CollisionVolume& selVol,
+	                                              CMatrix44f& selMat)
+	{
+		static constexpr float SCREEN_RECT_BOX_EPS = 1e-3f;
+		const float4& scales = cam->GetFrustumScales();
+		const float x0 = GetScreenRectOrthoCoord(l, globalRendering->viewSizeX, scales.x);
+		const float x1 = GetScreenRectOrthoCoord(r, globalRendering->viewSizeX, scales.x);
+		const float y0 = GetScreenRectOrthoCoord(t, globalRendering->viewSizeY, scales.y);
+		const float y1 = GetScreenRectOrthoCoord(b, globalRendering->viewSizeY, scales.y);
+		const float z0 = cam->GetNearPlaneDist();
+		const float z1 = cam->GetFarPlaneDist();
 
-	return fallback;
-}
-
-static void BuildOrthographicSelectionFrustum(const CCamera* cam, float l, float t, float r,
-	                                          float b, CollisionVolume& selVol, CMatrix44f& selMat)
-{
-	static constexpr float SCREEN_RECT_BOX_EPS = 1e-3f;
-	const float4& scales = cam->GetFrustumScales();
-	const float x0 = GetScreenRectOrthoCoord(l, globalRendering->viewSizeX, scales.x);
-	const float x1 = GetScreenRectOrthoCoord(r, globalRendering->viewSizeX, scales.x);
-	const float y0 = GetScreenRectOrthoCoord(t, globalRendering->viewSizeY, scales.y);
-	const float y1 = GetScreenRectOrthoCoord(b, globalRendering->viewSizeY, scales.y);
-	const float z0 = cam->GetNearPlaneDist();
-	const float z1 = cam->GetFarPlaneDist();
-
-	const float3 rectScales(std::max(std::fabs(x1 - x0), SCREEN_RECT_BOX_EPS),
-		                    std::max(std::fabs(y1 - y0), SCREEN_RECT_BOX_EPS),
-		                    std::max(std::fabs(z1 - z0), SCREEN_RECT_BOX_EPS));
-	const float3 rectPos = cam->GetPos() + cam->GetRight() * ((x0 + x1) * 0.5f) +
-		                   cam->GetUp() * ((y0 + y1) * 0.5f) +
-		                   cam->GetForward() * ((z0 + z1) * 0.5f);
-	selVol.InitShape(rectScales, ZeroVector, CollisionVolume::COLVOL_TYPE_BOX,
-		             CollisionVolume::COLVOL_HITTEST_CONT, CollisionVolume::COLVOL_AXIS_Z);
-	selMat = CMatrix44f(rectPos, cam->GetRight(), cam->GetUp(), cam->GetForward());
-}
+		const float3 rectScales(std::max(std::fabs(x1 - x0), SCREEN_RECT_BOX_EPS),
+		                        std::max(std::fabs(y1 - y0), SCREEN_RECT_BOX_EPS),
+		                        std::max(std::fabs(z1 - z0), SCREEN_RECT_BOX_EPS));
+		const float3 rectPos = cam->GetPos() + cam->GetRight() * ((x0 + x1) * 0.5f) +
+		                       cam->GetUp() * ((y0 + y1) * 0.5f) +
+		                       cam->GetForward() * ((z0 + z1) * 0.5f);
+		selVol.InitShape(rectScales, ZeroVector, CollisionVolume::COLVOL_TYPE_BOX,
+		                 CollisionVolume::COLVOL_HITTEST_CONT, CollisionVolume::COLVOL_AXIS_Z);
+		selMat = CMatrix44f(rectPos, cam->GetRight(), cam->GetUp(), cam->GetForward());
+	}
 
 static void BuildPerspectiveSelectionFrustum(
 	const CCamera* cam,
@@ -2269,7 +2268,7 @@ static void BuildPerspectiveSelectionFrustum(
 	CollisionVolume& fruVol,
 	CMatrix44f& fruMat
 ) {
-	static constexpr float EPS = 1e-3f;
+	static constexpr float EPS = 1e-4f;
 
 	const float nearDist = cam->GetNearPlaneDist();
 	const float farDist  = cam->GetFarPlaneDist();
@@ -2295,11 +2294,11 @@ static void BuildPerspectiveSelectionFrustum(
 
 	// Build an orthonormal basis around the center ray.
 	float3 fruRgt = camRgt - (fruFwd * fruFwd.dot(camRgt));
-	if (fruRgt.SqLength() < COLLISION_VOLUME_EPS)
+	if (fruRgt.SqLength() < EPS)
 		fruRgt = fruFwd.cross(camUp);
-	if (fruRgt.SqLength() < COLLISION_VOLUME_EPS)
+	if (fruRgt.SqLength() < EPS)
 		fruRgt = fruFwd.cross(float3(0.0f, 1.0f, 0.0f));
-	if (fruRgt.SqLength() < COLLISION_VOLUME_EPS)
+	if (fruRgt.SqLength() < EPS)
 		fruRgt = fruFwd.cross(float3(1.0f, 0.0f, 0.0f));
 
 	fruRgt = NormalizeOrFallback(fruRgt, float3(1.0f, 0.0f, 0.0f));
@@ -2331,7 +2330,7 @@ static void BuildPerspectiveSelectionFrustum(
 	// The base rectangle encloses those intersection points in the frustum basis.
 	for (const float3& ray: cornerRays) {
 		const float denom = fruFwd.dot(ray);
-		if (denom <= COLLISION_VOLUME_EPS)
+		if (denom <= EPS)
 			continue;
 		const float3 d = (camPos + ray * (fruHeight / denom)) - baseCtr;
 		halfW = std::max(halfW, math::fabs(d.dot(fruRgt)));

@@ -373,6 +373,9 @@ float CollisionVolume::GetCylinderDistance(const float3& pv, size_t axisA, size_
 	return d;
 }
 
+// Returns the minimum Euclidean outside distance from <pv> to this
+// rectangular pyramid. Interior points return 0.0f, so this is not a
+// signed distance function.
 float CollisionVolume::GetPyramidDistance(const float3& pv, size_t axisA, size_t axisB, size_t axisC) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
@@ -434,12 +437,7 @@ float CollisionVolume::GetPyramidDistance(const float3& pv, size_t axisA, size_t
 	float xs[4] = {-h, xBreakB, xBreakC, h};
 
 	// sort 4 values
-	for (int i = 0; i < 4; ++i) {
-		for (int j = i + 1; j < 4; ++j) {
-			if (xs[j] < xs[i])
-				std::swap(xs[i], xs[j]);
-		}
-	}
+	std::sort(xs, xs + 4);
 
 	float minDistSq = distSqAt(pa);
 
@@ -452,7 +450,7 @@ float CollisionVolume::GetPyramidDistance(const float3& pv, size_t axisA, size_t
 		const float xl = xs[i + 0];
 		const float xr = xs[i + 1];
 
-		if ((xr - xl) <= COLLISION_VOLUME_EPS)
+		if ((xr - xl) <= 1e-6f)
 			continue;
 
 		const float xm = (xl + xr) * 0.5f;
