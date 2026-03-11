@@ -2314,18 +2314,18 @@ static void BuildPerspectiveSelectionFrustum(
 			continue;
 
 		const float s = fruHeight / denom;
-		const float3 p = camPos + (ray * s);
-		const float3 d = p - baseCtr;
+ 		const float3 p = camPos + (ray * s);
+ 		const float3 d = p - baseCtr;
 
 		halfW = std::max(halfW, math::fabs(d.dot(fruRgt)));
 		halfH = std::max(halfH, math::fabs(d.dot(fruUp )));
 	}
 
-	const float3 fruScales(
-		std::max(halfW * 2.0f, SCREEN_RECT_FRUSTUM_EPS),
-		std::max(halfH * 2.0f, SCREEN_RECT_FRUSTUM_EPS),
+ 	const float3 fruScales(
+ 		std::max(halfW * 2.0f, SCREEN_RECT_FRUSTUM_EPS),
+ 		std::max(halfH * 2.0f, SCREEN_RECT_FRUSTUM_EPS),
 		std::max(fruHeight,     SCREEN_RECT_FRUSTUM_EPS)
-	);
+ 	);
 
 	// Local frustum convention:
 	//   apex     at local z = -h
@@ -2333,10 +2333,13 @@ static void BuildPerspectiveSelectionFrustum(
 	// so the world-space volume origin is the midpoint between them.
 	const float3 fruPos = camPos + (fruFwd * (fruHeight * 0.5f));
 
-	fruVol.SetVolumeType(CollisionVolume::COLVOL_TYPE_PYRAMID);
-	fruVol.SetOffsets(ZeroVector);
-	fruVol.SetAxisScales(fruScales);
-	fruVol.SetBoundingRadius();
+	fruVol.InitShape(
+		fruScales,
+		ZeroVector,
+		CollisionVolume::COLVOL_TYPE_PYRAMID,
+		CollisionVolume::COLVOL_HITTEST_CONT,
+		CollisionVolume::COLVOL_AXIS_Z
+	);
 
 	fruMat = CMatrix44f(fruPos, fruRgt, fruUp, fruFwd);
 }
@@ -2346,6 +2349,7 @@ static void BuildPerspectiveSelectionFrustum(
 	static constexpr float SCREEN_RECT_BOX_EPS = 1e-3f;
 
 	const CollisionVolume* unitVol = &unit->collisionVolume;
+	// const CollisionVolume* unitVol = &unit->unitDef->selectionVolume;
 	CMatrix44f unitMat(unit->GetTransformMatrix(false));
 	unitMat.Translate(unit->relMidPos);
 
@@ -2396,7 +2400,10 @@ static void BuildPerspectiveSelectionFrustum(
 	}
 
 	BuildPerspectiveSelectionFrustum(cam, l, t, r, b, selVol, selMat);
-	return CCollisionHandler::IntersectPyramidVolume(&selVol, selMat, unitVol, unitMat);
+
+
+	bool result = CCollisionHandler::IntersectPyramidVolume(&selVol, selMat, unitVol, unitMat);
+	return result;
 }
 
 	template<typename V>
