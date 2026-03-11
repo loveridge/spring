@@ -53,7 +53,6 @@ namespace
 	static constexpr int GJK_MAX_ITERATIONS = 32;
 	static constexpr float GJK_EPS = 1e-6f;
 	static constexpr float GJK_EPS_SQ = GJK_EPS * GJK_EPS;
-	static constexpr float VOL_EXTENT_EPS = 1e-6f;
 
 	static bool IsRigidTransform(const CMatrix44f& m)
 	{
@@ -279,13 +278,14 @@ namespace
 		const float3 abc = ab.cross(ac);
 
 		if (abc.SqLength() < GJK_EPS_SQ) {
-			GJKSimplex edgeAB;
-			GJKSimplex edgeAC;
+			GJKSimplex edgeAB, edgeAC, edgeBC;
 			float3 dirAB = ZeroVector;
 			float3 dirAC = ZeroVector;
+			float3 dirBC = ZeroVector;
 
 			edgeAB.Assign(a, b);
 			edgeAC.Assign(a, c);
+			edgeBC.Assign(b, c);
 
 			if (UpdateLineSimplex(edgeAB, dirAB)) {
 				simplex = edgeAB;
@@ -295,14 +295,26 @@ namespace
 				simplex = edgeAC;
 				return true;
 			}
+			if (UpdateLineSimplex(edgeBC, dirBC)) {
+				simplex = edgeBC;
+				return true;
+			}
 
-			if (dirAB.SqLength() <= dirAC.SqLength()) {
+			const float distAB = dirAB.SqLength();
+			const float distAC = dirAC.SqLength();
+			const float distBC = dirBC.SqLength();
+
+			if (distAB <= distAC && distAB <= distBC) {
 				simplex = edgeAB;
 				dir = dirAB;
-			} else {
+			} else if (distAC <= distBC) {
 				simplex = edgeAC;
 				dir = dirAC;
+			} else {
+				simplex = edgeBC;
+				dir = dirBC;
 			}
+
 			return false;
 		}
 
@@ -359,7 +371,7 @@ namespace
 		const float3 ad = d - a;
 		const float tetVolume6 = (ab.cross(ac)).dot(ad);
 
-		if (math::fabs(tetVolume6) <= GJK_EPS) {
+		if (math::fabs(tetVolume6) <= GJK_EPS_SQ) {
 			GJKSimplex bestFace;
 			float3 bestDir = ZeroVector;
 			float bestSqDist = std::numeric_limits<float>::infinity();
@@ -605,6 +617,18 @@ bool CCollisionHandler::IntersectVolume(const CollisionVolume* vol1,
 
 	if (vol1 == nullptr || vol2 == nullptr)
 		return false;
+
+	// This GJK implementation assumes support directions transform correctly
+	// under rigid transforms only (rotation + translation).
+	const bool rigid1 = IsRigidTransform(vol1Mat);
+	const bool rigid2 = IsRigidTransform(vol2Mat);
+	if (!rigid1 || !rigid2) {
+		LOG_L(L_WARNING,
+		      "[CollisionHandler::IntersectVolume] non-rigid transform passed to GJK "
+		      "(vol1Rigid=%d, vol2Rigid=%d)",
+		      rigid1, rigid2);
+		return false;
+	}
 
 	const float3 vol1Ctr = vol1Mat.Mul(vol1->GetOffsets());
 	const float3 vol2Ctr = vol2Mat.Mul(vol2->GetOffsets());
