@@ -12,6 +12,7 @@
 #include "System/Misc/TracyDefs.h"
 
 #include <algorithm>
+#include <limits>
 
 
 namespace
@@ -50,6 +51,8 @@ namespace
 	};
 
 	static constexpr int GJK_MAX_ITERATIONS = 32;
+	static constexpr float GJK_EPS = 1e-6f;
+	static constexpr float GJK_EPS_SQ = GJK_EPS * GJK_EPS;
 
 	static float3 TransformDirection(const CMatrix44f& m, const float3& d)
 	{
@@ -71,7 +74,7 @@ namespace
 
 		float3 p = v.cross(axis);
 
-		if (p.SqLength() < COLLISION_VOLUME_EPS)
+		if (p.SqLength() < GJK_EPS_SQ)
 			p = float3(v.y, -v.x, 0.0f);
 
 		return p;
@@ -81,10 +84,59 @@ namespace
 	{
 		float3 dir = TripleCross(edge, ao, edge);
 
-		if (dir.SqLength() < COLLISION_VOLUME_EPS)
+		if (dir.SqLength() < GJK_EPS_SQ)
 			dir = PerpendicularVector(edge);
 
 		return dir;
+	}
+
+	static bool OriginOnSegment(const float3& a, const float3& b)
+	{
+		const float3 ab = (b - a);
+		const float abSq = ab.SqLength();
+
+		if (abSq <= GJK_EPS_SQ)
+			return (a.SqLength() <= GJK_EPS_SQ);
+
+		const float t = (-a).dot(ab) / abSq;
+		if (t < -GJK_EPS || t > (1.0f + GJK_EPS))
+			return false;
+
+		const float3 closest = a + (ab * std::clamp(t, 0.0f, 1.0f));
+		return (closest.SqLength() <= GJK_EPS_SQ);
+	}
+
+	static bool OriginOnTriangle(const float3& a, const float3& b, const float3& c)
+	{
+		const float3 ab = (b - a);
+		const float3 ac = (c - a);
+		const float3 normal = ab.cross(ac);
+		const float normalSq = normal.SqLength();
+
+		if (normalSq <= GJK_EPS_SQ)
+			return false;
+
+		const float planeDistSq = Square(normal.dot(-a)) / normalSq;
+		if (planeDistSq > GJK_EPS_SQ)
+			return false;
+
+		const float d00 = ab.dot(ab);
+		const float d01 = ab.dot(ac);
+		const float d11 = ac.dot(ac);
+		const float d20 = (-a).dot(ab);
+		const float d21 = (-a).dot(ac);
+		const float denom = (d00 * d11) - (d01 * d01);
+
+		if (math::fabs(denom) <= GJK_EPS_SQ)
+			return false;
+
+		const float v = ((d11 * d20) - (d01 * d21)) / denom;
+		const float w = ((d00 * d21) - (d01 * d20)) / denom;
+		const float u = 1.0f - v - w;
+
+		return (u >= -GJK_EPS &&
+		        v >= -GJK_EPS &&
+		        w >= -GJK_EPS);
 	}
 
 	static float3 GetSupportPointLocal(const CollisionVolume* v, const float3& dir)
@@ -103,7 +155,7 @@ namespace
 				const float dirLen = dir.Length();
 				const float radius = ahs.x;
 
-				if (dirLen > COLLISION_VOLUME_EPS)
+				if (dirLen > GJK_EPS)
 					p += dir * (radius / dirLen);
 			} break;
 
@@ -112,7 +164,7 @@ namespace
 					math::sqrt((ahs.x * ahs.x * dir.x * dir.x) + (ahs.y * ahs.y * dir.y * dir.y) +
 					           (ahs.z * ahs.z * dir.z * dir.z));
 
-				if (denom > COLLISION_VOLUME_EPS) {
+				if (denom > GJK_EPS) {
 					p.x += (ahs.x * ahs.x * dir.x) / denom;
 					p.y += (ahs.y * ahs.y * dir.y) / denom;
 					p.z += (ahs.z * ahs.z * dir.z) / denom;
@@ -128,7 +180,7 @@ namespace
 
 				p[pAx] += (dir[pAx] >= 0.0f) ? ahs[pAx] : -ahs[pAx];
 
-				if (denom > COLLISION_VOLUME_EPS) {
+				if (denom > GJK_EPS) {
 					p[sAx0] += (ahs[sAx0] * ahs[sAx0] * dir[sAx0]) / denom;
 					p[sAx1] += (ahs[sAx1] * ahs[sAx1] * dir[sAx1]) / denom;
 				}
@@ -393,6 +445,9 @@ namespace
 		const float3 ao = -a;
 		const float3 ab = b - a;
 
+		if (OriginOnSegment(a, b))
+			return true;
+
 		if (ab.dot(ao) > 0.0f) {
 			dir = EdgeTowardOriginDirection(ab, ao);
 		} else {
@@ -414,40 +469,62 @@ namespace
 		const float3 ac = c - a;
 		const float3 abc = ab.cross(ac);
 
-		if (abc.SqLength() < COLLISION_VOLUME_EPS) {
-			if (ab.SqLength() >= ac.SqLength()) {
-				simplex.Assign(a, b);
-			} else {
-				simplex.Assign(a, c);
+		if (abc.SqLength() < GJK_EPS_SQ) {
+			GJKSimplex edgeAB;
+			GJKSimplex edgeAC;
+			float3 dirAB = ZeroVector;
+			float3 dirAC = ZeroVector;
+
+			edgeAB.Assign(a, b);
+			edgeAC.Assign(a, c);
+
+			if (UpdateLineSimplex(edgeAB, dirAB)) {
+				simplex = edgeAB;
+				return true;
 			}
-			return UpdateLineSimplex(simplex, dir);
+			if (UpdateLineSimplex(edgeAC, dirAC)) {
+				simplex = edgeAC;
+				return true;
+			}
+
+			if (dirAB.SqLength() <= dirAC.SqLength()) {
+				simplex = edgeAB;
+				dir = dirAB;
+			} else {
+				simplex = edgeAC;
+				dir = dirAC;
+			}
+			return false;
 		}
+
+		if (OriginOnTriangle(a, b, c))
+			return true;
 
 		if ((abc.cross(ac)).dot(ao) > 0.0f) {
 			if (ac.dot(ao) > 0.0f) {
 				simplex.Assign(a, c);
-				dir = EdgeTowardOriginDirection(ac, ao);
-			} else {
-				if (ab.dot(ao) > 0.0f) {
-					simplex.Assign(a, b);
-					dir = EdgeTowardOriginDirection(ab, ao);
-				} else {
-					simplex.Assign(a);
-					dir = ao;
-				}
+				return UpdateLineSimplex(simplex, dir);
 			}
-			return false;
+
+			if (ab.dot(ao) > 0.0f) {
+				simplex.Assign(a, b);
+				return UpdateLineSimplex(simplex, dir);
+			}
+
+			simplex.Assign(a);
+			dir = ao;
+			return (dir.SqLength() <= GJK_EPS_SQ);
 		}
 
 		if ((ab.cross(abc)).dot(ao) > 0.0f) {
 			if (ab.dot(ao) > 0.0f) {
 				simplex.Assign(a, b);
-				dir = EdgeTowardOriginDirection(ab, ao);
-			} else {
-				simplex.Assign(a);
-				dir = ao;
+				return UpdateLineSimplex(simplex, dir);
 			}
-			return false;
+
+			simplex.Assign(a);
+			dir = ao;
+			return (dir.SqLength() <= GJK_EPS_SQ);
 		}
 
 		if (abc.dot(ao) > 0.0f) {
@@ -471,6 +548,51 @@ namespace
 		const float3 ab = b - a;
 		const float3 ac = c - a;
 		const float3 ad = d - a;
+		const float tetVolume6 = (ab.cross(ac)).dot(ad);
+
+		if (math::fabs(tetVolume6) <= COLLISION_VOLUME_EPS) {
+			GJKSimplex bestFace;
+			float3 bestDir = ZeroVector;
+			float bestSqDist = std::numeric_limits<float>::infinity();
+			bool foundFace = false;
+
+			const float3 faceVerts[4][3] = {
+				{a, b, c},
+				{a, c, d},
+				{a, d, b},
+				{b, d, c},
+			};
+
+			for (const auto& face: faceVerts) {
+				GJKSimplex faceSimplex;
+				float3 faceDir = ZeroVector;
+
+				faceSimplex.Assign(face[0], face[1], face[2]);
+
+				if (UpdateTriangleSimplex(faceSimplex, faceDir)) {
+					simplex = faceSimplex;
+					return true;
+				}
+
+				const float sqDist = faceDir.SqLength();
+				if (!foundFace || sqDist < bestSqDist) {
+					bestFace = faceSimplex;
+					bestDir = faceDir;
+					bestSqDist = sqDist;
+					foundFace = true;
+				}
+			}
+
+			if (foundFace) {
+				simplex = bestFace;
+				dir = bestDir;
+				return false;
+			}
+
+			simplex.Assign(a);
+			dir = ao;
+			return (dir.SqLength() <= GJK_EPS_SQ);
+		}
 
 		float3 abc = ab.cross(ac);
 		if (abc.dot(ad) > 0.0f)
@@ -524,7 +646,7 @@ namespace
 	static bool HasSupportPoint(const GJKSimplex& simplex, const float3& point)
 	{
 		for (int i = 0; i < simplex.size; ++i) {
-			if ((simplex.points[i] - point).SqLength() <= COLLISION_VOLUME_EPS)
+			if ((simplex.points[i] - point).SqLength() <= GJK_EPS_SQ)
 				return true;
 		}
 
@@ -545,9 +667,9 @@ namespace
 		const CMatrix44f otherToRef = refInv * otherMat;
 		const CMatrix44f refToOther = otherInv * refMat;
 
-		if (initialDirRef.SqLength() < COLLISION_VOLUME_EPS)
+		if (initialDirRef.SqLength() < GJK_EPS_SQ)
 			initialDirRef = fallbackDirRef;
-		if (initialDirRef.SqLength() < COLLISION_VOLUME_EPS)
+		if (initialDirRef.SqLength() < GJK_EPS_SQ)
 			initialDirRef = float3(1.0f, 0.0f, 0.0f);
 
 		GJKSimplex simplex;
@@ -556,7 +678,7 @@ namespace
 
 		float3 dir = -simplex.points[0];
 
-		if (dir.SqLength() < COLLISION_VOLUME_EPS)
+		if (dir.SqLength() < GJK_EPS_SQ)
 			return true;
 
 		for (int n = 0; n < GJK_MAX_ITERATIONS; ++n) {
@@ -564,7 +686,7 @@ namespace
 			                                                              otherToRef, refToOther,
 			                                                              dir);
 
-			if (support.dot(dir) < -COLLISION_VOLUME_EPS)
+			if (support.dot(dir) < -GJK_EPS)
 				return false;
 
 			if (HasSupportPoint(simplex, support))
@@ -575,7 +697,7 @@ namespace
 			if (UpdateSimplex(simplex, dir))
 				return true;
 
-			if (dir.SqLength() < COLLISION_VOLUME_EPS)
+			if (dir.SqLength() < GJK_EPS_SQ)
 				return true;
 		}
 
@@ -605,11 +727,11 @@ bool CCollisionHandler::IntersectBoxVolume(const CollisionVolume* box, const CMa
 	const CMatrix44f boxInv = boxMat.InvertAffine();
 	const CMatrix44f volInv = volMat.InvertAffine();
 
-	bool handledByAxisAlignedFastPath = false;
-	if (IntersectAxisAlignedBoxVolume(box, vol, volMat, boxInv, handledByAxisAlignedFastPath))
-		return true;
-	if (handledByAxisAlignedFastPath)
-		return false;
+	// bool handledByAxisAlignedFastPath = false;
+	// if (IntersectAxisAlignedBoxVolume(box, vol, volMat, boxInv, handledByAxisAlignedFastPath))
+	// 	return true;
+	// if (handledByAxisAlignedFastPath)
+	// 	return false;
 
 	const float3 dir = GetCenterDeltaInLocalSpace(box, boxInv, volCtr);
 	return IntersectVolumesGJK(box, boxMat, vol, volMat, boxInv, volInv, dir,

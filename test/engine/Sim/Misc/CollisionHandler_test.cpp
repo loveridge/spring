@@ -783,6 +783,17 @@ TEST_CASE("CollisionHandler_IntersectBoxVolume_MultiAxisObliqueBoxes")
 	}
 }
 
+TEST_CASE("CollisionHandler_IntersectBoxVolume_RotatedLineContactCountsAsIntersection")
+{
+	const CollisionVolume boxA = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f));
+	const CollisionVolume boxB = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f));
+	const CMatrix44f boxAMat = MakeTransform();
+	const CMatrix44f boxBMat =
+		MakeTransform(float3(2.41421356f, 0.0f, 0.0f), float3(0.0f, 0.0f, QUARTER_PI));
+
+	CHECK(Intersects(boxA, boxAMat, boxB, boxBMat));
+}
+
 // TEST_CASE("CollisionHandler_IntersectBoxVolume_AxisAligned_Performance")
 // {
 // 	SKIP("performance");
@@ -898,6 +909,16 @@ TEST_CASE("CollisionHandler_IntersectPyramidVolume_PyramidVsSphere")
 	SECTION("sphere tangent to base face counts as intersecting") {
 		const CollisionVolume sphere = MakeSphereVolume(0.5f);
 		CHECK(IntersectsPyramid(pyramid, pyramidMat, sphere, MakeTransform(float3(0.0f, 0.0f, 2.5f))));
+	}
+
+	SECTION("sphere tangent to a side face counts as intersecting") {
+		const CollisionVolume sphere = MakeSphereVolume(1.5f);
+		CHECK(IntersectsPyramid(
+			pyramid,
+			pyramidMat,
+			sphere,
+			MakeTransform(float3(2.34164079f, 0.0f, -0.67082039f))
+		));
 	}
 
 	SECTION("sphere separated beyond base face") {
