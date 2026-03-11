@@ -892,44 +892,6 @@ static bool FrustumRejectsVolumeByPlanes(const CCamera::Frustum& frustum,
 
 	return false;
 }
-static bool FrustumIntersectsSphereOutward(const CCamera::Frustum& frustum, const float3& center,
-                                           float radius, uint8_t testMask = 0x3F)
-{
-	for (size_t i = 0; i < CCamera::FRUSTUM_PLANE_CNT; ++i) {
-		if ((testMask & (1 << i)) == 0)
-			continue;
-
-		const float4& plane = frustum.planes[i];
-		const float dist = plane.dot(center) + plane.w;
-
-		// outward-facing normals: outside is positive
-		if (dist > radius)
-			return false;
-	}
-
-	return true;
-}
-
-static bool FrustumRejectsVolumeByPlanesOutward(const CCamera::Frustum& frustum,
-                                                const CollisionVolume* vol,
-                                                const CMatrix44f& volToWorld)
-{
-	for (const float4& plane : frustum.planes) {
-		const float3 worldN = PlaneNormal(plane);
-
-		// support point farthest along outward normal
-		const float3 localDir = LocalDirFromWorldDir(volToWorld, worldN);
-		const float3 localSup = GetSupportPointLocal(vol, localDir);
-		const float3 worldSup = volToWorld.Mul(localSup);
-
-		// outward-facing normals: if even the farthest point along +n is still
-		// on the outside side, the whole volume is outside this plane
-		if (PlaneDistance(plane, worldSup) > EPS)
-			return true;
-	}
-
-	return false;
-}
 bool CCollisionHandler::IntersectVolumeWithFrustum(const CCamera::Frustum& frustum,
                                                    const CollisionVolume& vol,
                                                    const CMatrix44f& volumeToWorld)
@@ -954,12 +916,13 @@ bool CCollisionHandler::IntersectVolumeWithFrustum(const CCamera::Frustum& frust
 	printf("plane4 %s\n", frustum.planes[3].str().c_str());
 	printf("plane5 %s\n", frustum.planes[4].str().c_str());
 	printf("plane6 %s\n", frustum.planes[5].str().c_str());
-	if (!FrustumIntersectsSphereOutward(frustum, volCtr, volRad, 0x3F))
+	if (!frustum.IntersectSphere(volCtr, volRad, 0x3F))
 		return false;
 
 	printf("here2\n");
-	// Cheap frustum-plane rejection before GJK.
-	if (FrustumRejectsVolumeByPlanesOutward(frustum, &vol, volumeToWorld))
+	// Frustum planes use the same inward-facing convention as
+	// CCamera::Frustum::IntersectSphere, so plane rejection must do the same.
+	if (FrustumRejectsVolumeByPlanes(frustum, &vol, volumeToWorld))
 		return false;
 
 	const CMatrix44f worldToVol = volumeToWorld.InvertAffine();
