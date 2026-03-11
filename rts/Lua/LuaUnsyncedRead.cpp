@@ -2262,139 +2262,135 @@ namespace {
 		selMat = CMatrix44f(rectPos, cam->GetRight(), cam->GetUp(), cam->GetForward());
 	}
 
-static void BuildPerspectiveSelectionFrustum(
-	const CCamera* cam,
-	float l, float t, float r, float b,
-	CollisionVolume& fruVol,
-	CMatrix44f& fruMat
-) {
-	static constexpr float EPS = 1e-4f;
+	static void BuildPerspectiveSelectionFrustum(
+		const CCamera* cam,
+		float l, float t, float r, float b,
+		CollisionVolume& fruVol,
+		CMatrix44f& fruMat
+	) {
+		static constexpr float EPS = 1e-4f;
 
-	const float nearDist = cam->GetNearPlaneDist();
-	const float farDist  = cam->GetFarPlaneDist();
+		const float nearDist = cam->GetNearPlaneDist();
+		const float farDist  = cam->GetFarPlaneDist();
 
-	const float cx0 = GetScreenRectPerspCoeffX(cam, l);
-	const float cx1 = GetScreenRectPerspCoeffX(cam, r);
-	const float cy0 = GetScreenRectPerspCoeffY(cam, t);
-	const float cy1 = GetScreenRectPerspCoeffY(cam, b);
+		const float cx0 = GetScreenRectPerspCoeffX(cam, l);
+		const float cx1 = GetScreenRectPerspCoeffX(cam, r);
+		const float cy0 = GetScreenRectPerspCoeffY(cam, t);
+		const float cy1 = GetScreenRectPerspCoeffY(cam, b);
 
-	const float cxC = (cx0 + cx1) * 0.5f;
-	const float cyC = (cy0 + cy1) * 0.5f;
+		const float cxC = (cx0 + cx1) * 0.5f;
+		const float cyC = (cy0 + cy1) * 0.5f;
 
-	const float3 camPos = cam->GetPos();
-	const float3 camRgt = cam->GetRight();
-	const float3 camUp  = cam->GetUp();
-	const float3 camFwd = cam->GetForward();
+		const float3 camPos = cam->GetPos();
+		const float3 camRgt = cam->GetRight();
+		const float3 camUp  = cam->GetUp();
+		const float3 camFwd = cam->GetForward();
 
-	// Center ray of the screen rectangle.
-	const float3 fruFwd = NormalizeOrFallback(
-		(camFwd + (camRgt * cxC) + (camUp * cyC)),
-		camFwd
-	);
+		// Center ray of the screen rectangle.
+		const float3 fruFwd = NormalizeOrFallback(
+			(camFwd + (camRgt * cxC) + (camUp * cyC)),
+			camFwd
+		);
 
-	// Build an orthonormal basis around the center ray.
-	float3 fruRgt = camRgt - (fruFwd * fruFwd.dot(camRgt));
-	if (fruRgt.SqLength() < EPS)
-		fruRgt = fruFwd.cross(camUp);
-	if (fruRgt.SqLength() < EPS)
-		fruRgt = fruFwd.cross(float3(0.0f, 1.0f, 0.0f));
-	if (fruRgt.SqLength() < EPS)
-		fruRgt = fruFwd.cross(float3(1.0f, 0.0f, 0.0f));
+		// Build an orthonormal basis around the center ray.
+		float3 fruRgt = camRgt - (fruFwd * fruFwd.dot(camRgt));
+		if (fruRgt.SqLength() < EPS)
+			fruRgt = fruFwd.cross(camUp);
+		if (fruRgt.SqLength() < EPS)
+			fruRgt = fruFwd.cross(float3(0.0f, 1.0f, 0.0f));
+		if (fruRgt.SqLength() < EPS)
+			fruRgt = fruFwd.cross(float3(1.0f, 0.0f, 0.0f));
 
-	fruRgt = NormalizeOrFallback(fruRgt, float3(1.0f, 0.0f, 0.0f));
-	const float3 fruUp = NormalizeOrFallback(fruFwd.cross(fruRgt), camUp);
+		fruRgt = NormalizeOrFallback(fruRgt, float3(1.0f, 0.0f, 0.0f));
+		const float3 fruUp = NormalizeOrFallback(fruFwd.cross(fruRgt), camUp);
 
-	// Point on the camera's far plane corresponding to the rectangle center.
-	const float3 farCtr =
-		camPos +
-		(camRgt * (cxC * farDist)) +
-		(camUp  * (cyC * farDist)) +
-		(camFwd *  farDist);
+		// Point on the camera's far plane corresponding to the rectangle center.
+		const float3 farCtr =
+			camPos +
+			(camRgt * (cxC * farDist)) +
+			(camUp  * (cyC * farDist)) +
+			(camFwd *  farDist);
 
-	// Height of the pyramid along its own primary axis.
-	// The apex is at the camera, the base center lies on the center ray.
-	const float fruHeight = std::max((farCtr - camPos).dot(fruFwd), nearDist + EPS);
-	const float3 baseCtr = camPos + (fruFwd * fruHeight);
+		// Height of the pyramid along its own primary axis.
+		// The apex is at the camera, the base center lies on the center ray.
+		const float fruHeight = std::max((farCtr - camPos).dot(fruFwd), nearDist + EPS);
+		const float3 baseCtr = camPos + (fruFwd * fruHeight);
 
-	float halfW = 0.0f;
-	float halfH = 0.0f;
+		float halfW = 0.0f;
+		float halfH = 0.0f;
 
-	const std::array<float3, 4> cornerRays = {{
-		camFwd + camRgt * cx0 + camUp * cy0,
-		camFwd + camRgt * cx0 + camUp * cy1,
-		camFwd + camRgt * cx1 + camUp * cy0,
-		camFwd + camRgt * cx1 + camUp * cy1,
-	}};
+		const std::array<float3, 4> cornerRays = {{
+			camFwd + camRgt * cx0 + camUp * cy0,
+			camFwd + camRgt * cx0 + camUp * cy1,
+			camFwd + camRgt * cx1 + camUp * cy0,
+			camFwd + camRgt * cx1 + camUp * cy1,
+		}};
 
-	// Intersect the 4 corner rays with the base plane perpendicular to fruFwd.
-	// The base rectangle encloses those intersection points in the frustum basis.
-	for (const float3& ray: cornerRays) {
-		const float denom = fruFwd.dot(ray);
-		if (denom <= EPS)
-			continue;
-		const float3 d = (camPos + ray * (fruHeight / denom)) - baseCtr;
-		halfW = std::max(halfW, math::fabs(d.dot(fruRgt)));
-		halfH = std::max(halfH, math::fabs(d.dot(fruUp )));
+		// Intersect the 4 corner rays with the base plane perpendicular to fruFwd.
+		// The base rectangle encloses those intersection points in the frustum basis.
+		for (const float3& ray: cornerRays) {
+			const float denom = fruFwd.dot(ray);
+			if (denom <= EPS)
+				continue;
+			const float3 d = (camPos + ray * (fruHeight / denom)) - baseCtr;
+			halfW = std::max(halfW, math::fabs(d.dot(fruRgt)));
+			halfH = std::max(halfH, math::fabs(d.dot(fruUp )));
+		}
+
+		const float3 fruScales(
+			std::max(halfW * 2.0f, EPS),
+			std::max(halfH * 2.0f, EPS),
+			std::max(fruHeight,    EPS)
+		);
+
+		// Local frustum convention:
+		//   apex     at local z = -h
+		//   base     at local z = +h
+		// so the world-space volume origin is the midpoint between them.
+		const float3 fruPos = camPos + (fruFwd * (fruHeight * 0.5f));
+
+		fruVol.InitShape(
+			fruScales,
+			ZeroVector,
+			CollisionVolume::COLVOL_TYPE_PYRAMID,
+			CollisionVolume::COLVOL_HITTEST_CONT,
+			CollisionVolume::COLVOL_AXIS_Z
+		);
+
+		fruMat = CMatrix44f(fruPos, fruRgt, fruUp, fruFwd);
 	}
 
- 	const float3 fruScales(
- 		std::max(halfW * 2.0f, EPS),
- 		std::max(halfH * 2.0f, EPS),
-		std::max(fruHeight,    EPS)
- 	);
+	static bool IntersectUnitSelectionVolumeInScreenRect(const CUnit* unit, const CCamera* cam,
+	                                                     const CollisionVolume& selectionVolume,
+	                                                     const CMatrix44f& selectionMatrix, float l,
+	                                                     float t, float r, float b,
+	                                                     int selectionPrimitive)
+	{
+		const CollisionVolume* unitVol = &unit->collisionVolume;
+		if (selectionPrimitive == 2)
+			unitVol = &unit->selectionVolume;
+		if (selectionPrimitive == 3)
+			unitVol = &unit->unitDef->selectionVolume;
+		CMatrix44f unitMat(unit->GetTransformMatrix(false));
+		unitMat.Translate(unit->relMidPos);
 
-	// Local frustum convention:
-	//   apex     at local z = -h
-	//   base     at local z = +h
-	// so the world-space volume origin is the midpoint between them.
-	const float3 fruPos = camPos + (fruFwd * (fruHeight * 0.5f));
+		const float3 unitVolCtr = unitMat.Mul(unitVol->GetOffsets());
+		const float3 camToVolCtr = (unitVolCtr - cam->GetPos());
+		const float depth = cam->GetForward().dot(camToVolCtr);
+		const float volRadius = unitVol->GetBoundingRadius();
 
-	fruVol.InitShape(
-		fruScales,
-		ZeroVector,
-		CollisionVolume::COLVOL_TYPE_PYRAMID,
-		CollisionVolume::COLVOL_HITTEST_CONT,
-		CollisionVolume::COLVOL_AXIS_Z
-	);
+		if ((depth + volRadius) < cam->GetNearPlaneDist())
+			return false;
+		if ((depth - volRadius) > cam->GetFarPlaneDist())
+			return false;
 
-	fruMat = CMatrix44f(fruPos, fruRgt, fruUp, fruFwd);
-}
+		// Entire bounding sphere is behind the eye point.
+		if ((depth + volRadius) <= 0.0f)
+			return false;
 
-	static bool IntersectUnitSelectionVolumeInScreenRect(const CUnit* unit, const CCamera* cam, float l, float t, float r, float b, int selectionPrimitive)
-{
-	const CollisionVolume* unitVol = &unit->collisionVolume;
-	if (selectionPrimitive == 2)
-		unitVol = &unit->selectionVolume;
-	if (selectionPrimitive == 3)
-		unitVol = &unit->unitDef->selectionVolume;
-	CMatrix44f unitMat(unit->GetTransformMatrix(false));
-	unitMat.Translate(unit->relMidPos);
-
-	const float3 unitVolCtr = unitMat.Mul(unitVol->GetOffsets());
-	const float3 camToVolCtr = (unitVolCtr - cam->GetPos());
-	const float depth = cam->GetForward().dot(camToVolCtr);
-	const float volRadius = unitVol->GetBoundingRadius();
-
-	if ((depth + volRadius) < cam->GetNearPlaneDist())
-		return false;
-	if ((depth - volRadius) > cam->GetFarPlaneDist())
-		return false;
-
-	// Entire bounding sphere is behind the eye point.
-	if ((depth + volRadius) <= 0.0f)
-		return false;
-
-	CollisionVolume selVol;
-	CMatrix44f selMat;
-
-	if (cam->GetProjType() == CCamera::PROJTYPE_ORTHO) {
-		BuildOrthographicSelectionFrustum(cam, l, t, r, b, selVol, selMat);
-	} else {
-		BuildPerspectiveSelectionFrustum(cam, l, t, r, b, selVol, selMat);
+		bool result = CCollisionHandler::IntersectVolume(&selectionVolume, selectionMatrix, unitVol, unitMat);
+		return result;
 	}
-	bool result = CCollisionHandler::IntersectVolume(&selVol, selMat, unitVol, unitMat);
-	return result;
-}
 
 	template<typename V>
 	static int GetRenderObjects(lua_State* L, const V& renderObjects, const char* func) {
@@ -2630,6 +2626,15 @@ int LuaUnsyncedRead::GetUnitsInScreenRectangle(lua_State* L)
 
 	auto runLoop = [&](auto disqualifier) {
 		uint32_t count = 0;
+		CollisionVolume selectionVolume;
+		CMatrix44f selectionMatrix;
+		if (selectionPrimitive) {
+			if (camera->GetProjType() == CCamera::PROJTYPE_ORTHO) {
+				BuildOrthographicSelectionFrustum(camera, l, t, r, b, selectionVolume, selectionMatrix);
+			} else {
+				BuildPerspectiveSelectionFrustum(camera, l, t, r, b, selectionVolume, selectionMatrix);
+			}
+		}
 		for (auto visUnitList : unitQuadIter.GetObjectLists()) {
 			for (CUnit* unit : *visUnitList) {
 				if (disqualifier(unit))
@@ -2648,7 +2653,7 @@ int LuaUnsyncedRead::GetUnitsInScreenRectangle(lua_State* L)
 					inRect = true;
 				}
 				// slow check with collision volume
-				if (selectionPrimitive && !inRect && IntersectUnitSelectionVolumeInScreenRect(unit, camera, l, t, r, b, selectionPrimitive)) {
+				if (selectionPrimitive && !inRect && IntersectUnitSelectionVolumeInScreenRect(unit, camera, selectionVolume, selectionMatrix, l, t, r, b, selectionPrimitive)) {
 					inRect = true;
 				}
 				if (inRect) {
