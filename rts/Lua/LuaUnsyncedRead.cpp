@@ -2269,7 +2269,7 @@ static void BuildPerspectiveSelectionFrustum(
 	CollisionVolume& fruVol,
 	CMatrix44f& fruMat
 ) {
-	static constexpr float SCREEN_RECT_FRUSTUM_EPS = 1e-3f;
+	static constexpr float EPS = 1e-3f;
 
 	const float nearDist = cam->GetNearPlaneDist();
 	const float farDist  = cam->GetFarPlaneDist();
@@ -2314,40 +2314,34 @@ static void BuildPerspectiveSelectionFrustum(
 
 	// Height of the pyramid along its own primary axis.
 	// The apex is at the camera, the base center lies on the center ray.
-	const float fruHeight = std::max((farCtr - camPos).dot(fruFwd), nearDist + SCREEN_RECT_FRUSTUM_EPS);
+	const float fruHeight = std::max((farCtr - camPos).dot(fruFwd), nearDist + EPS);
 	const float3 baseCtr = camPos + (fruFwd * fruHeight);
 
 	float halfW = 0.0f;
 	float halfH = 0.0f;
 
-	const std::array<std::pair<float, float>, 4> corners = {{
-		{cx0, cy0},
-		{cx0, cy1},
-		{cx1, cy0},
-		{cx1, cy1},
+	const std::array<float3, 4> cornerRays = {{
+		camFwd + camRgt * cx0 + camUp * cy0,
+		camFwd + camRgt * cx0 + camUp * cy1,
+		camFwd + camRgt * cx1 + camUp * cy0,
+		camFwd + camRgt * cx1 + camUp * cy1,
 	}};
 
 	// Intersect the 4 corner rays with the base plane perpendicular to fruFwd.
 	// The base rectangle encloses those intersection points in the frustum basis.
-	for (const auto& [cx, cy]: corners) {
-		const float3 ray = camFwd + (camRgt * cx) + (camUp * cy);
+	for (const float3& ray: cornerRays) {
 		const float denom = fruFwd.dot(ray);
-
 		if (denom <= COLLISION_VOLUME_EPS)
 			continue;
-
-		const float s = fruHeight / denom;
- 		const float3 p = camPos + (ray * s);
- 		const float3 d = p - baseCtr;
-
+		const float3 d = (camPos + ray * (fruHeight / denom)) - baseCtr;
 		halfW = std::max(halfW, math::fabs(d.dot(fruRgt)));
 		halfH = std::max(halfH, math::fabs(d.dot(fruUp )));
 	}
 
  	const float3 fruScales(
- 		std::max(halfW * 2.0f, SCREEN_RECT_FRUSTUM_EPS),
- 		std::max(halfH * 2.0f, SCREEN_RECT_FRUSTUM_EPS),
-		std::max(fruHeight,     SCREEN_RECT_FRUSTUM_EPS)
+ 		std::max(halfW * 2.0f, EPS),
+ 		std::max(halfH * 2.0f, EPS),
+		std::max(fruHeight,    EPS)
  	);
 
 	// Local frustum convention:
