@@ -891,6 +891,73 @@ TEST_CASE("CollisionHandler_PyramidVsSphere")
 	}
 }
 
+// Generated with the following in CCollisionHandler::IntersectVolumeWithFrustum
+// printf("f.edges = {");
+// 	for (auto v : frustum.edges)
+// 		printf("%s,", v.str().c_str());
+// 	printf("};\n");
+// 	printf("f.verts = {");
+// 	for (auto v : frustum.verts)
+// 		printf("%s,", v.str().c_str());
+// 	printf("};\n");
+// 	printf("f.planes = {");
+// 	for (auto v : frustum.planes)
+// 		printf("%s,", v.str().c_str());
+// 	printf("};\n");
+// 	printf("testVol.InitShape(%s,%s,%d,1,%d);\n",vol.GetScales().str().c_str(), vol.GetOffsets().str().c_str(), vol.GetVolumeType(),vol.GetPrimaryAxis());
+// 	printf("testMat = {%s};\n", volumeToWorld.str_serialize().c_str());
+TEST_CASE("CollisionHandler other frustum checks")
+{
+
+	SECTION("should pass OK") {
+		CCamera::Frustum f;
+		f.edges = {
+			float3(-0.064, 0.000, 0.998),  float3(0.997, 0.031, 0.064),
+			float3(-0.057, -0.998, 0.006), float3(-0.068, -0.979, 0.192),
+			float3(-0.193, -0.965, 0.180), float3(-0.184, -0.983, -0.002),
+		};
+		f.verts = {
+			float3(15.357, 767.365, 12285.845),       float3(14.933, 767.365, 12292.442),
+			float3(19.497, 767.509, 12292.736),       float3(19.921, 767.509, 12286.139),
+			float3(-6166.502, -32176.096, 12214.750), float3(-6566.957, -32176.096, 18443.375),
+			float3(-2258.834, -32040.430, 18720.355), float3(-1858.380, -32040.430, 12491.730),
+		};
+		f.planes = {
+			float4(-0.065, 0.010, 0.998, -12266.233), float4(0.069, -0.196, -0.978, 12172.595),
+			float4(0.981, -0.184, 0.063, -648.544),   float4(-0.996, 0.057, -0.064, 763.442),
+			float4(0.031, -1.000, 0.002, 741.750),    float4(-0.031, 1.000, -0.002, 31991.396),
+		};
+		CollisionVolume testVol;
+		testVol.InitShape(float3(22.000, 30.000, 22.000), float3(0.000, -1.000, 0.000), 1, 1, 1);
+		CMatrix44f testMat = {0.99999f,  -0.00000f,  -0.00000f,    0.00000f,
+		                            0.00000f,  1.00000f,   0.00000f,     0.00000f,
+		                            0.00000f,  0.00000f,   0.99999f,     0.00000f,
+		                            44.00000f, 580.81061f, 12286.00000f, 1.00000f};
+		CHECK(CCollisionHandler::IntersectVolumeWithFrustum(f, testVol, testMat));
+		f.edges = {
+			float3(-0.064, 0.000, 0.998),   float3(0.997, 0.031, 0.064),
+			float3(-0.036, -0.970, -0.241), float3(-0.053, -0.999, -0.014),
+			float3(-0.176, -0.984, -0.022), float3(-0.157, -0.957, -0.244),
+		};
+		f.verts = {
+			float3(16.178, 767.373, 12277.004),       float3(15.655, 767.373, 12285.131),
+			float3(20.082, 767.512, 12285.415),       float3(20.605, 767.512, 12277.288),
+			float3(-5391.864, -32168.631, 3868.435),  float3(-5885.114, -32168.631, 11540.374),
+			float3(-1706.307, -32037.037, 11809.041), float3(-1213.058, -32037.037, 4137.102),
+		};
+		f.planes = {
+			float4(-0.055, -0.239, 0.970, -11719.678), float4(0.064, 0.011, -0.998, 12249.854),
+			float4(0.982, -0.177, 0.063, -654.982),    float4(-0.997, 0.053, -0.064, 766.165),
+			float4(0.031, -1.000, 0.002, 741.744),     float4(-0.031, 1.000, -0.002, 31991.465),
+		};
+		testVol.InitShape(float3(22.000, 30.000, 22.000), float3(0.000, -1.000, 0.000), 1, 1, 1);
+		testMat = {0.99999f,  -0.00000f,  -0.00000f,    0.00000f, 0.00000f, 1.00000f,
+		           0.00000f,  0.00000f,   0.00000f,     0.00000f, 0.99999f, 0.00000f,
+		           44.00000f, 580.81061f, 12286.00000f, 1.00000f};
+		CHECK(CCollisionHandler::IntersectVolumeWithFrustum(f, testVol, testMat));
+	}
+}
+
 TEST_CASE("CollisionHandler_IntersectBoxVolume_BoxVsBox")
 {
 	const CollisionVolume boxA = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f));
