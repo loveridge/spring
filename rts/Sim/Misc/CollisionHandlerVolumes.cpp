@@ -876,22 +876,6 @@ static bool IntersectVolumeFrustumGJK(const CollisionVolume* vol, const CCamera:
 	return false;
 }
 
-
-static bool FrustumRejectsVolumeByPlanes(const CCamera::Frustum& frustum,
-                                         const CollisionVolume* vol, const CMatrix44f& volToWorld)
-{
-	for (const float4& plane : frustum.planes) {
-		const float3 worldN = PlaneNormal(plane);
-		const float3 localDir = LocalDirFromWorldDir(volToWorld, worldN);
-		const float3 localSup = GetSupportPointLocal(vol, localDir);
-		const float3 worldSup = volToWorld.Mul(localSup);
-
-		if (PlaneDistance(plane, worldSup) < -EPS)
-			return true;
-	}
-
-	return false;
-}
 bool CCollisionHandler::IntersectVolumeWithFrustum(const CCamera::Frustum& frustum,
                                                    const CollisionVolume& vol,
                                                    const CMatrix44f& volumeToWorld)
@@ -919,12 +903,6 @@ bool CCollisionHandler::IntersectVolumeWithFrustum(const CCamera::Frustum& frust
 	if (!frustum.IntersectSphere(volCtr, volRad, 0x3F))
 		return false;
 
-	printf("here2\n");
-	// Frustum planes use the same inward-facing convention as
-	// CCamera::Frustum::IntersectSphere, so plane rejection must do the same.
-	if (FrustumRejectsVolumeByPlanes(frustum, &vol, volumeToWorld))
-		return false;
-
 	const CMatrix44f worldToVol = volumeToWorld.InvertAffine();
 
 	// Initial search direction in volume-local space: frustum center relative to volume center.
@@ -934,7 +912,7 @@ bool CCollisionHandler::IntersectVolumeWithFrustum(const CCamera::Frustum& frust
 	float3 fallbackDirVol = ZeroVector;
 	fallbackDirVol[vol.GetPrimaryAxis()] = 1.0f;
 
-	printf("here3\n");
+	printf("here2\n");
 	return IntersectVolumeFrustumGJK(&vol, frustum, volumeToWorld, worldToVol, initialDirVol,
 	                                 fallbackDirVol);
 }

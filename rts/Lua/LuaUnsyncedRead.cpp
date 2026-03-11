@@ -2604,7 +2604,8 @@ int LuaUnsyncedRead::GetUnitsInScreenRectangle(lua_State* L)
 	float t = luaL_checkfloat(L, 2);
 	float r = luaL_checkfloat(L, 3);
 	float b = luaL_checkfloat(L, 4);
-	const int selectionPrimitive = luaL_optint(L, 6, 0);
+	int selectionPrimitive = luaL_optint(L, 6, 0);
+	selectionPrimitive = 1;
 
 	if (l > r) std::swap(l, r);
 	if (t > b) std::swap(t, b);
@@ -2626,14 +2627,15 @@ int LuaUnsyncedRead::GetUnitsInScreenRectangle(lua_State* L)
 
 	auto runLoop = [&](auto disqualifier) {
 		uint32_t count = 0;
-		CollisionVolume selectionVolume;
-		CMatrix44f selectionMatrix;
+		CCamera::Frustum fr;
 		if (selectionPrimitive) {
-			if (camera->GetProjType() == CCamera::PROJTYPE_ORTHO) {
-				BuildOrthographicSelectionFrustum(camera, l, t, r, b, selectionVolume, selectionMatrix);
-			} else {
-				BuildPerspectiveSelectionFrustum(camera, l, t, r, b, selectionVolume, selectionMatrix);
-			}
+			const float nl = std::clamp(l / float(globalRendering->viewSizeX), 0.f, 1.f);
+			const float nt = std::clamp( t / float(globalRendering->viewSizeY), 0.f, 1.f);
+			const float nr = std::clamp( r / float(globalRendering->viewSizeX), 0.f, 1.f);
+			const float nb = std::clamp( b / float(globalRendering->viewSizeY), 0.f, 1.f);
+			fr = camera->BuildSelectionFrustum(nl, nt, nr, nb);
+			printf("l,t,r,b = (%.5f, %.5f, %.5f, %.5f)\n", l,t,r,b);
+			printf("nl,nt,nr,nb = (%.5f, %.5f, %.5f, %.5f)\n", nl,nt,nr,nb);
 		}
 		for (auto visUnitList : unitQuadIter.GetObjectLists()) {
 			for (CUnit* unit : *visUnitList) {
@@ -2652,8 +2654,28 @@ int LuaUnsyncedRead::GetUnitsInScreenRectangle(lua_State* L)
 					inRect = true;
 				}
 				// slow check with collision volume
-				if (selectionPrimitive && !inRect && IntersectUnitSelectionVolumeInScreenRect(unit, camera, selectionVolume, selectionMatrix, l, t, r, b, selectionPrimitive)) {
-					inRect = true;
+				if (selectionPrimitive && !inRect) {
+					const CollisionVolume* unitVol = &unit->collisionVolume;
+					if (selectionPrimitive == 2)
+						unitVol = &unit->selectionVolume;
+					if (selectionPrimitive == 3)
+						unitVol = &unit->unitDef->selectionVolume;
+					CMatrix44f unitMat(unit->GetTransformMatrix(false));
+					unitMat.Translate(unit->relMidPos);
+
+					const float3 a = unitMat.Mul(unitVol->GetOffsets());
+					const float3 b = unitVol->GetWorldSpacePos(unit);
+
+					for (int i = 0; i < CCamera::FRUSTUM_PLANE_CNT; ++i) {
+						const float dist = fr.planes[i].dot(unit->drawPos) + fr.planes[i].w;
+						printf("plane %d dist-to-center = %.6f\n", i, dist);
+					}
+
+					printf("mat center = (%.3f, %.3f, %.3f)\n", a.x, a.y, a.z);
+					printf("ref center = (%.3f, %.3f, %.3f)\n", b.x, b.y, b.z);
+					printf("delta      = (%.6f, %.6f, %.6f)\n", a.x - b.x, a.y - b.y, a.z - b.z);
+
+					inRect = CCollisionHandler::IntersectVolumeWithFrustum(fr, *unitVol, unitMat);
 				}
 				if (inRect) {
 					lua_pushnumber(L, unit->id);
