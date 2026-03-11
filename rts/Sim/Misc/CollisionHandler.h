@@ -168,22 +168,13 @@ class CCollisionHandler {
 		static bool IntersectBox(const CollisionVolume* v, const float3& pi0, const float3& pi1, CollisionQuery* cq);
 
 		/**
-		 * Test if a box volume intersects another collision volume.
-		 * @param box first volume, must be COLVOL_TYPE_BOX
-		 * @param boxMat box transformation matrix
-		 * @param vol second volume
-		 * @param volMat second volume transformation matrix
+		 * Test if a volume intersects another collision volume.
+		 * @param vol1 first volume
+		 * @param vol1Mat first volume transformation matrix
+		 * @param vol2 second volume
+		 * @param vol2Mat second volume transformation matrix
 		 */
-		static bool IntersectBoxVolume(const CollisionVolume* box, const CMatrix44f& boxMat, const CollisionVolume* vol, const CMatrix44f& volMat);
-
-		/**
-		 * Test if a pyramid volume intersects another collision volume.
-		 * @param pyramid first volume, must be COLVOL_TYPE_PYRAMID
-		 * @param pyrMat pyramid transformation matrix
-		 * @param vol second volume
-		 * @param volMat second volume transformation matrix
-		 */
-		static bool IntersectPyramidVolume(const CollisionVolume* pyramid, const CMatrix44f& pyrMat, const CollisionVolume* vol, const CMatrix44f& volMat);
+		static bool IntersectVolume(const CollisionVolume* vol1, const CMatrix44f& vol1Mat, const CollisionVolume* vol2, const CMatrix44f& vol2Mat);
 
 
 	private:

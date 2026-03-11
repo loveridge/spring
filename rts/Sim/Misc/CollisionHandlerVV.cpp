@@ -12,7 +12,6 @@
 #include "System/Misc/TracyDefs.h"
 
 #include <algorithm>
-#include <cassert>
 #include <limits>
 
 
@@ -63,11 +62,6 @@ namespace
 
 	static float3 TransformDirection(const CMatrix44f& m, const float3& d)
 	{
-		// The support-mapping code relies on converting world/reference directions into
-		// local-space directions with the inverse transform. That is only equivalent to the
-		// mathematically correct transpose-of-linear-part mapping when collision transforms are
-		// rigid (rotation + translation, no scale/shear).
-		assert(IsRigidTransform(m));
 		return m.MulDir(d);
 	}
 
@@ -239,275 +233,6 @@ namespace
 		const float3 pOther =
 			GetSupportPointInReferenceSpace(otherVol, otherToRef, refToOther, -dirRef);
 		return (pRef - pOther);
-	}
-
-	static bool GetAxisAlignedMapping(const CMatrix44f& relMat, int axisMap[3], int axisSign[3])
-	{
-		constexpr float axisEps = 1.0f - 1e-4f;
-		constexpr float orthoEps = 1e-4f;
-		const float3 basis[3] = {
-			float3(1.0f, 0.0f, 0.0f),
-			float3(0.0f, 1.0f, 0.0f),
-			float3(0.0f, 0.0f, 1.0f),
-		};
-		bool usedAxes[3] = {false, false, false};
-
-		for (int i = 0; i < 3; ++i) {
-			const float3 axis = TransformDirection(relMat, basis[i]);
-			const float axisLen = axis.Length();
-
-			if (axisLen <= COLLISION_VOLUME_EPS)
-				return false;
-
-			const float3 normAxis = axis / axisLen;
-			const float3 absAxis = float3::fabs(normAxis);
-
-			int majorAxis = 0;
-			if (absAxis.y > absAxis[majorAxis])
-				majorAxis = 1;
-			if (absAxis.z > absAxis[majorAxis])
-				majorAxis = 2;
-
-			if (usedAxes[majorAxis])
-				return false;
-			if (absAxis[majorAxis] < axisEps)
-				return false;
-
-			for (int j = 0; j < 3; ++j) {
-				if (j == majorAxis)
-					continue;
-				if (absAxis[j] > orthoEps)
-					return false;
-			}
-
-			usedAxes[majorAxis] = true;
-			axisMap[i] = majorAxis;
-			axisSign[i] = (normAxis[majorAxis] >= 0.0f) ? 1 : -1;
-		}
-
-		return true;
-	}
-
-	static float3 GetAlignedHalfScales(const CollisionVolume* vol, const int axisMap[3])
-	{
-		float3 alignedHScales = ZeroVector;
-		const float3& volHScales = vol->GetHScales();
-
-		for (int localAxis = 0; localAxis < 3; ++localAxis)
-			alignedHScales[axisMap[localAxis]] = volHScales[localAxis];
-
-		return alignedHScales;
-	}
-
-	static float GetWeightedSqDistToBox(const float3& point, const float3& boxCenter,
-	                                    const float3& boxHScales, const float3& weights)
-	{
-		float weightedSqDist = 0.0f;
-
-		for (int axis = 0; axis < 3; ++axis) {
-			const float boxMin = boxCenter[axis] - boxHScales[axis];
-			const float boxMax = boxCenter[axis] + boxHScales[axis];
-			const float d = (point[axis] < boxMin)   ? (boxMin - point[axis])
-			                : (point[axis] > boxMax) ? (point[axis] - boxMax)
-			                                         : 0.0f;
-
-			weightedSqDist += (d * d) * weights[axis];
-		}
-
-		return weightedSqDist;
-	}
-
-	static bool PointInsideAxisAlignedBox(const float3& point, const float3& boxCenter,
-	                                      const float3& boxHScales, float eps = VOL_EXTENT_EPS)
-	{
-		const float3 delta = float3::fabs(point - boxCenter);
-		return (delta.x <= (boxHScales.x + eps) &&
-		        delta.y <= (boxHScales.y + eps) &&
-		        delta.z <= (boxHScales.z + eps));
-	}
-
-	static bool IntersectAxisAlignedBoxEllipsoid(const float3& boxCenter, const float3& boxHScales,
-	                                            const float3& ellipsoidCenter,
-	                                            const float3& radii)
-	{
-		float weightedSqDist = 0.0f;
-
-		for (int axis = 0; axis < 3; ++axis) {
-			const float boxMin = boxCenter[axis] - boxHScales[axis];
-			const float boxMax = boxCenter[axis] + boxHScales[axis];
-			const float d = (ellipsoidCenter[axis] < boxMin)   ? (boxMin - ellipsoidCenter[axis])
-			                : (ellipsoidCenter[axis] > boxMax) ? (ellipsoidCenter[axis] - boxMax)
-			                                                   : 0.0f;
-
-			if (radii[axis] <= VOL_EXTENT_EPS) {
-				if (d > VOL_EXTENT_EPS)
-					return false;
-				continue;
-			}
-
-			weightedSqDist += (d * d) / (radii[axis] * radii[axis]);
-		}
-
-		return (weightedSqDist <= 1.0f + COLLISION_VOLUME_EPS);
-	}
-
-	static bool IntersectAxisAlignedBoxPyramid(const float3& boxCenter, const float3& boxHScales,
-	                                           const float3& pyrCenter, const float3& pyrHScales,
-	                                           int primaryAxis, int secondaryAxis0,
-	                                           int secondaryAxis1, int primarySign)
-	{
-		const float h = pyrHScales[primaryAxis];
-		const float hb = pyrHScales[secondaryAxis0];
-		const float hc = pyrHScales[secondaryAxis1];
-
-		assert(h >= 0.0f);
-		assert(hb >= 0.0f);
-		assert(hc >= 0.0f);
-
-		if (h <= VOL_EXTENT_EPS) {
-			if (math::fabs(boxCenter[primaryAxis] - pyrCenter[primaryAxis]) >
-			    (boxHScales[primaryAxis] + VOL_EXTENT_EPS))
-				return false;
-
-			return (math::fabs(boxCenter[secondaryAxis0] - pyrCenter[secondaryAxis0]) <=
-			            (boxHScales[secondaryAxis0] + hb + VOL_EXTENT_EPS) &&
-			        math::fabs(boxCenter[secondaryAxis1] - pyrCenter[secondaryAxis1]) <=
-			            (boxHScales[secondaryAxis1] + hc + VOL_EXTENT_EPS));
-		}
-
-		const float boxMinP = boxCenter[primaryAxis] - boxHScales[primaryAxis];
-		const float boxMaxP = boxCenter[primaryAxis] + boxHScales[primaryAxis];
-
-		const float u0 = primarySign * (boxMinP - pyrCenter[primaryAxis]);
-		const float u1 = primarySign * (boxMaxP - pyrCenter[primaryAxis]);
-
-		const float overlapUMin = std::max(std::min(u0, u1), -h);
-		const float overlapUMax = std::min(std::max(u0, u1), h);
-
-		if (overlapUMin > overlapUMax)
-			return false;
-
-		const float deltaB = math::fabs(boxCenter[secondaryAxis0] - pyrCenter[secondaryAxis0]);
-		const float deltaC = math::fabs(boxCenter[secondaryAxis1] - pyrCenter[secondaryAxis1]);
-
-		const float needB = std::max(deltaB - boxHScales[secondaryAxis0], 0.0f);
-		const float needC = std::max(deltaC - boxHScales[secondaryAxis1], 0.0f);
-
-		if (hb <= VOL_EXTENT_EPS && needB > VOL_EXTENT_EPS)
-			return false;
-		if (hc <= VOL_EXTENT_EPS && needC > VOL_EXTENT_EPS)
-			return false;
-
-		const float reqUB = (hb <= VOL_EXTENT_EPS) ? -h : (-h + ((2.0f * h * needB) / hb));
-		const float reqUC = (hc <= VOL_EXTENT_EPS) ? -h : (-h + ((2.0f * h * needC) / hc));
-		const float reqU = std::max(reqUB, reqUC);
-
-		return (reqU <= (overlapUMax + COLLISION_VOLUME_EPS));
-	}
-
-	static bool IntersectAxisAlignedBoxEllipticCylinder(const float3& boxCenter,
-	                                                   const float3& boxHScales,
-	                                                   const float3& cylCenter,
-	                                                   const float3& cylHScales,
-	                                                   int primaryAxis)
-	{
-		if (math::fabs(cylCenter[primaryAxis] - boxCenter[primaryAxis]) >
-		    (cylHScales[primaryAxis] + boxHScales[primaryAxis]))
-			return false;
-
-		const int secondaryAxis0 = (primaryAxis + 1) % 3;
-		const int secondaryAxis1 = (primaryAxis + 2) % 3;
-		const float boxMin0 = boxCenter[secondaryAxis0] - boxHScales[secondaryAxis0];
-		const float boxMax0 = boxCenter[secondaryAxis0] + boxHScales[secondaryAxis0];
-		const float boxMin1 = boxCenter[secondaryAxis1] - boxHScales[secondaryAxis1];
-		const float boxMax1 = boxCenter[secondaryAxis1] + boxHScales[secondaryAxis1];
-
-		const float d0 = (cylCenter[secondaryAxis0] < boxMin0)   ? (boxMin0 - cylCenter[secondaryAxis0])
-		               : (cylCenter[secondaryAxis0] > boxMax0) ? (cylCenter[secondaryAxis0] - boxMax0)
-		                                                       : 0.0f;
-		const float d1 = (cylCenter[secondaryAxis1] < boxMin1)   ? (boxMin1 - cylCenter[secondaryAxis1])
-		               : (cylCenter[secondaryAxis1] > boxMax1) ? (cylCenter[secondaryAxis1] - boxMax1)
-		                                                       : 0.0f;
-
-		const float r0 = cylHScales[secondaryAxis0];
-		const float r1 = cylHScales[secondaryAxis1];
-
-		assert(r0 >= 0.0f);
-		assert(r1 >= 0.0f);
-
-		if (r0 <= VOL_EXTENT_EPS && r1 <= VOL_EXTENT_EPS)
-			return (d0 <= VOL_EXTENT_EPS && d1 <= VOL_EXTENT_EPS);
-		if (r0 <= VOL_EXTENT_EPS)
-			return (d0 <= VOL_EXTENT_EPS &&
-			        ((d1 * d1) / (r1 * r1) <= (1.0f + COLLISION_VOLUME_EPS)));
-		if (r1 <= VOL_EXTENT_EPS)
-			return (d1 <= VOL_EXTENT_EPS &&
-			        ((d0 * d0) / (r0 * r0) <= (1.0f + COLLISION_VOLUME_EPS)));
-
-		return (((d0 * d0) / (r0 * r0)) + ((d1 * d1) / (r1 * r1)) <= (1.0f + COLLISION_VOLUME_EPS));
-	}
-
-	static bool IntersectAxisAlignedBoxVolume(const CollisionVolume* box, const CollisionVolume* vol,
-	                                          const CMatrix44f& volMat, const CMatrix44f& boxInv,
-	                                          bool& handled)
-	{
-		const CMatrix44f relMat = boxInv * volMat;
-		int axisMap[3] = {0, 1, 2};
-		int axisSign[3] = {1, 1, 1};
-
-		handled = GetAxisAlignedMapping(relMat, axisMap, axisSign);
-
-		if (!handled)
-			return false;
-
-		const float3 boxCenter = box->GetOffsets();
-		const float3 boxHScales = box->GetHScales();
-		const float3 volCenter = relMat.Mul(vol->GetOffsets());
-
-		switch (vol->GetVolumeType()) {
-			case CollisionVolume::COLVOL_TYPE_BOX: {
-				const float3 volHScales = GetAlignedHalfScales(vol, axisMap);
-				const float3 centerDelta = float3::fabs(volCenter - boxCenter);
-				return (centerDelta.x <= (boxHScales.x + volHScales.x) &&
-				        centerDelta.y <= (boxHScales.y + volHScales.y) &&
-				        centerDelta.z <= (boxHScales.z + volHScales.z));
-			} break;
-
-			case CollisionVolume::COLVOL_TYPE_SPHERE: {
-				const float radius = vol->GetHScales().x;
-				if (radius <= VOL_EXTENT_EPS)
-					return PointInsideAxisAlignedBox(volCenter, boxCenter, boxHScales);
-
-				const float3 invRadiusSq = OnesVector / (radius * radius);
-				return (GetWeightedSqDistToBox(volCenter, boxCenter, boxHScales, invRadiusSq) <= 1.0f);
-			} break;
-
-			case CollisionVolume::COLVOL_TYPE_ELLIPSOID: {
-				const float3 radii = GetAlignedHalfScales(vol, axisMap);
-				return IntersectAxisAlignedBoxEllipsoid(boxCenter, boxHScales, volCenter, radii);
-			} break;
-
-			case CollisionVolume::COLVOL_TYPE_CYLINDER: {
-				const int primaryAxis = axisMap[vol->GetPrimaryAxis()];
-				const float3 volHScales = GetAlignedHalfScales(vol, axisMap);
-				return IntersectAxisAlignedBoxEllipticCylinder(boxCenter, boxHScales, volCenter,
-				                                             volHScales, primaryAxis);
-			} break;
-
-			case CollisionVolume::COLVOL_TYPE_PYRAMID: {
-				const int primaryAxis = axisMap[vol->GetPrimaryAxis()];
-				const int secondaryAxis0 = axisMap[vol->GetSecondaryAxis(0)];
-				const int secondaryAxis1 = axisMap[vol->GetSecondaryAxis(1)];
-				const int primarySign = axisSign[vol->GetPrimaryAxis()];
-				const float3 volHScales = GetAlignedHalfScales(vol, axisMap);
-
-				return IntersectAxisAlignedBoxPyramid(boxCenter, boxHScales, volCenter, volHScales,
-				                                      primaryAxis, secondaryAxis0, secondaryAxis1,
-				                                      primarySign);
-			} break;
-		}
-
-		return false;
 	}
 
 	static bool UpdateLineSimplex(GJKSimplex& simplex, float3& dir)
@@ -816,16 +541,8 @@ namespace
 	                                const CMatrix44f& refInv, const CMatrix44f& otherInv,
 	                                float3 initialDirRef, const float3& fallbackDirRef)
 	{
-		assert(IsRigidTransform(refMat));
-		assert(IsRigidTransform(otherMat));
-		assert(IsRigidTransform(refInv));
-		assert(IsRigidTransform(otherInv));
-
 		const CMatrix44f otherToRef = refInv * otherMat;
 		const CMatrix44f refToOther = otherInv * refMat;
-
-		assert(IsRigidTransform(otherToRef));
-		assert(IsRigidTransform(refToOther));
 
 		if (initialDirRef.SqLength() < GJK_EPS_SQ)
 			initialDirRef = fallbackDirRef;
@@ -868,72 +585,28 @@ namespace
 
 }  // namespace
 
-
-bool CCollisionHandler::IntersectBoxVolume(const CollisionVolume* box, const CMatrix44f& boxMat,
-	                                       const CollisionVolume* vol, const CMatrix44f& volMat)
+bool CCollisionHandler::IntersectVolume(const CollisionVolume* vol1,
+	                                           const CMatrix44f& vol1Mat, const CollisionVolume* vol2,
+	                                           const CMatrix44f& vol2Mat)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 
-	if (box == nullptr || vol == nullptr)
-		return false;
-	if (box->GetVolumeType() != CollisionVolume::COLVOL_TYPE_BOX)
+	if (vol1 == nullptr || vol2 == nullptr)
 		return false;
 
-	// Volume-vs-volume support mapping assumes rigid transforms. Non-uniform scale and shear
-	// would require different direction mapping and invalidate the axis-aligned fast paths.
-	assert(IsRigidTransform(boxMat));
-	assert(IsRigidTransform(volMat));
+	const float3 vol1Ctr = vol1Mat.Mul(vol1->GetOffsets());
+	const float3 vol2Ctr = vol2Mat.Mul(vol2->GetOffsets());
+	const float sumRadii = vol1->GetBoundingRadius() + vol2->GetBoundingRadius();
 
-	const float3 boxCtr = boxMat.Mul(box->GetOffsets());
-	const float3 volCtr = volMat.Mul(vol->GetOffsets());
-	const float sumRadii = box->GetBoundingRadius() + vol->GetBoundingRadius();
-
-	if ((boxCtr - volCtr).SqLength() > (sumRadii * sumRadii))
+	if ((vol1Ctr - vol2Ctr).SqLength() > (sumRadii * sumRadii))
 		return false;
 
-	const CMatrix44f boxInv = boxMat.InvertAffine();
-	const CMatrix44f volInv = volMat.InvertAffine();
-
-	// bool handledByAxisAlignedFastPath = false;
-	// if (IntersectAxisAlignedBoxVolume(box, vol, volMat, boxInv, handledByAxisAlignedFastPath))
-	// 	return true;
-	// if (handledByAxisAlignedFastPath)
-	// 	return false;
-
-	const float3 dir = GetCenterDeltaInLocalSpace(box, boxInv, volCtr);
-	return IntersectVolumesGJK(box, boxMat, vol, volMat, boxInv, volInv, dir,
-	                           float3(1.0f, 0.0f, 0.0f));
-}
-
-bool CCollisionHandler::IntersectPyramidVolume(const CollisionVolume* pyramid,
-	                                           const CMatrix44f& pyrMat, const CollisionVolume* vol,
-	                                           const CMatrix44f& volMat)
-{
-	RECOIL_DETAILED_TRACY_ZONE;
-
-	if (pyramid == nullptr || vol == nullptr)
-		return false;
-	if (pyramid->GetVolumeType() != CollisionVolume::COLVOL_TYPE_PYRAMID)
-		return false;
-
-	// Volume-vs-volume support mapping assumes rigid transforms. Non-uniform scale and shear
-	// would require different direction mapping and invalidate the axis-aligned fast paths.
-	assert(IsRigidTransform(pyrMat));
-	assert(IsRigidTransform(volMat));
-
-	const float3 pyrCtr = pyrMat.Mul(pyramid->GetOffsets());
-	const float3 volCtr = volMat.Mul(vol->GetOffsets());
-	const float sumRadii = pyramid->GetBoundingRadius() + vol->GetBoundingRadius();
-
-	if ((pyrCtr - volCtr).SqLength() > (sumRadii * sumRadii))
-		return false;
-
-	const CMatrix44f pyrInv = pyrMat.InvertAffine();
-	const CMatrix44f volInv = volMat.InvertAffine();
+	const CMatrix44f pyrInv = vol1Mat.InvertAffine();
+	const CMatrix44f volInv = vol2Mat.InvertAffine();
 
 	float3 fallbackDir = ZeroVector;
-	fallbackDir[pyramid->GetPrimaryAxis()] = 1.0f;
+	fallbackDir[vol1->GetPrimaryAxis()] = 1.0f;
 
-	const float3 dir = GetCenterDeltaInLocalSpace(pyramid, pyrInv, volCtr);
-	return IntersectVolumesGJK(pyramid, pyrMat, vol, volMat, pyrInv, volInv, dir, fallbackDir);
+	const float3 dir = GetCenterDeltaInLocalSpace(vol1, pyrInv, vol2Ctr);
+	return IntersectVolumesGJK(vol1, vol1Mat, vol2, vol2Mat, pyrInv, volInv, dir, fallbackDir);
 }

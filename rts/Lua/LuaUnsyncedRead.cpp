@@ -2402,7 +2402,7 @@ static void BuildPerspectiveSelectionFrustum(
 	BuildPerspectiveSelectionFrustum(cam, l, t, r, b, selVol, selMat);
 
 
-	bool result = CCollisionHandler::IntersectPyramidVolume(&selVol, selMat, unitVol, unitMat);
+	bool result = CCollisionHandler::IntersectVolume(&selVol, selMat, unitVol, unitMat);
 	return result;
 }
 
