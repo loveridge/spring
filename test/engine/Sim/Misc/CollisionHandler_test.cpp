@@ -268,6 +268,29 @@ TEST_CASE("CollisionHandler_IntersectBoxVolume_BoxVsSphere")
 	}
 }
 
+TEST_CASE("CollisionHandler_IntersectVolume_SphereVsSphere")
+{
+	const CollisionVolume sphereA = MakeSphereVolume(3.0f);
+	const CollisionVolume sphereB = MakeSphereVolume(4.0f);
+	const CMatrix44f sphereAMat = MakeTransform();
+
+	SECTION("containment") {
+		CHECK(IntersectsVolume(sphereA, sphereAMat, sphereB, MakeTransform(float3(1.0f, 0.0f, 0.0f))));
+	}
+
+	SECTION("overlap") {
+		CHECK(IntersectsVolume(sphereA, sphereAMat, sphereB, MakeTransform(float3(6.5f, 0.0f, 0.0f))));
+	}
+
+	SECTION("tangent counts as intersecting") {
+		CHECK(IntersectsVolume(sphereA, sphereAMat, sphereB, MakeTransform(float3(7.0f, 0.0f, 0.0f))));
+	}
+
+	SECTION("separated") {
+		CHECK_FALSE(IntersectsVolume(sphereA, sphereAMat, sphereB, MakeTransform(float3(7.1f, 0.0f, 0.0f))));
+	}
+}
+
 TEST_CASE("CollisionHandler_IntersectBoxVolume_BoxVsEllipsoid")
 {
 	const CollisionVolume box       = MakeBoxVolume(float3(4.0f, 4.0f, 4.0f));
@@ -352,6 +375,36 @@ TEST_CASE("CollisionHandler_IntersectBoxVolume_BoxVsCylinder")
 		CHECK_FALSE(IntersectsVolume(box, boxMat, cylinder, MakeTransform(float3(2.8f, 2.8f, 0.0f))));
 	}
 }
+
+TEST_CASE("CollisionHandler_IntersectVolume_CylinderVsCylinder")
+{
+	const CollisionVolume cylinderA = MakeCylinderVolume(float3(6.0f, 6.0f, 8.0f), CollisionVolume::COLVOL_AXIS_Z);
+	const CollisionVolume cylinderB = MakeCylinderVolume(float3(6.0f, 6.0f, 8.0f), CollisionVolume::COLVOL_AXIS_Z);
+	const CMatrix44f cylinderAMat = MakeTransform();
+
+	SECTION("parallel overlap") {
+		CHECK(IntersectsVolume(cylinderA, cylinderAMat, cylinderB, MakeTransform(float3(5.5f, 0.0f, 0.0f))));
+	}
+
+	SECTION("parallel tangent counts as intersecting") {
+		CHECK(IntersectsVolume(cylinderA, cylinderAMat, cylinderB, MakeTransform(float3(6.0f, 0.0f, 0.0f))));
+	}
+
+	SECTION("parallel separation") {
+		CHECK_FALSE(IntersectsVolume(cylinderA, cylinderAMat, cylinderB, MakeTransform(float3(6.1f, 0.0f, 0.0f))));
+	}
+
+	SECTION("orthogonal crossing intersects") {
+		const CollisionVolume cylinderX = MakeCylinderVolume(float3(8.0f, 6.0f, 6.0f), CollisionVolume::COLVOL_AXIS_X);
+		CHECK(IntersectsVolume(cylinderA, cylinderAMat, cylinderX, MakeTransform()));
+	}
+
+	SECTION("orthogonal offset separates") {
+		const CollisionVolume cylinderX = MakeCylinderVolume(float3(8.0f, 6.0f, 6.0f), CollisionVolume::COLVOL_AXIS_X);
+		CHECK_FALSE(IntersectsVolume(cylinderA, cylinderAMat, cylinderX, MakeTransform(float3(0.0f, 6.5f, 0.0f))));
+	}
+}
+
 TEST_CASE("CollisionHandler_IntersectBoxVolume_BoxVsPyramid")
 {
 	// Box is 1x1x1 => half-scales 0.5
