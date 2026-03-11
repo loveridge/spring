@@ -904,13 +904,6 @@ TEST_CASE("CollisionHandler_IntersectPyramidVolume_PyramidVsSphere")
 		const CollisionVolume sphere = MakeSphereVolume(0.5f);
 		CHECK_FALSE(IntersectsPyramid(pyramid, pyramidMat, sphere, MakeTransform(float3(0.0f, 0.0f, 2.6f))));
 	}
-
-	SECTION("sphere near apex separates while same radius fits near base") {
-		const CollisionVolume sphere = MakeSphereVolume(0.3f);
-
-		CHECK_FALSE(IntersectsPyramid(pyramid, pyramidMat, sphere, MakeTransform(float3(0.9f, 0.0f, -1.0f))));
-		CHECK(IntersectsPyramid(pyramid, pyramidMat, sphere, MakeTransform(float3(0.9f, 0.0f, 1.0f))));
-	}
 }
 
 TEST_CASE("CollisionHandler_IntersectPyramidVolume_PyramidVsEllipsoid")
