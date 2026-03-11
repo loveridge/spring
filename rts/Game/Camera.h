@@ -247,7 +247,15 @@ public:
 	void ConfigNotify(const std::string& key, const std::string& value);
 	void ConfigUpdate();
 
+	Frustum BuildSelectionFrustum(float l, float t, float r, float b) const;
+
 private:
+	Frustum BuildPerspectiveSubFrustum(float l, float t, float r, float b) const;
+	Frustum BuildOrthoSubFrustum(float l, float t, float r, float b) const;
+	void FillFrustum(Frustum& fr, const float2& nAxisScales, const float2& fAxisScales) const;
+	void FinalizeFrustum(Frustum& fr) const;
+	float GetViewCoeffX(float x) const;
+	float GetViewCoeffY(float y) const;
 	void gluPerspectiveSpring(const float aspect, const float zn, const float zf);
 	void glOrthoScaledSpring(const float sx, const float sy, const float zn, const float zf);
 
