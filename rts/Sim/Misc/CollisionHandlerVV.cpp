@@ -21,9 +21,9 @@ namespace
 	struct GJKSimplex {
 		void PushFront(const float3& p)
 		{
-			for (int i = std::min(size, 3); i > 0; --i)
-				points[i] = points[i - 1];
-
+			points[3] = points[2];
+			points[2] = points[1];
+			points[1] = points[0];
 			points[0] = p;
 			size = std::min(size + 1, 4);
 		}
@@ -462,7 +462,7 @@ namespace
 
 		const float3 boxCenter = box->GetOffsets();
 		const float3 boxHScales = box->GetHScales();
-		const float3 volCenter = boxInv.Mul(volMat.Mul(vol->GetOffsets()));
+		const float3 volCenter = relMat.Mul(vol->GetOffsets());
 
 		switch (vol->GetVolumeType()) {
 			case CollisionVolume::COLVOL_TYPE_BOX: {
