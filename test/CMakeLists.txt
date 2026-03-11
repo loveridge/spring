@@ -555,10 +555,7 @@ endif()
 	set(test_name CollisionHandler)
 	set(test_src
 			"${CMAKE_CURRENT_SOURCE_DIR}/engine/Sim/Misc/CollisionHandler_test.cpp"
-			# "${CMAKE_CURRENT_SOURCE_DIR}/engine/Sim/Misc/CollisionHandlerBoxVolumeSupport.cpp"
-			# "${CMAKE_CURRENT_SOURCE_DIR}/engine/Sim/Misc/CollisionVolumeTestSupport.cpp"
 			"${CMAKE_CURRENT_SOURCE_DIR}/engine/Sim/Misc/CollisionHandlerSupport.cpp"
-			# "${ENGINE_SOURCE_DIR}/Sim/Misc/CollisionHandler.cpp"
 			"${ENGINE_SOURCE_DIR}/Sim/Misc/CollisionHandlerVolumes.cpp"
 			"${ENGINE_SOURCE_DIR}/Sim/Misc/CollisionVolume.cpp"
 			"${ENGINE_SOURCE_DIR}/System/Matrix44f.cpp"

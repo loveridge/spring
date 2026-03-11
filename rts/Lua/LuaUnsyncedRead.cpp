@@ -2648,8 +2648,7 @@ int LuaUnsyncedRead::GetUnitsInScreenRectangle(lua_State* L)
 				const float3 vpPos = camera->CalcViewPortCoordinates(unit->drawPos);
 				bool inRect = false;
 				// fast check with center point
-				if (vpPos.x <= r && vpPos.x >= l && vpPos.y <= b && vpPos.y >= t && vpPos.z <= 1.0f &&
-				    vpPos.z >= 0.0f) {
+				if (vpPos.x <= r && vpPos.x >= l && vpPos.y <= b && vpPos.y >= t && vpPos.z <= 1.0f && vpPos.z >= 0.0f) {
 					inRect = true;
 				}
 				// slow check with collision volume
