@@ -558,6 +558,7 @@ endif()
 			"${CMAKE_CURRENT_SOURCE_DIR}/engine/Sim/Misc/CollisionHandlerSupport.cpp"
 			"${ENGINE_SOURCE_DIR}/Sim/Misc/CollisionHandlerVolumes.cpp"
 			"${ENGINE_SOURCE_DIR}/Sim/Misc/CollisionVolume.cpp"
+			# "${ENGINE_SOURCE_DIR}/Game/Camera.cpp" # brings in too much
 			"${ENGINE_SOURCE_DIR}/System/Matrix44f.cpp"
 			"${ENGINE_SOURCE_DIR}/System/Quaternion.cpp"
 			"${ENGINE_SOURCE_DIR}/System/float3.cpp"
