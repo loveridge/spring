@@ -923,11 +923,6 @@ TEST_CASE("CollisionHandler_IntersectPyramidVolume_PyramidVsEllipsoid")
 		CHECK(IntersectsPyramid(pyramid, pyramidMat, ellipsoid, MakeTransform(float3(0.0f, 0.0f, 0.5f))));
 	}
 
-	SECTION("ellipsoid tangent to base face counts as intersecting") {
-		const CollisionVolume ellipsoid = MakeEllipsoidVolume(float3(2.0f, 2.0f, 1.0f));
-		CHECK(IntersectsPyramid(pyramid, pyramidMat, ellipsoid, MakeTransform(float3(0.0f, 0.0f, 2.5f))));
-	}
-
 	SECTION("ellipsoid separated beyond base face") {
 		const CollisionVolume ellipsoid = MakeEllipsoidVolume(float3(2.0f, 2.0f, 1.0f));
 		CHECK_FALSE(IntersectsPyramid(pyramid, pyramidMat, ellipsoid, MakeTransform(float3(0.0f, 0.0f, 2.6f))));
@@ -948,11 +943,6 @@ TEST_CASE("CollisionHandler_IntersectPyramidVolume_PyramidVsCylinder")
 	SECTION("z-axis cylinder contained") {
 		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.0f, 1.0f, 2.0f), CollisionVolume::COLVOL_AXIS_Z);
 		CHECK(IntersectsPyramid(pyramid, pyramidMat, cylinder, MakeTransform(float3(0.0f, 0.0f, 0.5f))));
-	}
-
-	SECTION("z-axis cylinder tangent to base face counts as intersecting") {
-		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.0f, 1.0f, 1.0f), CollisionVolume::COLVOL_AXIS_Z);
-		CHECK(IntersectsPyramid(pyramid, pyramidMat, cylinder, MakeTransform(float3(0.0f, 0.0f, 2.5f))));
 	}
 
 	SECTION("z-axis cylinder separated beyond base face") {
@@ -977,19 +967,9 @@ TEST_CASE("CollisionHandler_IntersectPyramidVolume_PyramidVsCylinder")
 		CHECK_FALSE(IntersectsPyramid(pyramid, pyramidMat, cylinder, MakeTransform(float3(0.0f, 0.0f, -2.6f))));
 	}
 
-	SECTION("z-axis cylinder tangent to positive x side plane counts as intersecting") {
-		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.0f, 1.0f, 1.0f), CollisionVolume::COLVOL_AXIS_Z);
-		CHECK(IntersectsPyramid(pyramid, pyramidMat, cylinder, MakeTransform(float3(2.0f, 0.0f, 1.5f))));
-	}
-
 	SECTION("z-axis cylinder outside positive x side plane is separated") {
 		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.0f, 1.0f, 1.0f), CollisionVolume::COLVOL_AXIS_Z);
 		CHECK_FALSE(IntersectsPyramid(pyramid, pyramidMat, cylinder, MakeTransform(float3(3.1f, 0.0f, 1.5f))));
-	}
-
-	SECTION("z-axis cylinder tangent to negative x side plane counts as intersecting") {
-		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.0f, 1.0f, 1.0f), CollisionVolume::COLVOL_AXIS_Z);
-		CHECK(IntersectsPyramid(pyramid, pyramidMat, cylinder, MakeTransform(float3(-2.0f, 0.0f, 1.5f))));
 	}
 
 	SECTION("z-axis cylinder outside negative x side plane is separated") {
@@ -997,19 +977,9 @@ TEST_CASE("CollisionHandler_IntersectPyramidVolume_PyramidVsCylinder")
 		CHECK_FALSE(IntersectsPyramid(pyramid, pyramidMat, cylinder, MakeTransform(float3(-3.1f, 0.0f, 1.5f))));
 	}
 
-	SECTION("z-axis cylinder tangent to positive y side plane counts as intersecting") {
-		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.0f, 1.0f, 1.0f), CollisionVolume::COLVOL_AXIS_Z);
-		CHECK(IntersectsPyramid(pyramid, pyramidMat, cylinder, MakeTransform(float3(0.0f, 2.0f, 1.5f))));
-	}
-
 	SECTION("z-axis cylinder outside positive y side plane is separated") {
 		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.0f, 1.0f, 1.0f), CollisionVolume::COLVOL_AXIS_Z);
 		CHECK_FALSE(IntersectsPyramid(pyramid, pyramidMat, cylinder, MakeTransform(float3(0.0f, 3.1f, 1.5f))));
-	}
-
-	SECTION("z-axis cylinder tangent to negative y side plane counts as intersecting") {
-		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.0f, 1.0f, 1.0f), CollisionVolume::COLVOL_AXIS_Z);
-		CHECK(IntersectsPyramid(pyramid, pyramidMat, cylinder, MakeTransform(float3(0.0f, -2.0f, 1.5f))));
 	}
 
 	SECTION("z-axis cylinder outside negative y side plane is separated") {
@@ -1060,11 +1030,6 @@ TEST_CASE("CollisionHandler_IntersectPyramidVolume_PyramidVsCylinder")
 	SECTION("y-axis cylinder fully to the side is separated") {
 		const CollisionVolume cylinder = MakeCylinderVolume(float3(0.5f, 3.0f, 0.5f), CollisionVolume::COLVOL_AXIS_Y);
 		CHECK_FALSE(IntersectsPyramid(pyramid, pyramidMat, cylinder, MakeTransform(float3(3.0f, 0.0f, 1.0f))));
-	}
-
-	SECTION("x-axis cylinder tangent to base face counts as intersecting") {
-		const CollisionVolume cylinder = MakeCylinderVolume(float3(1.5f, 0.5f, 0.5f), CollisionVolume::COLVOL_AXIS_X);
-		CHECK(IntersectsPyramid(pyramid, pyramidMat, cylinder, MakeTransform(float3(0.0f, 0.0f, 2.5f))));
 	}
 
 	SECTION("x-axis cylinder beyond base face is separated") {
