@@ -2630,9 +2630,11 @@ int LuaUnsyncedRead::GetUnitsInScreenRectangle(lua_State* L)
 		CCamera::Frustum fr;
 		if (selectionPrimitive) {
 			const float nl = std::clamp(l / float(globalRendering->viewSizeX), 0.f, 1.f);
-			const float nt = std::clamp( t / float(globalRendering->viewSizeY), 0.f, 1.f);
 			const float nr = std::clamp( r / float(globalRendering->viewSizeX), 0.f, 1.f);
-			const float nb = std::clamp( b / float(globalRendering->viewSizeY), 0.f, 1.f);
+			// Viewport coordinates use a bottom-left origin, while BuildSelectionFrustum
+			// expects normalized screen coordinates with a top-left origin.
+			const float nt = std::clamp(1.0f - (b / float(globalRendering->viewSizeY)), 0.f, 1.f);
+			const float nb = std::clamp(1.0f - (t / float(globalRendering->viewSizeY)), 0.f, 1.f);
 			fr = camera->BuildSelectionFrustum(nl, nt, nr, nb);
 			printf("l,t,r,b = (%.5f, %.5f, %.5f, %.5f)\n", l,t,r,b);
 			printf("nl,nt,nr,nb = (%.5f, %.5f, %.5f, %.5f)\n", nl,nt,nr,nb);
