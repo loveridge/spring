@@ -893,13 +893,21 @@ bool CCollisionHandler::IntersectVolumeWithFrustum(const CCamera::Frustum& frust
 	// so the world-space center for the bounding sphere is volumeToWorld * offsets.
 	const float3 volCtr = volumeToWorld.Mul(vol.GetOffsets());
 	const float volRad = vol.GetBoundingRadius();
-	printf("here %s, %f\n", volCtr.str().c_str(), volRad);
-	printf("plane1 %s\n", frustum.planes[0].str().c_str());
-	printf("plane2 %s\n", frustum.planes[1].str().c_str());
-	printf("plane3 %s\n", frustum.planes[2].str().c_str());
-	printf("plane4 %s\n", frustum.planes[3].str().c_str());
-	printf("plane5 %s\n", frustum.planes[4].str().c_str());
-	printf("plane6 %s\n", frustum.planes[5].str().c_str());
+	printf("f.edges = {");
+	for (auto v : frustum.edges)
+		printf("%s,", v.str().c_str());
+	printf("};\n");
+	printf("f.verts = {");
+	for (auto v : frustum.verts)
+		printf("%s,", v.str().c_str());
+	printf("};\n");
+	printf("f.planes = {");
+	for (auto v : frustum.planes)
+		printf("%s,", v.str().c_str());
+	printf("};\n");
+	printf("testVol.InitShape(%s,%s,%d,1,%d);\n",vol.GetScales().str().c_str(), vol.GetOffsets().str().c_str(), vol.GetVolumeType(),vol.GetPrimaryAxis());
+	printf("testMat = {%s};\n", volumeToWorld.str_serialize().c_str());
+
 	if (!frustum.IntersectSphere(volCtr, volRad, 0x3F))
 		return false;
 
