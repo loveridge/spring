@@ -819,63 +819,7 @@ static inline float3 SupportVolumeLocal(const CollisionVolume& vol, const float3
 	assert(false);
 	return ZeroVector;
 }
-static bool IntersectVolumeFrustumGJK(const CollisionVolume* vol, const SelectionFrustum& frustum,
-                                      const CMatrix44f& volToWorld, const CMatrix44f& worldToVol,
-                                      float3 initialDirVol, const float3& fallbackDirVol)
-{
-	if (initialDirVol.SqLength() < GJK_EPS_SQ)
-		initialDirVol = fallbackDirVol;
-	if (initialDirVol.SqLength() < GJK_EPS_SQ)
-		initialDirVol = float3(1.0f, 0.0f, 0.0f);
 
-	GJKSimplex simplex;
-	simplex.PushFront(
-		GetMinkowskiSupportPointVolumeFrustum(vol, frustum, worldToVol, volToWorld, initialDirVol));
-
-	float3 dir = -simplex.points[0];
-
-	if (dir.SqLength() < GJK_EPS_SQ)
-		return true;
-
-	for (int n = 0; n < GJK_MAX_ITERATIONS; ++n) {
-		const float3 support =
-			GetMinkowskiSupportPointVolumeFrustum(vol, frustum, worldToVol, volToWorld, dir);
-
-		const float supportAdvance = support.dot(dir);
-		const float simplexAdvance = GetMaxSimplexAdvance(simplex, dir);
-
-		if (supportAdvance < -GJK_EPS)
-			return false;
-
-		if ((supportAdvance - simplexAdvance) <= GJK_EPS || HasSupportPoint(simplex, support))
-			return ClassifyStalledSimplex(simplex, support, dir);
-
-		simplex.PushFront(support);
-
-		if (UpdateSimplex(simplex, dir))
-			return true;
-
-		if (dir.SqLength() < GJK_EPS_SQ)
-			return true;
-	}
-
-	return false;
-}
-static void GetFrustumBoundingSphere(const SelectionFrustum& frustum, float3& center, float& radius)
-{
-	center = ZeroVector;
-
-	for (const float3& p : frustum.corners)
-		center += p;
-
-	center *= (1.0f / float(frustum.corners.size()));
-
-	float maxDistSq = 0.0f;
-	for (const float3& p : frustum.corners)
-		maxDistSq = std::max(maxDistSq, (p - center).SqLength());
-
-	radius = math::sqrt(maxDistSq);
-}
 static float3 GetFrustumSupportPoint(const CCamera::Frustum& frustum, const float3& dirWorld)
 {
 	float bestDot = -std::numeric_limits<float>::infinity();
