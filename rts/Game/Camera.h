@@ -247,6 +247,15 @@ public:
 	void ConfigNotify(const std::string& key, const std::string& value);
 	void ConfigUpdate();
 
+	/**
+	 * Inputs must be normalized from 0 to 1
+	 *
+	 * @param l
+	 * @param t
+	 * @param r
+	 * @param b
+	 * @return Frustum
+	 */
 	Frustum BuildSelectionFrustum(float l, float t, float r, float b) const;
 
 private:
