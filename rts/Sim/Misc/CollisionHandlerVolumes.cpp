@@ -198,15 +198,27 @@ namespace
 				const int sAx1 = v->GetSecondaryAxis(1);
 
 				const float h = ahs[pAx];
-				const float baseCoeff = dir[pAx] +
-				                        (math::fabs(dir[sAx0]) * ahs[sAx0]) / (2.0f * h) +
-				                        (math::fabs(dir[sAx1]) * ahs[sAx1]) / (2.0f * h);
+				const float lateral =
+					(math::fabs(dir[sAx0]) * ahs[sAx0]) +
+					(math::fabs(dir[sAx1]) * ahs[sAx1]);
 
-				if (baseCoeff >= 0.0f) {
+				// Pyramid model:
+				//   apex at p[pAx] - h
+				//   base plane at p[pAx] + h
+				//   best base corner adds ±ahs on the secondary axes
+				//
+				// Choose base iff:
+				//   dir·bestBaseCorner >= dir·apex
+				// => dir[pAx] * h + lateral >= -dir[pAx] * h
+				// => 2*h*dir[pAx] + lateral >= 0
+
+				if ((2.0f * h * dir[pAx] + lateral) >= 0.0f) {
+					// best base corner
 					p[pAx] += h;
 					p[sAx0] += (dir[sAx0] >= 0.0f) ? ahs[sAx0] : -ahs[sAx0];
 					p[sAx1] += (dir[sAx1] >= 0.0f) ? ahs[sAx1] : -ahs[sAx1];
 				} else {
+					// apex
 					p[pAx] -= h;
 				}
 			} break;
@@ -347,7 +359,7 @@ namespace
 		const float3 ad = d - a;
 		const float tetVolume6 = (ab.cross(ac)).dot(ad);
 
-		if (math::fabs(tetVolume6) <= COLLISION_VOLUME_EPS) {
+		if (math::fabs(tetVolume6) <= GJK_EPS) {
 			GJKSimplex bestFace;
 			float3 bestDir = ZeroVector;
 			float bestSqDist = std::numeric_limits<float>::infinity();
