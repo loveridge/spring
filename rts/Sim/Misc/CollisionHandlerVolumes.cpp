@@ -220,6 +220,7 @@ namespace
 
 		return p;
 	}
+
 	static float3 GetSupportPointInReferenceSpace(const CollisionVolume* v,
 	                                              const CMatrix44f& vToRef,
 	                                              const CMatrix44f& refToV, const float3& dirRef)
@@ -649,147 +650,10 @@ static inline float3 PlaneNormal(const float4& p)
 	return float3(p.x, p.y, p.z);
 }
 
-static inline float3 LocalDirFromWorldDir(const CMatrix44f& m, const float3& worldDir)
-{
-	// Assumes volumeToWorld is rigid / orthonormal.
-	// localDir = R^T * worldDir
-	return {worldDir.dot(m.GetX()), worldDir.dot(m.GetY()), worldDir.dot(m.GetZ())};
-}
-
-static inline float3 WorldPointFromLocalPoint(const CMatrix44f& m, const float3& localPoint)
-{
-	return m.GetPos() + m.GetX() * localPoint.x + m.GetY() * localPoint.y + m.GetZ() * localPoint.z;
-}
-
-static inline float3 SupportSphereLocal(const CollisionVolume& vol, const float3& dir)
-{
-	const float r = vol.GetHScale(0);  // uniform after FixTypeAndScale
-	const float sql = dir.SqLength();
-
-	if (sql <= COLLISION_VOLUME_EPS)
-		return ZeroVector;
-
-	return (dir * (r * math::isqrt(sql)));
-}
-
-static inline float3 SupportBoxLocal(const CollisionVolume& vol, const float3& dir)
-{
-	const float3& h = vol.GetHScales();
-
-	return {(dir.x >= 0.0f) ? h.x : -h.x, (dir.y >= 0.0f) ? h.y : -h.y,
-	        (dir.z >= 0.0f) ? h.z : -h.z};
-}
-
-static inline float3 SupportEllipsoidLocal(const CollisionVolume& vol, const float3& dir)
-{
-	// Support of ellipsoid x^2/a^2 + y^2/b^2 + z^2/c^2 <= 1:
-	// s_i = a_i^2 * d_i / sqrt(sum(a_j^2 d_j^2))
-	const float3& h2 = vol.GetHSqScales();
-
-	const float denomSq = h2.x * dir.x * dir.x + h2.y * dir.y * dir.y + h2.z * dir.z * dir.z;
-
-	if (denomSq <= COLLISION_VOLUME_EPS)
-		return ZeroVector;
-
-	const float invDenom = math::isqrt(denomSq);
-
-	return {h2.x * dir.x * invDenom, h2.y * dir.y * invDenom, h2.z * dir.z * invDenom};
-}
-
-static inline float3 SupportCylinderLocal(const CollisionVolume& vol, const float3& dir)
-{
-	// Matches GetCylinderDistance:
-	// - primary axis extent is [-h, +h]
-	// - secondary cross-section is circular
-	const int axisA = vol.GetPrimaryAxis();
-	const int axisB = vol.GetSecondaryAxis(0);
-	const int axisC = vol.GetSecondaryAxis(1);
-
-	const float h = vol.GetHScale(axisA);
-	const float r = vol.GetHScale(axisB);  // == axisC after FixTypeAndScale
-
-	assert(vol.GetHScale(axisB) == vol.GetHScale(axisC));
-
-	float3 p = ZeroVector;
-
-	p[axisA] = (dir[axisA] >= 0.0f) ? h : -h;
-
-	const float radialLenSq = dir[axisB] * dir[axisB] + dir[axisC] * dir[axisC];
-
-	if (radialLenSq > COLLISION_VOLUME_EPS) {
-		const float s = r * math::isqrt(radialLenSq);
-		p[axisB] = dir[axisB] * s;
-		p[axisC] = dir[axisC] * s;
-	}
-
-	return p;
-}
-
-static inline float3 SupportPyramidLocal(const CollisionVolume& vol, const float3& dir)
-{
-	// Matches GetPyramidDistance:
-	// - primary axis in [-h, +h]
-	// - apex at primary = -h
-	// - rectangular base at primary = +h
-	const int axisA = vol.GetPrimaryAxis();
-	const int axisB = vol.GetSecondaryAxis(0);
-	const int axisC = vol.GetSecondaryAxis(1);
-
-	const float h = vol.GetHScale(axisA);
-	const float hb = vol.GetHScale(axisB);
-	const float hc = vol.GetHScale(axisC);
-
-	float3 best = ZeroVector;
-	float bestDot = -std::numeric_limits<float>::infinity();
-
-	auto tryPoint = [&](const float3& p) {
-		const float dp = dir.dot(p);
-		if (dp > bestDot) {
-			bestDot = dp;
-			best = p;
-		}
-	};
-
-	{
-		float3 apex = ZeroVector;
-		apex[axisA] = -h;
-		tryPoint(apex);
-	}
-
-	for (int sb = -1; sb <= 1; sb += 2) {
-		for (int sc = -1; sc <= 1; sc += 2) {
-			float3 base = ZeroVector;
-			base[axisA] = +h;
-			base[axisB] = sb * hb;
-			base[axisC] = sc * hc;
-			tryPoint(base);
-		}
-	}
-
-	return best;
-}
-
-static inline float3 SupportVolumeLocal(const CollisionVolume& vol, const float3& dir)
-{
-	switch (vol.GetVolumeType()) {
-		case CollisionVolume::COLVOL_TYPE_SPHERE:
-			return SupportSphereLocal(vol, dir);
-		case CollisionVolume::COLVOL_TYPE_BOX:
-			return SupportBoxLocal(vol, dir);
-		case CollisionVolume::COLVOL_TYPE_ELLIPSOID:
-			return SupportEllipsoidLocal(vol, dir);
-		case CollisionVolume::COLVOL_TYPE_CYLINDER:
-			return SupportCylinderLocal(vol, dir);
-		case CollisionVolume::COLVOL_TYPE_PYRAMID:
-			return SupportPyramidLocal(vol, dir);
-	}
-
-	assert(false);
-	return ZeroVector;
-}
-
 static float3 GetFrustumSupportPoint(const CCamera::Frustum& frustum, const float3& dirWorld)
 {
+	if (frustum.verts.empty())
+		return ZeroVector;
 	float bestDot = -std::numeric_limits<float>::infinity();
 	float3 bestPt = frustum.verts[0];
 
@@ -826,6 +690,8 @@ static float3 GetMinkowskiSupportPointVolumeFrustum(const CollisionVolume* vol,
 static float3 GetFrustumCenter(const CCamera::Frustum& frustum)
 {
 	float3 c = ZeroVector;
+	if (frustum.verts.empty())
+		return c;
 
 	for (const float3& p : frustum.verts)
 		c += p;
