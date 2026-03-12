@@ -893,7 +893,7 @@ bool CCollisionHandler::IntersectVolumeWithFrustum(const CCamera::Frustum& frust
 	const float3 volCtr = volumeToWorld.Mul(vol.GetOffsets());
 	const float volRad = vol.GetBoundingRadius();
 
-	if (!frustum.IntersectSphere(volCtr, volRad, 0x3F))
+	if (!frustum.IntersectSphere(volCtr, volRad))
 		return false;
 
 	const CMatrix44f worldToVol = volumeToWorld.InvertAffine();

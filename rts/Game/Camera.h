@@ -78,7 +78,7 @@ public:
 
 	struct Frustum {
 	public:
-		bool IntersectSphere(float3 p, float radius, uint8_t testMask) const;
+		bool IntersectSphere(float3 p, float radius, uint8_t testMask = 0x3F) const;
 		bool IntersectAABB(const AABB& b, uint8_t testMask = 0x3F) const;
 
 	public:
