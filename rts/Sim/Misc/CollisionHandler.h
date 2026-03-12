@@ -175,7 +175,7 @@ class CCollisionHandler {
 		 * @param vol2 second volume
 		 * @param vol2Mat second volume transformation matrix
 		 */
-		static bool IntersectVolume(const CollisionVolume* vol1, const CMatrix44f& vol1Mat, const CollisionVolume* vol2, const CMatrix44f& vol2Mat);
+		static bool IntersectVolume(const CollisionVolume& vol1, const CMatrix44f& vol1Mat, const CollisionVolume& vol2, const CMatrix44f& vol2Mat);
 		/**
 		 * Test if a volume intersects a frustum.
 		 * @param frustum frustum

@@ -67,6 +67,16 @@ namespace
 		return (a.cross(b)).cross(c);
 	}
 
+	static inline float PlaneDistance(const float4& p, const float3& x)
+	{
+		return (p.x * x.x + p.y * x.y + p.z * x.z + p.w);
+	}
+
+	static inline float3 PlaneNormal(const float4& p)
+	{
+		return float3(p.x, p.y, p.z);
+	}
+
 	static float3 PerpendicularVector(const float3& v)
 	{
 		const float3 axis =
@@ -80,6 +90,18 @@ namespace
 			p = float3(v.y, -v.x, 0.0f);
 
 		return p;
+	}
+
+	static float3 GetFrustumCenter(const CCamera::Frustum& frustum)
+	{
+		float3 c = ZeroVector;
+		if (frustum.verts.empty())
+			return c;
+
+		for (const float3& p : frustum.verts)
+			c += p;
+
+		return (c * (1.0f / float(frustum.verts.size())));
 	}
 
 	static float3 EdgeTowardOriginDirection(const float3& edge, const float3& ao)
@@ -139,14 +161,14 @@ namespace
 		return (u >= -GJK_EPS && v >= -GJK_EPS && w >= -GJK_EPS);
 	}
 
-	static float3 GetSupportPointLocal(const CollisionVolume* v, const float3& dir)
+	static float3 GetSupportPointLocal(const CollisionVolume& v, const float3& dir)
 	{
-		const float3& ahs = v->GetHScales();
+		const float3& ahs = v.GetHScales();
 		const float3 ahsSq(ahs.x * ahs.x, ahs.y * ahs.y, ahs.z * ahs.z);
 
-		float3 p = v->GetOffsets();
+		float3 p = v.GetOffsets();
 
-		switch (v->GetVolumeType()) {
+		switch (v.GetVolumeType()) {
 			case CollisionVolume::COLVOL_TYPE_BOX: {
 				p.x += (dir.x >= 0.0f) ? ahs.x : -ahs.x;
 				p.y += (dir.y >= 0.0f) ? ahs.y : -ahs.y;
@@ -174,9 +196,9 @@ namespace
 			} break;
 
 			case CollisionVolume::COLVOL_TYPE_CYLINDER: {
-				const int pAx = v->GetPrimaryAxis();
-				const int sAx0 = v->GetSecondaryAxis(0);
-				const int sAx1 = v->GetSecondaryAxis(1);
+				const int pAx = v.GetPrimaryAxis();
+				const int sAx0 = v.GetSecondaryAxis(0);
+				const int sAx1 = v.GetSecondaryAxis(1);
 
 				p[pAx] += (dir[pAx] >= 0.0f) ? ahs[pAx] : -ahs[pAx];
 
@@ -190,9 +212,9 @@ namespace
 			} break;
 
 			case CollisionVolume::COLVOL_TYPE_PYRAMID: {
-				const int pAx = v->GetPrimaryAxis();
-				const int sAx0 = v->GetSecondaryAxis(0);
-				const int sAx1 = v->GetSecondaryAxis(1);
+				const int pAx = v.GetPrimaryAxis();
+				const int sAx0 = v.GetSecondaryAxis(0);
+				const int sAx1 = v.GetSecondaryAxis(1);
 
 				const float h = ahs[pAx];
 				const float lateral = (math::fabs(dir[sAx0]) * ahs[sAx0]) + (math::fabs(dir[sAx1]) * ahs[sAx1]);
@@ -222,7 +244,7 @@ namespace
 		return p;
 	}
 
-	static float3 GetSupportPointInReferenceSpace(const CollisionVolume* v, const CMatrix44f& vToRef,
+	static float3 GetSupportPointInReferenceSpace(const CollisionVolume& v, const CMatrix44f& vToRef,
 	                                              const CMatrix44f& refToV, const float3& dirRef)
 	{
 		const float3 dirLocal = TransformDirection(refToV, dirRef);
@@ -230,8 +252,8 @@ namespace
 		return vToRef.Mul(pointLocal);
 	}
 
-	static float3 GetMinkowskiSupportPointInReferenceSpace(const CollisionVolume* refVol,
-	                                                       const CollisionVolume* otherVol,
+	static float3 GetMinkowskiSupportPointInReferenceSpace(const CollisionVolume& refVol,
+	                                                       const CollisionVolume& otherVol,
 	                                                       const CMatrix44f& otherToRef, const CMatrix44f& refToOther,
 	                                                       const float3& dirRef)
 	{
@@ -458,24 +480,63 @@ namespace
 		}
 	}
 
-	static bool HasSupportPoint(const GJKSimplex& simplex, const float3& point)
+	static inline float3 ResolveInitialDir(float3 initialDir, const float3& fallbackDir)
 	{
-		for (int i = 0; i < simplex.size; ++i) {
-			if ((simplex.points[i] - point).SqLength() <= GJK_EPS_SQ)
-				return true;
-		}
-
-		return false;
+		if (initialDir.SqLength() >= GJK_EPS_SQ)
+			return initialDir;
+		if (fallbackDir.SqLength() >= GJK_EPS_SQ)
+			return fallbackDir;
+		return float3(1.0f, 0.0f, 0.0f);
 	}
 
-	static float GetMaxSimplexAdvance(const GJKSimplex& simplex, const float3& dir)
+	static inline bool HasSupportPoint(const GJKSimplex& s, const float3& p)
 	{
-		float maxAdvance = -std::numeric_limits<float>::infinity();
+		switch (s.size) {
+			case 4:
+				if ((s.points[3] - p).SqLength() <= GJK_EPS_SQ)
+					return true;
+				[[fallthrough]];
+			case 3:
+				if ((s.points[2] - p).SqLength() <= GJK_EPS_SQ)
+					return true;
+				[[fallthrough]];
+			case 2:
+				if ((s.points[1] - p).SqLength() <= GJK_EPS_SQ)
+					return true;
+				[[fallthrough]];
+			case 1:
+				return ((s.points[0] - p).SqLength() <= GJK_EPS_SQ);
+			default:
+				return false;
+		}
+	}
 
-		for (int i = 0; i < simplex.size; ++i)
-			maxAdvance = std::max(maxAdvance, simplex.points[i].dot(dir));
-
-		return maxAdvance;
+	static inline float GetMaxSimplexAdvance(const GJKSimplex& s, const float3& dir)
+	{
+		switch (s.size) {
+			case 4: {
+				const float d0 = s.points[0].dot(dir);
+				const float d1 = s.points[1].dot(dir);
+				const float d2 = s.points[2].dot(dir);
+				const float d3 = s.points[3].dot(dir);
+				return std::max(std::max(d0, d1), std::max(d2, d3));
+			}
+			case 3: {
+				const float d0 = s.points[0].dot(dir);
+				const float d1 = s.points[1].dot(dir);
+				const float d2 = s.points[2].dot(dir);
+				return std::max(std::max(d0, d1), d2);
+			}
+			case 2: {
+				const float d0 = s.points[0].dot(dir);
+				const float d1 = s.points[1].dot(dir);
+				return std::max(d0, d1);
+			}
+			case 1:
+				return s.points[0].dot(dir);
+			default:
+				return -std::numeric_limits<float>::infinity();
+		}
 	}
 
 	static bool SimplexContainsOriginWithinTolerance(const GJKSimplex& simplex)
@@ -544,14 +605,14 @@ namespace
 		return (trialDir.SqLength() <= GJK_EPS_SQ || SimplexContainsOriginWithinTolerance(trialSimplex));
 	}
 
-	static float3 GetCenterDeltaInLocalSpace(const CollisionVolume* refVol, const CMatrix44f& refInv,
+	static float3 GetCenterDeltaInLocalSpace(const CollisionVolume& refVol, const CMatrix44f& refInv,
 	                                         const float3& otherWorldCenter)
 	{
-		return (refInv.Mul(otherWorldCenter) - refVol->GetOffsets());
+		return (refInv.Mul(otherWorldCenter) - refVol.GetOffsets());
 	}
 
-	static bool IntersectVolumesGJK(const CollisionVolume* refVol, const CMatrix44f& refMat,
-	                                const CollisionVolume* otherVol, const CMatrix44f& otherMat,
+	static bool IntersectVolumesGJK(const CollisionVolume& refVol, const CMatrix44f& refMat,
+	                                const CollisionVolume& otherVol, const CMatrix44f& otherMat,
 	                                const CMatrix44f& refInv, const CMatrix44f& otherInv, float3 initialDirRef,
 	                                const float3& fallbackDirRef)
 	{
@@ -596,15 +657,89 @@ namespace
 		return false;
 	}
 
+	static float3 GetFrustumSupportPoint(const CCamera::Frustum& frustum, const float3& dirWorld)
+	{
+		if (frustum.verts.empty())
+			return ZeroVector;
+		float bestDot = -std::numeric_limits<float>::infinity();
+		float3 bestPt = frustum.verts[0];
+
+		for (const float3& p : frustum.verts) {
+			const float dp = p.dot(dirWorld);
+			if (dp > bestDot) {
+				bestDot = dp;
+				bestPt = p;
+			}
+		}
+
+		return bestPt;
+	}
+
+	static float3 GetMinkowskiSupportPointVolumeFrustum(const CollisionVolume& vol, const CCamera::Frustum& frustum,
+	                                                    const CMatrix44f& worldToVol, const CMatrix44f& volToWorld,
+	                                                    const float3& dirVol)
+	{
+		// Minkowski support in volume-local space:
+		// support(vol - frustumInVol, d) = support(vol, d) - support(frustumInVol, -d)
+
+		const float3 pVol = GetSupportPointLocal(vol, dirVol);
+
+		// Convert -dirVol into world-space for frustum support
+		const float3 dirWorld = TransformDirection(volToWorld, -dirVol);
+		const float3 pFrustumWorld = GetFrustumSupportPoint(frustum, dirWorld);
+		const float3 pFrustumVol = worldToVol.Mul(pFrustumWorld);
+
+		return (pVol - pFrustumVol);
+	}
+
+
+	static bool IntersectVolumeFrustumGJK(const CollisionVolume& vol, const CCamera::Frustum& frustum,
+	                                      const CMatrix44f& volToWorld, const CMatrix44f& worldToVol,
+	                                      float3 initialDirVol, const float3& fallbackDirVol)
+	{
+		if (initialDirVol.SqLength() < GJK_EPS_SQ)
+			initialDirVol = fallbackDirVol;
+		if (initialDirVol.SqLength() < GJK_EPS_SQ)
+			initialDirVol = float3(1.0f, 0.0f, 0.0f);
+
+		GJKSimplex simplex;
+		simplex.PushFront(GetMinkowskiSupportPointVolumeFrustum(vol, frustum, worldToVol, volToWorld, initialDirVol));
+
+		float3 dir = -simplex.points[0];
+
+		if (dir.SqLength() < GJK_EPS_SQ)
+			return true;
+
+		for (int n = 0; n < GJK_MAX_ITERATIONS; ++n) {
+			const float3 support = GetMinkowskiSupportPointVolumeFrustum(vol, frustum, worldToVol, volToWorld, dir);
+
+			const float supportAdvance = support.dot(dir);
+			const float simplexAdvance = GetMaxSimplexAdvance(simplex, dir);
+
+			if (supportAdvance < -GJK_EPS)
+				return false;
+
+			if ((supportAdvance - simplexAdvance) <= GJK_EPS || HasSupportPoint(simplex, support))
+				return ClassifyStalledSimplex(simplex, support, dir);
+
+			simplex.PushFront(support);
+
+			if (UpdateSimplex(simplex, dir))
+				return true;
+
+			if (dir.SqLength() < GJK_EPS_SQ)
+				return true;
+		}
+
+		return false;
+	}
+
 }  // namespace
 
-bool CCollisionHandler::IntersectVolume(const CollisionVolume* vol1, const CMatrix44f& vol1Mat,
-                                        const CollisionVolume* vol2, const CMatrix44f& vol2Mat)
+bool CCollisionHandler::IntersectVolume(const CollisionVolume& vol1, const CMatrix44f& vol1Mat,
+                                        const CollisionVolume& vol2, const CMatrix44f& vol2Mat)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-
-	if (vol1 == nullptr || vol2 == nullptr)
-		return false;
 
 	// This GJK implementation assumes support directions transform correctly
 	// under rigid transforms only (rotation + translation).
@@ -618,9 +753,9 @@ bool CCollisionHandler::IntersectVolume(const CollisionVolume* vol1, const CMatr
 		return false;
 	}
 
-	const float3 vol1Ctr = vol1Mat.Mul(vol1->GetOffsets());
-	const float3 vol2Ctr = vol2Mat.Mul(vol2->GetOffsets());
-	const float sumRadii = vol1->GetBoundingRadius() + vol2->GetBoundingRadius();
+	const float3 vol1Ctr = vol1Mat.Mul(vol1.GetOffsets());
+	const float3 vol2Ctr = vol2Mat.Mul(vol2.GetOffsets());
+	const float sumRadii = vol1.GetBoundingRadius() + vol2.GetBoundingRadius();
 
 	if ((vol1Ctr - vol2Ctr).SqLength() > (sumRadii * sumRadii))
 		return false;
@@ -629,108 +764,10 @@ bool CCollisionHandler::IntersectVolume(const CollisionVolume* vol1, const CMatr
 	const CMatrix44f volInv = vol2Mat.InvertAffine();
 
 	float3 fallbackDir = ZeroVector;
-	fallbackDir[vol1->GetPrimaryAxis()] = 1.0f;
+	fallbackDir[vol1.GetPrimaryAxis()] = 1.0f;
 
 	const float3 dir = GetCenterDeltaInLocalSpace(vol1, pyrInv, vol2Ctr);
 	return IntersectVolumesGJK(vol1, vol1Mat, vol2, vol2Mat, pyrInv, volInv, dir, fallbackDir);
-}
-
-static inline float PlaneDistance(const float4& p, const float3& x)
-{
-	return (p.x * x.x + p.y * x.y + p.z * x.z + p.w);
-}
-
-static inline float3 PlaneNormal(const float4& p)
-{
-	return float3(p.x, p.y, p.z);
-}
-
-static float3 GetFrustumSupportPoint(const CCamera::Frustum& frustum, const float3& dirWorld)
-{
-	if (frustum.verts.empty())
-		return ZeroVector;
-	float bestDot = -std::numeric_limits<float>::infinity();
-	float3 bestPt = frustum.verts[0];
-
-	for (const float3& p : frustum.verts) {
-		const float dp = p.dot(dirWorld);
-		if (dp > bestDot) {
-			bestDot = dp;
-			bestPt = p;
-		}
-	}
-
-	return bestPt;
-}
-
-static float3 GetMinkowskiSupportPointVolumeFrustum(const CollisionVolume* vol, const CCamera::Frustum& frustum,
-                                                    const CMatrix44f& worldToVol, const CMatrix44f& volToWorld,
-                                                    const float3& dirVol)
-{
-	// Minkowski support in volume-local space:
-	// support(vol - frustumInVol, d) = support(vol, d) - support(frustumInVol, -d)
-
-	const float3 pVol = GetSupportPointLocal(vol, dirVol);
-
-	// Convert -dirVol into world-space for frustum support
-	const float3 dirWorld = TransformDirection(volToWorld, -dirVol);
-	const float3 pFrustumWorld = GetFrustumSupportPoint(frustum, dirWorld);
-	const float3 pFrustumVol = worldToVol.Mul(pFrustumWorld);
-
-	return (pVol - pFrustumVol);
-}
-
-static float3 GetFrustumCenter(const CCamera::Frustum& frustum)
-{
-	float3 c = ZeroVector;
-	if (frustum.verts.empty())
-		return c;
-
-	for (const float3& p : frustum.verts)
-		c += p;
-
-	return (c * (1.0f / float(frustum.verts.size())));
-}
-
-static bool IntersectVolumeFrustumGJK(const CollisionVolume* vol, const CCamera::Frustum& frustum,
-                                      const CMatrix44f& volToWorld, const CMatrix44f& worldToVol, float3 initialDirVol,
-                                      const float3& fallbackDirVol)
-{
-	if (initialDirVol.SqLength() < GJK_EPS_SQ)
-		initialDirVol = fallbackDirVol;
-	if (initialDirVol.SqLength() < GJK_EPS_SQ)
-		initialDirVol = float3(1.0f, 0.0f, 0.0f);
-
-	GJKSimplex simplex;
-	simplex.PushFront(GetMinkowskiSupportPointVolumeFrustum(vol, frustum, worldToVol, volToWorld, initialDirVol));
-
-	float3 dir = -simplex.points[0];
-
-	if (dir.SqLength() < GJK_EPS_SQ)
-		return true;
-
-	for (int n = 0; n < GJK_MAX_ITERATIONS; ++n) {
-		const float3 support = GetMinkowskiSupportPointVolumeFrustum(vol, frustum, worldToVol, volToWorld, dir);
-
-		const float supportAdvance = support.dot(dir);
-		const float simplexAdvance = GetMaxSimplexAdvance(simplex, dir);
-
-		if (supportAdvance < -GJK_EPS)
-			return false;
-
-		if ((supportAdvance - simplexAdvance) <= GJK_EPS || HasSupportPoint(simplex, support))
-			return ClassifyStalledSimplex(simplex, support, dir);
-
-		simplex.PushFront(support);
-
-		if (UpdateSimplex(simplex, dir))
-			return true;
-
-		if (dir.SqLength() < GJK_EPS_SQ)
-			return true;
-	}
-
-	return false;
 }
 
 bool CCollisionHandler::IntersectVolumeWithFrustum(const CCamera::Frustum& frustum, const CollisionVolume& vol,
@@ -761,5 +798,5 @@ bool CCollisionHandler::IntersectVolumeWithFrustum(const CCamera::Frustum& frust
 	float3 fallbackDirVol = ZeroVector;
 	fallbackDirVol[vol.GetPrimaryAxis()] = 1.0f;
 
-	return IntersectVolumeFrustumGJK(&vol, frustum, volumeToWorld, worldToVol, initialDirVol, fallbackDirVol);
+	return IntersectVolumeFrustumGJK(vol, frustum, volumeToWorld, worldToVol, initialDirVol, fallbackDirVol);
 }

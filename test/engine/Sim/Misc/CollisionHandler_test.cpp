@@ -38,39 +38,22 @@ static CollisionVolume MakeSphereVolume(const float radius, const float3& offset
 static CollisionVolume MakeEllipsoidVolume(const float3& scales, const float3& offsets = ZeroVector)
 {
 	CollisionVolume v;
-	v.InitShape(
-		scales,
-		offsets,
-		CollisionVolume::COLVOL_TYPE_ELLIPSOID,
-		CollisionVolume::COLVOL_HITTEST_CONT,
-		CollisionVolume::COLVOL_AXIS_Z
-	);
+	v.InitShape(scales, offsets, CollisionVolume::COLVOL_TYPE_ELLIPSOID, CollisionVolume::COLVOL_HITTEST_CONT,
+		        CollisionVolume::COLVOL_AXIS_Z);
 	return v;
 }
 
 static CollisionVolume MakeCylinderVolume(const float3& scales, const int axis, const float3& offsets = ZeroVector)
 {
 	CollisionVolume v;
-	v.InitShape(
-		scales,
-		offsets,
-		CollisionVolume::COLVOL_TYPE_CYLINDER,
-		CollisionVolume::COLVOL_HITTEST_CONT,
-		axis
-	);
+	v.InitShape(scales, offsets, CollisionVolume::COLVOL_TYPE_CYLINDER, CollisionVolume::COLVOL_HITTEST_CONT, axis);
 	return v;
 }
 
 static CollisionVolume MakePyramidVolume(const float3& scales, const int axis, const float3& offsets = ZeroVector)
 {
 	CollisionVolume v;
-	v.InitShape(
-		scales,
-		offsets,
-		CollisionVolume::COLVOL_TYPE_PYRAMID,
-		CollisionVolume::COLVOL_HITTEST_CONT,
-		axis
-	);
+	v.InitShape(scales, offsets, CollisionVolume::COLVOL_TYPE_PYRAMID, CollisionVolume::COLVOL_HITTEST_CONT, axis);
 	return v;
 }
 
@@ -89,19 +72,18 @@ static CMatrix44f MakeTransform(const float3& pos = ZeroVector, const float3& ro
 	return m;
 }
 
-static bool IntersectsVolume(
-	const CollisionVolume& vol,
-	const CMatrix44f& mat,
-	const CollisionVolume& otherVol,
-	const CMatrix44f& otherMat
-) {
-	return CCollisionHandler::IntersectVolume(&vol, mat, &otherVol, otherMat);
+static bool IntersectsVolume(const CollisionVolume& vol, const CMatrix44f& mat, const CollisionVolume& otherVol,
+	                         const CMatrix44f& otherMat)
+{
+	return CCollisionHandler::IntersectVolume(vol, mat, &otherVol, otherMat);
 }
+
 static CCamera::Frustum PyramidToFrustum(
 	const CollisionVolume& pyramid,
 	const CMatrix44f& pyramidToWorld,
 	float nearFrac = 1e-4f   // small slice away from apex; exact apex is degenerate
-) {
+)
+{
 	assert(pyramid.GetVolumeType() == CollisionVolume::COLVOL_TYPE_PYRAMID);
 	assert(pyramidToWorld.IsRotOrRotTranMatrix());
 
@@ -1908,74 +1890,72 @@ TEST_CASE("CollisionHandler_IntersectPyramidVolume_PyramidVsPyramid")
 	}
 }
 
-// TEST_CASE("CollisionHandler_IntersectBoxVolume_AxisAligned_Performance")
-// {
-// 	SKIP("performance");
-// 	const CollisionVolume box = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f));
-// 	const CollisionVolume cylinder = MakeCylinderVolume(float3(2.0f, 2.0f, 6.0f), CollisionVolume::COLVOL_AXIS_Z);
-// 	const CMatrix44f boxMat = MakeTransform();
+TEST_CASE("CollisionHandler_IntersectBoxVolume_AxisAligned_Performance")
+{
+	const CollisionVolume box = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f));
+	const CollisionVolume cylinder = MakeCylinderVolume(float3(2.0f, 2.0f, 6.0f), CollisionVolume::COLVOL_AXIS_Z);
+	const CMatrix44f boxMat = MakeTransform();
 
-// 	std::array<CMatrix44f, 64> hitMats;
-// 	std::array<CMatrix44f, 64> missMats;
+	std::array<CMatrix44f, 64> hitMats;
+	std::array<CMatrix44f, 64> missMats;
 
-// 	for (std::size_t i = 0; i < hitMats.size(); ++i) {
-// 		const float x = 0.75f + ((i % 8) * 0.05f);
-// 		hitMats[i] = MakeTransform(float3(x, 2.0f, 4.0f));
-// 		missMats[i] = MakeTransform(float3(x, 2.2f, 4.0f));
-// 	}
+	for (std::size_t i = 0; i < hitMats.size(); ++i) {
+		const float x = 0.75f + ((i % 8) * 0.05f);
+		hitMats[i] = MakeTransform(float3(x, 2.0f, 4.0f));
+		missMats[i] = MakeTransform(float3(x, 2.2f, 4.0f));
+	}
 
-// 	const std::int64_t iterations = 10000000;
-// 	volatile std::int64_t sink = 0;
+	const std::int64_t iterations = 10000000;
+	volatile std::int64_t sink = 0;
 
-// 	LOG("CollisionHandler axis-aligned box-volume:");
-// 	{
-// 		ScopedOnceTimer timer(" axis-aligned box vs cylinder (intersecting)");
-// 		for (std::int64_t j = iterations; j > 0; --j) {
-// 			sink ^= static_cast<std::int64_t>(Intersects(box, boxMat, cylinder, hitMats[j % hitMats.size()])) * j;
-// 		}
-// 	}
-// 	{
-// 		ScopedOnceTimer timer(" axis-aligned box vs cylinder (separated)");
-// 		for (std::int64_t j = iterations; j > 0; --j) {
-// 			sink ^= static_cast<std::int64_t>(Intersects(box, boxMat, cylinder, missMats[j % missMats.size()])) * j;
-// 		}
-// 	}
+	LOG("CollisionHandler axis-aligned box-volume:");
+	{
+		ScopedOnceTimer timer(" axis-aligned box vs cylinder (intersecting)");
+		for (std::int64_t j = iterations; j > 0; --j) {
+			sink ^= static_cast<std::int64_t>(IntersectsVolume(box, boxMat, cylinder, hitMats[j % hitMats.size()])) * j;
+		}
+	}
+	{
+		ScopedOnceTimer timer(" axis-aligned box vs cylinder (separated)");
+		for (std::int64_t j = iterations; j > 0; --j) {
+			sink ^= static_cast<std::int64_t>(IntersectsVolume(box, boxMat, cylinder, missMats[j % missMats.size()])) * j;
+		}
+	}
 
-// 	CHECK((sink | 1) != 0);
-// }
+	CHECK((sink | 1) != 0);
+}
 
-// TEST_CASE("CollisionHandler_IntersectBoxVolume_Rotated_Performance")
-// {
-// 	SKIP("performance");
-// 	const CollisionVolume box = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f));
-// 	const CollisionVolume cylinder = MakeCylinderVolume(float3(2.0f, 2.0f, 6.0f), CollisionVolume::COLVOL_AXIS_Z);
-// 	const CMatrix44f boxMat = MakeTransform(ZeroVector, float3(0.0f, QUARTER_PI, 0.0f));
+TEST_CASE("CollisionHandler_IntersectBoxVolume_Rotated_Performance")
+{
+	const CollisionVolume box = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f));
+	const CollisionVolume cylinder = MakeCylinderVolume(float3(2.0f, 2.0f, 6.0f), CollisionVolume::COLVOL_AXIS_Z);
+	const CMatrix44f boxMat = MakeTransform(ZeroVector, float3(0.0f, QUARTER_PI, 0.0f));
 
-// 	std::array<CMatrix44f, 64> hitMats;
-// 	std::array<CMatrix44f, 64> missMats;
+	std::array<CMatrix44f, 64> hitMats;
+	std::array<CMatrix44f, 64> missMats;
 
-// 	for (std::size_t i = 0; i < hitMats.size(); ++i) {
-// 		const float y = 0.75f + ((i % 8) * 0.05f);
-// 		hitMats[i] = MakeTransform(float3(2.75f, y, 0.0f), float3(HALF_PI, 0.0f, 0.0f));
-// 		missMats[i] = MakeTransform(float3(3.6f, y, 0.0f), float3(HALF_PI, 0.0f, 0.0f));
-// 	}
+	for (std::size_t i = 0; i < hitMats.size(); ++i) {
+		const float y = 0.75f + ((i % 8) * 0.05f);
+		hitMats[i] = MakeTransform(float3(2.75f, y, 0.0f), float3(HALF_PI, 0.0f, 0.0f));
+		missMats[i] = MakeTransform(float3(3.6f, y, 0.0f), float3(HALF_PI, 0.0f, 0.0f));
+	}
 
-// 	const std::int64_t iterations = 10000000;
-// 	volatile std::int64_t sink = 0;
+	const std::int64_t iterations = 10000000;
+	volatile std::int64_t sink = 0;
 
-// 	LOG("CollisionHandler rotated box-volume:");
-// 	{
-// 		ScopedOnceTimer timer(" rotated box vs cylinder (intersecting)");
-// 		for (std::int64_t j = iterations; j > 0; --j) {
-// 			sink ^= static_cast<std::int64_t>(Intersects(box, boxMat, cylinder, hitMats[j % hitMats.size()])) * j;
-// 		}
-// 	}
-// 	{
-// 		ScopedOnceTimer timer(" rotated box vs cylinder (separated)");
-// 		for (std::int64_t j = iterations; j > 0; --j) {
-// 			sink ^= static_cast<std::int64_t>(Intersects(box, boxMat, cylinder, missMats[j % missMats.size()])) * j;
-// 		}
-// 	}
+	LOG("CollisionHandler rotated box-volume:");
+	{
+		ScopedOnceTimer timer(" rotated box vs cylinder (intersecting)");
+		for (std::int64_t j = iterations; j > 0; --j) {
+			sink ^= static_cast<std::int64_t>(IntersectsVolume(box, boxMat, cylinder, hitMats[j % hitMats.size()])) * j;
+		}
+	}
+	{
+		ScopedOnceTimer timer(" rotated box vs cylinder (separated)");
+		for (std::int64_t j = iterations; j > 0; --j) {
+			sink ^= static_cast<std::int64_t>(IntersectsVolume(box, boxMat, cylinder, missMats[j % missMats.size()])) * j;
+		}
+	}
 
-// 	CHECK((sink | 1) != 0);
-// }
+	CHECK((sink | 1) != 0);
+}
