@@ -273,7 +273,7 @@ public:
 	 * @param FwdVector
 	 * @return Frustum
 	 */
-	static Frustum MakeMinimapSelectionFrustumProjected(float r0, float r1, float f0, float f1,
+	static Frustum MakeBasisProjectedFrustum(float r0, float r1, float f0, float f1,
 	        float worldYMin, float worldYMax, const float3& RgtVector, const float3& FwdVector);
 
 private:

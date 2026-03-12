@@ -2421,7 +2421,7 @@ int LuaUnsyncedRead::GetUnitsInScreenRectangle(lua_State* L)
 	float t = luaL_checkfloat(L, 2);
 	float r = luaL_checkfloat(L, 3);
 	float b = luaL_checkfloat(L, 4);
-	int selectionPrimitive = luaL_optint(L, 6, 0);
+	const int selectionPrimitive = luaL_optint(L, 6, 0);
 
 	if (l > r) std::swap(l, r);
 	if (t > b) std::swap(t, b);

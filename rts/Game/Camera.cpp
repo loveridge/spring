@@ -474,7 +474,7 @@ CCamera::Frustum CCamera::BuildSelectionFrustum(float l, float t, float r, float
 	}
 }
 
-CCamera::Frustum CCamera::MakeMinimapSelectionFrustumProjected(float r0, float r1, float f0, float f1, float worldYMin,
+CCamera::Frustum CCamera::MakeBasisProjectedFrustum(float r0, float r1, float f0, float f1, float worldYMin,
                                                                float worldYMax, const float3& RgtVector,
                                                                const float3& FwdVector)
 {

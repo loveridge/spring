@@ -636,7 +636,7 @@ void CMiniMap::SelectUnits(int x, int y)
 		const float f0 = p0.dot(FwdVector);
 		const float f1 = p1.dot(FwdVector);
 
-		CCamera::Frustum fr = CCamera::MakeMinimapSelectionFrustumProjected(r0, r1, f0, f1,	-1.0e6f, 1.0e6f, RgtVector, FwdVector);
+		CCamera::Frustum fr = CCamera::MakeBasisProjectedFrustum(r0, r1, f0, f1,	-1.0e6f, 1.0e6f, RgtVector, FwdVector);
 
 		selectedUnitsHandler.HandleUnitBoxSelection(fr);
 	} else {
