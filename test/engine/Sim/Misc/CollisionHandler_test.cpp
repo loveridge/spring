@@ -68,7 +68,7 @@ static CMatrix44f MakeTransform(const float3& pos = ZeroVector, const float3& ro
 static bool IntersectsVolume(const CollisionVolume& vol, const CMatrix44f& mat, const CollisionVolume& otherVol,
 	                         const CMatrix44f& otherMat)
 {
-	return CCollisionHandler::IntersectVolume(vol, mat, &otherVol, otherMat);
+	return CCollisionHandler::IntersectVolume(vol, mat, otherVol, otherMat);
 }
 
 static CCamera::Frustum PyramidToFrustum(
@@ -996,6 +996,28 @@ TEST_CASE("CollisionHandler_IntersectBoxVolume_BoxVsBox")
 		CHECK_FALSE(IntersectsVolume(boxA, boxAMat, boxB, boxBMat));
 	}
 
+	SECTION("moving box transitions from separated to intersecting") {
+		constexpr float tangentDistance = 2.0f;
+		bool hasBeenSeparated = false;
+		bool hasTransitionedToIntersection = false;
+
+		for (int step = 0; step <= 8; ++step) {
+			const float x = 3.0f - (0.25f * step);
+			const bool hit = IntersectsVolume(boxA, boxAMat, boxB, MakeTransform(float3(x, 0.0f, 0.0f)));
+			const bool expectedHit = (x <= tangentDistance);
+
+			CHECK(hit == expectedHit);
+
+			if (!hit)
+				hasBeenSeparated = true;
+			if (hit && hasBeenSeparated)
+				hasTransitionedToIntersection = true;
+		}
+
+		CHECK(hasBeenSeparated);
+		CHECK(hasTransitionedToIntersection);
+	}
+
 	SECTION("touching corners counts as intersecting") {
 		const CMatrix44f boxBMat = MakeTransform(float3(2.0f, 2.0f, 2.0f));
 		CHECK(IntersectsVolume(boxA, boxAMat, boxB, boxBMat));
@@ -1068,6 +1090,27 @@ TEST_CASE("CollisionHandler_IntersectVolume_SphereVsSphere")
 
 	SECTION("separated") {
 		CHECK_FALSE(IntersectsVolume(sphereA, sphereAMat, sphereB, MakeTransform(float3(7.1f, 0.0f, 0.0f))));
+	}
+
+	SECTION("moving sphere transitions from separated to intersecting") {
+		constexpr float sumRadii = 7.0f;
+		bool hasBeenSeparated = false;
+		bool hasTransitionedToIntersection = false;
+
+		for (int step = 0; step <= 8; ++step) {
+			const float x = 8.0f - (0.25f * step);
+			const bool hit = IntersectsVolume(sphereA, sphereAMat, sphereB, MakeTransform(float3(x, 0.0f, 0.0f)));
+			const bool expectedHit = (x <= sumRadii);
+			CHECK(hit == expectedHit);
+
+			if (!hit)
+				hasBeenSeparated = true;
+			if (hit && hasBeenSeparated)
+				hasTransitionedToIntersection = true;
+		}
+
+		CHECK(hasBeenSeparated);
+		CHECK(hasTransitionedToIntersection);
 	}
 }
 
@@ -1172,6 +1215,28 @@ TEST_CASE("CollisionHandler_IntersectVolume_CylinderVsCylinder")
 
 	SECTION("parallel separation") {
 		CHECK_FALSE(IntersectsVolume(cylinderA, cylinderAMat, cylinderB, MakeTransform(float3(6.1f, 0.0f, 0.0f))));
+	}
+
+	SECTION("moving cylinder transitions from separated to intersecting") {
+		constexpr float tangentDistance = 6.0f;
+		bool hasBeenSeparated = false;
+		bool hasTransitionedToIntersection = false;
+
+		for (int step = 0; step <= 8; ++step) {
+			const float x = 7.0f - (0.25f * step);
+			const bool hit = IntersectsVolume(cylinderA, cylinderAMat, cylinderB, MakeTransform(float3(x, 0.0f, 0.0f)));
+			const bool expectedHit = (x <= tangentDistance);
+
+			CHECK(hit == expectedHit);
+
+			if (!hit)
+				hasBeenSeparated = true;
+			if (hit && hasBeenSeparated)
+				hasTransitionedToIntersection = true;
+		}
+
+		CHECK(hasBeenSeparated);
+		CHECK(hasTransitionedToIntersection);
 	}
 
 	SECTION("orthogonal crossing intersects") {
