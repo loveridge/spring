@@ -26,7 +26,7 @@ public:
 		COLVOL_TYPE_ELLIPSOID =  0,
 		COLVOL_TYPE_CYLINDER  =  1,
 		COLVOL_TYPE_BOX       =  2,
-		COLVOL_TYPE_SPHERE    =  4,
+		COLVOL_TYPE_SPHERE    =  3,
 	};
 	enum {
 		COLVOL_AXIS_X = 0,

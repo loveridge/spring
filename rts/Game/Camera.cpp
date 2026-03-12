@@ -197,12 +197,12 @@ void CCamera::FinalizeFrustum(Frustum& fr) const
 	SetFrustumPlane(FRUSTUM_PLANE_NEA, FRUSTUM_POINT_NTL, FRUSTUM_POINT_NTR, FRUSTUM_POINT_NBR);
 	SetFrustumPlane(FRUSTUM_PLANE_FAR, FRUSTUM_POINT_FTR, FRUSTUM_POINT_FTL, FRUSTUM_POINT_FBL);
 
-	fr.edges[FRUSTUM_EDGE_NTR_NTL] = (fr.verts[FRUSTUM_POINT_NTR] - fr.verts[FRUSTUM_POINT_NTL]).UnsafeANormalize();
-	fr.edges[FRUSTUM_EDGE_NTL_NBL] = (fr.verts[FRUSTUM_POINT_NTL] - fr.verts[FRUSTUM_POINT_NBL]).UnsafeANormalize();
-	fr.edges[FRUSTUM_EDGE_FTL_NTL] = (fr.verts[FRUSTUM_POINT_FTL] - fr.verts[FRUSTUM_POINT_NTL]).UnsafeANormalize();
-	fr.edges[FRUSTUM_EDGE_FTR_NTR] = (fr.verts[FRUSTUM_POINT_FTR] - fr.verts[FRUSTUM_POINT_NTR]).UnsafeANormalize();
-	fr.edges[FRUSTUM_EDGE_FBR_NBR] = (fr.verts[FRUSTUM_POINT_FBR] - fr.verts[FRUSTUM_POINT_NBR]).UnsafeANormalize();
-	fr.edges[FRUSTUM_EDGE_FBL_NBL] = (fr.verts[FRUSTUM_POINT_FBL] - fr.verts[FRUSTUM_POINT_NBL]).UnsafeANormalize();
+	fr.edges[FRUSTUM_EDGE_NTR_NTL] = (fr.verts[FRUSTUM_POINT_NTR] - fr.verts[FRUSTUM_POINT_NTL]).UnsafeANormalize(); // ntr - ntl (same as ftr - ftl)
+	fr.edges[FRUSTUM_EDGE_NTL_NBL] = (fr.verts[FRUSTUM_POINT_NTL] - fr.verts[FRUSTUM_POINT_NBL]).UnsafeANormalize(); // ntl - nbl (same as ftl - fbl)
+	fr.edges[FRUSTUM_EDGE_FTL_NTL] = (fr.verts[FRUSTUM_POINT_FTL] - fr.verts[FRUSTUM_POINT_NTL]).UnsafeANormalize(); // ftl - ntl
+	fr.edges[FRUSTUM_EDGE_FTR_NTR] = (fr.verts[FRUSTUM_POINT_FTR] - fr.verts[FRUSTUM_POINT_NTR]).UnsafeANormalize(); // ftr - ntr
+	fr.edges[FRUSTUM_EDGE_FBR_NBR] = (fr.verts[FRUSTUM_POINT_FBR] - fr.verts[FRUSTUM_POINT_NBR]).UnsafeANormalize(); // fbr - nbr
+	fr.edges[FRUSTUM_EDGE_FBL_NBL] = (fr.verts[FRUSTUM_POINT_FBL] - fr.verts[FRUSTUM_POINT_NBL]).UnsafeANormalize(); // fbl - nbl
 }
 
 void CCamera::UpdateFrustum()
@@ -217,8 +217,8 @@ void CCamera::UpdateFrustum()
 	if (projType == PROJTYPE_PERSP) {
     const float tanHalfHFov = tanHalfFov * aspectRatio;
 
-    nAxisScales = {frustum.scales.z * tanHalfHFov, frustum.scales.z * tanHalfFov};
-    fAxisScales = {frustum.scales.w * tanHalfHFov, frustum.scales.w * tanHalfFov};
+    nAxisScales = {frustum.scales.z * tanHalfHFov, frustum.scales.z * tanHalfFov}; // x, y
+    fAxisScales = {frustum.scales.w * tanHalfHFov, frustum.scales.w * tanHalfFov}; // x, y
 	} else {
 		nAxisScales = {frustum.scales.x, frustum.scales.y};
 		fAxisScales = {frustum.scales.x, frustum.scales.y};

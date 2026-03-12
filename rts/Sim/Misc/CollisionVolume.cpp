@@ -152,6 +152,7 @@ void CollisionVolume::SetBoundingRadius() {
 	//   a call to SetAxisScales or to RescaleAxes
 	switch (volumeType) {
 		case COLVOL_TYPE_BOX: {
+			// would be an over-estimation for cylinders
 			volumeBoundingRadiusSq = halfAxisScalesSqr.x + halfAxisScalesSqr.y + halfAxisScalesSqr.z;
 			volumeBoundingRadius = math::sqrt(volumeBoundingRadiusSq);
 		} break;
@@ -294,12 +295,14 @@ float CollisionVolume::GetPointSurfaceDistance(const CMatrix44f& mv, const float
 			pt.y = std::clamp(pv.y, -halfAxisScales.y, halfAxisScales.y);
 			pt.z = std::clamp(pv.z, -halfAxisScales.z, halfAxisScales.z);
 
+			// float l = std::min(pv.x - pt.x, std::min(pv.y - pt.y, pv.z - pt.z));
 			d = pv.distance(pt);
 		} break;
 
 		case COLVOL_TYPE_SPHERE: {
 			float l = pv.Length();
 			d = std::max(l - volumeBoundingRadius, 0.0f);
+			//float3 pt = (pv / std::max(0.01f, l)) * d;
 		} break;
 
 		case COLVOL_TYPE_CYLINDER: {
@@ -317,7 +320,6 @@ float CollisionVolume::GetPointSurfaceDistance(const CMatrix44f& mv, const float
 		case COLVOL_TYPE_ELLIPSOID: {
 			d = GetEllipsoidDistance(pv);
 		} break;
-
 
 		default: {
 			assert(false);

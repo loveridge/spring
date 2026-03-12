@@ -328,7 +328,7 @@ void CSelectedUnitsHandler::HandleUnitBoxSelection(const CCamera::Frustum& frust
 				CMatrix44f unitMat(u->GetTransformMatrix(false));
 				unitMat.Translate(u->relMidPos);
 
-				if (!CCollisionHandler::IntersectVolumeWithFrustum(frustum, *unitVol, unitMat))
+				if (unitVol == nullptr || !CCollisionHandler::IntersectVolumeWithFrustum(frustum, *unitVol, unitMat))
 					continue;
 			}
 
