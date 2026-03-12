@@ -2445,8 +2445,8 @@ int LuaUnsyncedRead::GetUnitsInScreenRectangle(lua_State* L)
 		uint32_t count = 0;
 		CCamera::Frustum fr;
 		if (selectionPrimitive) {
-			const float vx = std::min(float(globalRendering->viewSizeX), 1.0f);
-			const float vy = std::min(float(globalRendering->viewSizeY), 1.0f);
+			const float vx = std::max(float(globalRendering->viewSizeX), 1.0f);
+			const float vy = std::max(float(globalRendering->viewSizeY), 1.0f);
 			const float nl = std::clamp(l / vx, 0.f, 1.f);
 			const float nr = std::clamp( r / vx, 0.f, 1.f);
 			// Viewport coordinates use a bottom-left origin, while BuildSelectionFrustum
@@ -2479,6 +2479,7 @@ int LuaUnsyncedRead::GetUnitsInScreenRectangle(lua_State* L)
 					if (selectionPrimitive == 3)
 						unitVol = &unit->unitDef->selectionVolume;
 
+					printf("selprim %d\n", selectionPrimitive);
 					CMatrix44f unitMat(unit->GetTransformMatrix(false));
 					unitMat.Translate(unit->relMidPos);
 
