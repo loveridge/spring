@@ -210,35 +210,6 @@ namespace
 					p[sAx1] += ahsSq[sAx1] * dir[sAx1] * invDenom;
 				}
 			} break;
-
-			case CollisionVolume::COLVOL_TYPE_PYRAMID: {
-				const int pAx = v.GetPrimaryAxis();
-				const int sAx0 = v.GetSecondaryAxis(0);
-				const int sAx1 = v.GetSecondaryAxis(1);
-
-				const float h = ahs[pAx];
-				const float lateral = (math::fabs(dir[sAx0]) * ahs[sAx0]) + (math::fabs(dir[sAx1]) * ahs[sAx1]);
-
-				// Pyramid model:
-				//   apex at p[pAx] - h
-				//   base plane at p[pAx] + h
-				//   best base corner adds ±ahs on the secondary axes
-				//
-				// Choose base iff:
-				//   dir·bestBaseCorner >= dir·apex
-				// => dir[pAx] * h + lateral >= -dir[pAx] * h
-				// => 2*h*dir[pAx] + lateral >= 0
-
-				if ((2.0f * h * dir[pAx] + lateral) >= 0.0f) {
-					// best base corner
-					p[pAx] += h;
-					p[sAx0] += (dir[sAx0] >= 0.0f) ? ahs[sAx0] : -ahs[sAx0];
-					p[sAx1] += (dir[sAx1] >= 0.0f) ? ahs[sAx1] : -ahs[sAx1];
-				} else {
-					// apex
-					p[pAx] -= h;
-				}
-			} break;
 		}
 
 		return p;

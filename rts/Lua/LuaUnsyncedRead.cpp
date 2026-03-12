@@ -2479,7 +2479,6 @@ int LuaUnsyncedRead::GetUnitsInScreenRectangle(lua_State* L)
 					if (selectionPrimitive == 3)
 						unitVol = &unit->unitDef->selectionVolume;
 
-					printf("selprim %d\n", selectionPrimitive);
 					CMatrix44f unitMat(unit->GetTransformMatrix(false));
 					unitMat.Translate(unit->relMidPos);
 

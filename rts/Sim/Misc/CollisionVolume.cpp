@@ -71,12 +71,11 @@ CollisionVolume::CollisionVolume(
 		case 'E': case 'e': { cvType = COLVOL_TYPE_ELLIPSOID; } break; // "[E|e]ll..."
 		case 'C': case 'c': { cvType = COLVOL_TYPE_CYLINDER;  } break; // "[C|c]yl..."
 		case 'B': case 'b': { cvType = COLVOL_TYPE_BOX;       } break; // "[B|b]ox"
-		case 'P': case 'p': { cvType = COLVOL_TYPE_PYRAMID;   } break; // "[F|f]rustum"
 		case 'S': case 's': { cvType = COLVOL_TYPE_SPHERE;    } break; // "[S|s]ph..."
 		default           : {                                 } break;
 	}
 
-	if (cvType == COLVOL_TYPE_CYLINDER || cvType == COLVOL_TYPE_PYRAMID) {
+	if (cvType == COLVOL_TYPE_CYLINDER) {
 		switch (cvAxisChar) {
 			case 'X': case 'x': { cvAxis = COLVOL_AXIS_X; } break;
 			case 'Y': case 'y': { cvAxis = COLVOL_AXIS_Y; } break;
@@ -152,10 +151,7 @@ void CollisionVolume::SetBoundingRadius() {
 	//   this must be called manually after either
 	//   a call to SetAxisScales or to RescaleAxes
 	switch (volumeType) {
-		case COLVOL_TYPE_BOX:
-		case COLVOL_TYPE_PYRAMID: {
-			// for rectangular pyramids, this is the max distance from the local origin
-			// to the base corners; for boxes it is the usual corner radius
+		case COLVOL_TYPE_BOX: {
 			volumeBoundingRadiusSq = halfAxisScalesSqr.x + halfAxisScalesSqr.y + halfAxisScalesSqr.z;
 			volumeBoundingRadius = math::sqrt(volumeBoundingRadiusSq);
 		} break;
@@ -225,11 +221,6 @@ void CollisionVolume::FixTypeAndScale(float3& scales) {
 			scales[volumeAxes[2]] =          scales[volumeAxes[1]];
 		} break;
 
-		case COLVOL_TYPE_PYRAMID: {
-			// no extra normalization; the primary axis is height and the
-			// secondary axes are the wide-end extents of the rectangular base
-		} break;
-
 		default: {
 		} break;
 	}
@@ -242,8 +233,6 @@ float3 CollisionVolume::GetWorldSpacePos(const CSolidObject* o, const float3& ex
 	// collision-volumes are always centered on midPos
 	return (o->midPos + o->GetObjectSpaceVec(axisOffsets + extOffsets));
 }
-
-
 
 float CollisionVolume::GetPointSurfaceDistance(const CUnit* u, const LocalModelPiece* lmp, const float3& pos) const {
 	RECOIL_DETAILED_TRACY_ZONE;
@@ -329,13 +318,6 @@ float CollisionVolume::GetPointSurfaceDistance(const CMatrix44f& mv, const float
 			d = GetEllipsoidDistance(pv);
 		} break;
 
-		case COLVOL_TYPE_PYRAMID: {
-			switch (volumeAxes[0]) {
-				case COLVOL_AXIS_X: { d = GetPyramidDistance(pv, 0, 1, 2); } break;
-				case COLVOL_AXIS_Y: { d = GetPyramidDistance(pv, 1, 0, 2); } break;
-				case COLVOL_AXIS_Z: { d = GetPyramidDistance(pv, 2, 0, 1); } break;
-			}
-		} break;
 
 		default: {
 			assert(false);
@@ -372,112 +354,6 @@ float CollisionVolume::GetCylinderDistance(const float3& pv, size_t axisA, size_
 
 	return d;
 }
-
-// Returns the minimum Euclidean outside distance from <pv> to this
-// rectangular pyramid. Interior points return 0.0f, so this is not a
-// signed distance function.
-float CollisionVolume::GetPyramidDistance(const float3& pv, size_t axisA, size_t axisB, size_t axisC) const
-{
-	RECOIL_DETAILED_TRACY_ZONE;
-
-	// The rectangular pyramid is represented by:
-	//   primary axis in [-h, +h]
-	//   apex at primary = -h
-	//   rectangular base at primary = +h with half-extents {b, c}
-	//
-	// For a fixed primary coordinate x, the best secondary coordinates are just
-	// the clamped point onto the rectangle whose half-extents vary linearly with x.
-	// This reduces the outside-distance query to a 1D convex minimization.
-
-	const float h  = halfAxisScales[axisA];
-	const float hb = halfAxisScales[axisB];
-	const float hc = halfAxisScales[axisC];
-
-	assert(h  > 0.0f);
-	assert(hb > 0.0f);
-	assert(hc > 0.0f);
-
-	const float pa = pv[axisA];
-	const float pb = math::fabs(pv[axisB]);
-	const float pc = math::fabs(pv[axisC]);
-
-	const float kb = hb / (2.0f * h);
-	const float kc = hc / (2.0f * h);
-
-	auto clampPrimary = [](float x, float hScale) {
-		return std::clamp(x, -hScale, hScale);
-	};
-
-	auto extentB = [&](float x) {
-		return hb * ((x + h) / (2.0f * h));
-	};
-
-	auto extentC = [&](float x) {
-		return hc * ((x + h) / (2.0f * h));
-	};
-
-	auto distSqAt = [&](float x) {
-		x = clampPrimary(x, h);
-
-		const float eb = extentB(x);
-		const float ec = extentC(x);
-
-		const float db = std::max(pb - eb, 0.0f);
-		const float dc = std::max(pc - ec, 0.0f);
-		const float da = x - pa;
-
-		return (da * da + db * db + dc * dc);
-	};
-
-	// Breakpoints where the point transitions from "outside" to "inside"
-	// the linearly expanding cross-section on each secondary axis.
-	const float xBreakB = clampPrimary((2.0f * h * pb / hb) - h, h);
-	const float xBreakC = clampPrimary((2.0f * h * pc / hc) - h, h);
-
-	float xs[4] = {-h, xBreakB, xBreakC, h};
-
-	// sort 4 values
-	std::sort(xs, xs + 4);
-
-	float minDistSq = distSqAt(pa);
-
-	// Always consider interval boundaries
-	for (int i = 0; i < 4; ++i) {
-		minDistSq = std::min(minDistSq, distSqAt(xs[i]));
-	}
-
-	for (int i = 0; i < 3; ++i) {
-		const float xl = xs[i + 0];
-		const float xr = xs[i + 1];
-
-		if ((xr - xl) <= 1e-6f)
-			continue;
-
-		const float xm = (xl + xr) * 0.5f;
-		const bool activeB = (xm < xBreakB);
-		const bool activeC = (xm < xBreakC);
-
-		float denom = 1.0f;
-		float numer = pa;
-
-		if (activeB) {
-			denom += kb * kb;
-			numer += kb * pb - kb * kb * h;
-		}
-		if (activeC) {
-			denom += kc * kc;
-			numer += kc * pc - kc * kc * h;
-		}
-
-		float xOpt = numer / denom;
-		xOpt = std::clamp(xOpt, xl, xr);
-
-		minDistSq = std::min(minDistSq, distSqAt(xOpt));
-	}
-
-	return math::sqrt(minDistSq);
-}
-
 #define MAX_ITERATIONS 10
 #define THRESHOLD 0.001
 
