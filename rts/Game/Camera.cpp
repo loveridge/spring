@@ -474,6 +474,48 @@ CCamera::Frustum CCamera::BuildSelectionFrustum(float l, float t, float r, float
 	}
 }
 
+CCamera::Frustum CCamera::MakeMinimapSelectionFrustumProjected(float r0, float r1, float f0, float f1, float worldYMin,
+                                                               float worldYMax, const float3& RgtVector,
+                                                               const float3& FwdVector)
+{
+	CCamera::Frustum fr;
+
+	const float rmin = std::min(r0, r1);
+	const float rmax = std::max(r0, r1);
+	const float fmin = std::min(f0, f1);
+	const float fmax = std::max(f0, f1);
+
+	const float3 UpVector(0.0f, 1.0f, 0.0f);
+
+	fr.verts[FRUSTUM_POINT_NBL] = RgtVector * rmin + UpVector * worldYMin + FwdVector * fmin;
+	fr.verts[FRUSTUM_POINT_NBR] = RgtVector * rmax + UpVector * worldYMin + FwdVector * fmin;
+	fr.verts[FRUSTUM_POINT_NTR] = RgtVector * rmax + UpVector * worldYMin + FwdVector * fmax;
+	fr.verts[FRUSTUM_POINT_NTL] = RgtVector * rmin + UpVector * worldYMin + FwdVector * fmax;
+
+	fr.verts[FRUSTUM_POINT_FBL] = RgtVector * rmin + UpVector * worldYMax + FwdVector * fmin;
+	fr.verts[FRUSTUM_POINT_FBR] = RgtVector * rmax + UpVector * worldYMax + FwdVector * fmin;
+	fr.verts[FRUSTUM_POINT_FTR] = RgtVector * rmax + UpVector * worldYMax + FwdVector * fmax;
+	fr.verts[FRUSTUM_POINT_FTL] = RgtVector * rmin + UpVector * worldYMax + FwdVector * fmax;
+
+	fr.planes[FRUSTUM_PLANE_LFT] = float4(RgtVector, -rmin);
+	fr.planes[FRUSTUM_PLANE_RGT] = float4(-RgtVector, rmax);
+	fr.planes[FRUSTUM_PLANE_BOT] = float4(FwdVector, -fmin);
+	fr.planes[FRUSTUM_PLANE_TOP] = float4(-FwdVector, fmax);
+	fr.planes[FRUSTUM_PLANE_NEA] = float4(UpVector, -worldYMin);
+	fr.planes[FRUSTUM_PLANE_FAR] = float4(-UpVector, worldYMax);
+
+	fr.edges[FRUSTUM_EDGE_NTR_NTL] = fr.verts[FRUSTUM_POINT_NTR] - fr.verts[FRUSTUM_POINT_NTL];
+	fr.edges[FRUSTUM_EDGE_NTL_NBL] = fr.verts[FRUSTUM_POINT_NTL] - fr.verts[FRUSTUM_POINT_NBL];
+	fr.edges[FRUSTUM_EDGE_FTL_NTL] = fr.verts[FRUSTUM_POINT_FTL] - fr.verts[FRUSTUM_POINT_NTL];
+	fr.edges[FRUSTUM_EDGE_FTR_NTR] = fr.verts[FRUSTUM_POINT_FTR] - fr.verts[FRUSTUM_POINT_NTR];
+	fr.edges[FRUSTUM_EDGE_FBR_NBR] = fr.verts[FRUSTUM_POINT_FBR] - fr.verts[FRUSTUM_POINT_NBR];
+	fr.edges[FRUSTUM_EDGE_FBL_NBL] = fr.verts[FRUSTUM_POINT_FBL] - fr.verts[FRUSTUM_POINT_NBL];
+
+	fr.scales = float4(rmax - rmin, fmax - fmin, worldYMin, worldYMax);
+
+	return fr;
+}
+
 #if 0
 // axis-aligned bounding box test (AABB)
 bool CCamera::InView(const AABB& aabb) const

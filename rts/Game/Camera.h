@@ -258,6 +258,24 @@ public:
 	 */
 	Frustum BuildSelectionFrustum(float l, float t, float r, float b) const;
 
+	/**
+	 * Two conditions must hold:
+	 * RgtVector and FwdVector should be unit length.
+	 * They should be orthogonal on the selection plane.
+	 *
+	 * @param r0
+	 * @param r1
+	 * @param f0
+	 * @param f1
+	 * @param worldYMin
+	 * @param worldYMax
+	 * @param RgtVector
+	 * @param FwdVector
+	 * @return Frustum
+	 */
+	static Frustum MakeMinimapSelectionFrustumProjected(float r0, float r1, float f0, float f1,
+	        float worldYMin, float worldYMax, const float3& RgtVector, const float3& FwdVector);
+
 private:
 	Frustum BuildPerspectiveSubFrustum(float l, float t, float r, float b) const;
 	Frustum BuildOrthoSubFrustum(float l, float t, float r, float b) const;
