@@ -72,8 +72,10 @@ static bool IntersectsVolume(const CollisionVolume& vol, const CMatrix44f& mat, 
 }
 
 static CCamera::Frustum PyramidToFrustum(
-	const CollisionVolume& pyramid,
+	const float3& pyramidShape,
 	const CMatrix44f& pyramidToWorld,
+	const float3& pyramidOffsets,
+	int primaryAxis,
 	float nearFrac = 1e-4f   // small slice away from apex; exact apex is degenerate
 )
 {
@@ -81,12 +83,28 @@ static CCamera::Frustum PyramidToFrustum(
 
 	CCamera::Frustum fr;
 
-	const int pAx  = pyramid.GetPrimaryAxis();
-	const int sAx0 = pyramid.GetSecondaryAxis(0);
-	const int sAx1 = pyramid.GetSecondaryAxis(1);
+	const int pAx = primaryAxis;
+	int sAx0 = CollisionVolume::COLVOL_AXIS_X;
+	int sAx1 = CollisionVolume::COLVOL_AXIS_Y;
 
-	const float3 h = pyramid.GetHScales();
-	const float3 o = pyramid.GetOffsets();
+	switch (pAx) {
+		case CollisionVolume::COLVOL_AXIS_X: {
+			sAx0 = CollisionVolume::COLVOL_AXIS_Y;
+			sAx1 = CollisionVolume::COLVOL_AXIS_Z;
+		} break;
+		case CollisionVolume::COLVOL_AXIS_Y: {
+			sAx0 = CollisionVolume::COLVOL_AXIS_X;
+			sAx1 = CollisionVolume::COLVOL_AXIS_Z;
+		} break;
+		case CollisionVolume::COLVOL_AXIS_Z:
+		default: {
+			sAx0 = CollisionVolume::COLVOL_AXIS_X;
+			sAx1 = CollisionVolume::COLVOL_AXIS_Y;
+		} break;
+	}
+
+	const float3 h = pyramidShape * 0.5f;
+	const float3& o = pyramidOffsets;
 
 	const float hp  = h[pAx];
 	const float hs0 = h[sAx0];
@@ -621,9 +639,7 @@ TEST_CASE("CollisionHandler_PyramidVsCylinder + frustum tests")
 
 	for (const auto& tc : cases) {
 		DYNAMIC_SECTION(tc.name) {
-			CollisionVolume pyramid;
-			pyramid.InitShape(tc.pyramidShape, float3(0.000f, 0.000f, 0.000f), 3, 1, 2);
-			const CCamera::Frustum frustum = PyramidToFrustum(pyramid, tc.pyramidMat);
+			const CCamera::Frustum frustum = PyramidToFrustum(tc.pyramidShape, tc.pyramidMat, ZeroVector, CollisionVolume::COLVOL_AXIS_Z);
 			const bool frustumHit = CCollisionHandler::IntersectVolumeWithFrustum(frustum, testVol, testMat);
 			CHECK(frustumHit == tc.intersects);
 		}
@@ -755,9 +771,7 @@ TEST_CASE("CollisionHandler_PyramidVsBox")
 
 	for (const auto& tc : cases) {
 		DYNAMIC_SECTION(tc.name) {
-			CollisionVolume pyramid;
-			pyramid.InitShape(tc.pyramidShape, float3(0.0f, 0.0f, 0.0f), 3, 1, 2);
-			const CCamera::Frustum frustum = PyramidToFrustum(pyramid, tc.pyramidMat);
+			const CCamera::Frustum frustum = PyramidToFrustum(tc.pyramidShape, tc.pyramidMat, ZeroVector, CollisionVolume::COLVOL_AXIS_Z);
 			const bool frustumHit = CCollisionHandler::IntersectVolumeWithFrustum(frustum, testVol, testMat);
 			CHECK(frustumHit == tc.intersects);
 		}
@@ -869,9 +883,7 @@ TEST_CASE("CollisionHandler_PyramidVsEllipse")
 
 	for (const auto& tc : cases) {
 		DYNAMIC_SECTION(tc.name) {
-			CollisionVolume pyramid;
-			pyramid.InitShape(tc.pyramidShape, float3(0.0f, 0.0f, 0.0f), 3, 1, 2);
-			const CCamera::Frustum frustum = PyramidToFrustum(pyramid, tc.pyramidMat);
+			const CCamera::Frustum frustum = PyramidToFrustum(tc.pyramidShape, tc.pyramidMat, ZeroVector, CollisionVolume::COLVOL_AXIS_Z);
 			const bool frustumHit = CCollisionHandler::IntersectVolumeWithFrustum(frustum, testVol, testMat);
 			CHECK(frustumHit == tc.intersects);
 		}
@@ -961,9 +973,7 @@ TEST_CASE("CollisionHandler_PyramidVsSphere")
 
 	for (const auto& tc : cases) {
 		DYNAMIC_SECTION(tc.name) {
-			CollisionVolume pyramid;
-			pyramid.InitShape(tc.pyramidShape, float3(0.0f, 0.0f, 0.0f), 1, 1, 2);
-			const CCamera::Frustum frustum = PyramidToFrustum(pyramid, tc.pyramidMat);
+			const CCamera::Frustum frustum = PyramidToFrustum(tc.pyramidShape, tc.pyramidMat, ZeroVector, CollisionVolume::COLVOL_AXIS_Z);
 			const bool frustumHit = CCollisionHandler::IntersectVolumeWithFrustum(frustum, testVol, testMat);
 			CHECK(frustumHit == tc.intersects);
 		}
