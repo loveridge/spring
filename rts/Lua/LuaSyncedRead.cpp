@@ -3027,7 +3027,7 @@ int LuaSyncedRead::GetUnitsInRectangle(lua_State* L)
 			if (unitVol != nullptr) {
 				const float3 visibleBasePos = visibleMidPos - unit->relMidPos;
 				CMatrix44f volMat = unit->ComposeMatrix(visibleBasePos);
-				volMat.Translate(unit->relMidPos + unitVol->GetOffsets());
+				volMat.Translate(unit->relMidPos);
 
 				return CCollisionHandler::IntersectVolumeWithFrustum(frustum, *unitVol, volMat);
 			}
@@ -3108,7 +3108,7 @@ int LuaSyncedRead::GetUnitsInBox(lua_State* L)
 			if (unitVol != nullptr) {
 				const float3 visibleBasePos = visibleMidPos - unit->relMidPos;
 				CMatrix44f volMat = unit->ComposeMatrix(visibleBasePos);
-				volMat.Translate(unit->relMidPos + unitVol->GetOffsets());
+				volMat.Translate(unit->relMidPos);
 
 				return CCollisionHandler::IntersectVolume(*unitVol, volMat, queryVol, queryMat);
 			}
@@ -3172,7 +3172,7 @@ int LuaSyncedRead::GetUnitsInCylinder(lua_State* L)
 				const float3 visibleBasePos = visibleMidPos - unit->relMidPos;
 
 				CMatrix44f volMat = unit->ComposeMatrix(visibleBasePos);
-				volMat.Translate(unit->relMidPos + unitVol->GetOffsets());
+				volMat.Translate(unit->relMidPos);
 
 				return CCollisionHandler::IntersectVolume(*unitVol, volMat, queryVol, queryMat);
 			}
@@ -3236,7 +3236,7 @@ int LuaSyncedRead::GetUnitsInSphere(lua_State* L)
 			if (unitVol != nullptr) {
 				const float3 visibleBasePos = visibleMidPos - unit->relMidPos;
 				CMatrix44f volMat = unit->ComposeMatrix(visibleBasePos);
-				volMat.Translate(unit->relMidPos + unitVol->GetOffsets());
+				volMat.Translate(unit->relMidPos);
 
 				return CCollisionHandler::IntersectVolume(*unitVol, volMat, queryVol, queryMat);
 			}
