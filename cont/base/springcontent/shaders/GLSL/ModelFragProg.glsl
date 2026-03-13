@@ -14,6 +14,10 @@
 	uniform sampler2DShadow shadowTex;
 	uniform sampler2D shadowColorTex;
 	uniform float shadowDensity;
+	uniform mat4 shadowDepthTransform;
+	uniform mat4 shadowViewMat[4];
+	uniform vec4 shadowCascadeAtlas[4];
+	uniform float shadowCascadeSplits[4];
 #endif
 
 // in opaque passes tc.a is always 1.0 [all objects], and alphaPass is 0.0
@@ -28,11 +32,55 @@ varying vec3 cameraDir;
 varying float fogFactor;
 varying vec3 normalv;
 
+#if (USE_SHADOWS == 1)
+int SelectShadowCascade(float depthValue) {
+	if (depthValue <= shadowCascadeSplits[0]) return 0;
+	if (depthValue <= shadowCascadeSplits[1]) return 1;
+	if (depthValue <= shadowCascadeSplits[2]) return 2;
+	return 3;
+}
+
+vec3 GetCascadeDebugTint(int cascadeIdx) {
+	if (cascadeIdx == 0) return vec3(1.0, 0.25, 0.25);
+	if (cascadeIdx == 3) return vec3(0.25, 0.25, 1.0);
+	return vec3(0.25, 1.0, 0.25);
+}
+
+vec4 GetShadowCoord(vec4 worldPos, int cascadeIdx) {
+	if (cascadeIdx == 0) {
+		vec4 sc = shadowViewMat[0] * worldPos;
+		sc.xy += vec2(0.5);
+		sc.xy = sc.xy * shadowCascadeAtlas[0].xy + shadowCascadeAtlas[0].zw;
+		return sc;
+	}
+	if (cascadeIdx == 1) {
+		vec4 sc = shadowViewMat[1] * worldPos;
+		sc.xy += vec2(0.5);
+		sc.xy = sc.xy * shadowCascadeAtlas[1].xy + shadowCascadeAtlas[1].zw;
+		return sc;
+	}
+	if (cascadeIdx == 2) {
+		vec4 sc = shadowViewMat[2] * worldPos;
+		sc.xy += vec2(0.5);
+		sc.xy = sc.xy * shadowCascadeAtlas[2].xy + shadowCascadeAtlas[2].zw;
+		return sc;
+	}
+
+	vec4 sc = shadowViewMat[3] * worldPos;
+	sc.xy += vec2(0.5);
+	sc.xy = sc.xy * shadowCascadeAtlas[3].xy + shadowCascadeAtlas[3].zw;
+	return sc;
+}
+#endif
+
 vec3 GetShadowMult(float NdotL) {
 	#if (USE_SHADOWS == 1)
-		vec3 shadowCoord = shadowVertexPos.xyz / shadowVertexPos.w;
-		float sh = min(shadow2DProj(shadowTex, shadowVertexPos).r, smoothstep(0.0, 0.35, NdotL));
-		vec3 shColor = texture2D(shadowColorTex, shadowCoord.xy).rgb;
+		float depthValue = -(shadowDepthTransform * vertexWorldPos).z;
+		int cascadeIdx = SelectShadowCascade(depthValue);
+		vec4 shadowCoordProj = GetShadowCoord(vertexWorldPos, cascadeIdx);
+		vec3 shadowCoord = shadowCoordProj.xyz / shadowCoordProj.w;
+		float sh = min(shadow2DProj(shadowTex, shadowCoordProj).r, smoothstep(0.0, 0.35, NdotL));
+		vec3 shColor = texture2D(shadowColorTex, shadowCoord.xy).rgb * GetCascadeDebugTint(cascadeIdx);
 		return mix(1.0, sh, shadowDensity) * shColor;
 	#else
 		return vec3(1.0);
@@ -129,4 +177,3 @@ void main(void)
 	gl_FragColor.a   = alpha;
 #endif
 }
-

@@ -478,6 +478,7 @@ bool CGroundDecalHandler::ReloadDecalShaders() {
 	);
 	const auto& identityMat = CMatrix44f::Identity();
 	decalShader->SetUniformMatrix4x4("shadowMatrix", false, &identityMat.m[0]);
+	shadowHandler.SetShadowSamplingUniforms(decalShader);
 
 	decalShader->Disable();
 	SunChanged();
@@ -825,8 +826,10 @@ void CGroundDecalHandler::Draw()
 
 	decalShader->SetUniform("infoTexIntensityMul", float(infoTextureHandler->InMetalMode()) + 1.0f);
 	decalShader->SetUniform("curAdjustedFrame", std::max(gs->frameNum, 0) + globalRendering->timeOffset);
-	if (shadowHandler.ShadowsLoaded())
+	if (shadowHandler.ShadowsLoaded()) {
 		decalShader->SetUniformMatrix4x4("shadowMatrix", false, shadowHandler.GetShadowMatrixRaw());
+		shadowHandler.SetShadowSamplingUniforms(decalShader);
+	}
 
 	vao.Bind();
 	glDrawArraysInstanced(GL_TRIANGLES, 0, 36, decals.size());

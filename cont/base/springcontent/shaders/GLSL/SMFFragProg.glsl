@@ -69,6 +69,10 @@ uniform vec2 infoTexGen;     // 1.0/(pwr2map{x,z} * SQUARE_SIZE)
 	uniform sampler2DShadow shadowTex;
 	uniform sampler2D shadowColorTex;
 	uniform mat4 shadowMat;
+	uniform mat4 shadowDepthTransform;
+	uniform mat4 shadowViewMat[4];
+	uniform vec4 shadowCascadeAtlas[4];
+	uniform float shadowCascadeSplits[4];
 #endif
 
 #ifdef SMF_WATER_ABSORPTION
@@ -255,6 +259,50 @@ vec4 GetSplatDetailTextureNormal(vec2 uv, out vec2 splatDetailStrength) {
 /***********************************************************************/
 // main()
 
+#ifdef HAVE_SHADOWS
+int SelectShadowCascade(float depthValue) {
+	if (depthValue <= shadowCascadeSplits[0]) return 0;
+	if (depthValue <= shadowCascadeSplits[1]) return 1;
+	if (depthValue <= shadowCascadeSplits[2]) return 2;
+	return 3;
+}
+
+vec3 GetCascadeDebugTint(int cascadeIdx) {
+	if (cascadeIdx == 0) return vec3(1.0, 0.25, 0.25);
+	if (cascadeIdx == 3) return vec3(1.25, 0.25, 1.0);
+	return vec3(0.25, 1.0, 0.25);
+}
+
+vec4 GetCascadeShadowCoord(vec4 worldPos) {
+	float depthValue = -(shadowDepthTransform * worldPos).z;
+	int cascadeIdx = SelectShadowCascade(depthValue);
+
+	if (cascadeIdx == 0) {
+		vec4 sc = shadowViewMat[0] * worldPos;
+		sc.xy += vec2(0.5);
+		sc.xy = sc.xy * shadowCascadeAtlas[0].xy + shadowCascadeAtlas[0].zw;
+		return sc;
+	}
+	if (cascadeIdx == 1) {
+		vec4 sc = shadowViewMat[1] * worldPos;
+		sc.xy += vec2(0.5);
+		sc.xy = sc.xy * shadowCascadeAtlas[1].xy + shadowCascadeAtlas[1].zw;
+		return sc;
+	}
+	if (cascadeIdx == 2) {
+		vec4 sc = shadowViewMat[2] * worldPos;
+		sc.xy += vec2(0.5);
+		sc.xy = sc.xy * shadowCascadeAtlas[2].xy + shadowCascadeAtlas[2].zw;
+		return sc;
+	}
+
+	vec4 sc = shadowViewMat[3] * worldPos;
+	sc.xy += vec2(0.5);
+	sc.xy = sc.xy * shadowCascadeAtlas[3].xy + shadowCascadeAtlas[3].zw;
+	return sc;
+}
+#endif
+
 #line 10257
 
 void main() {
@@ -363,11 +411,13 @@ void main() {
 
 	#if !defined(DEFERRED_MODE) && defined(HAVE_SHADOWS)
 	{
-		vec4 vertexShadowPos = shadowMat * vertexWorldPos;
-			vertexShadowPos.xy += vec2(0.5);
+		float depthValue = -(shadowDepthTransform * vertexWorldPos).z;
+		int cascadeIdx = SelectShadowCascade(depthValue);
+		vec4 vertexShadowPos = GetCascadeShadowCoord(vertexWorldPos);
+		vec3 shadowCoord = vertexShadowPos.xyz / vertexShadowPos.w;
 
 		// same as ARB shader: shadowCoeff = 1 - (1 - shadowCoeff) * groundShadowDensity
-		vec3 shadowColor = texture(shadowColorTex, vertexShadowPos.xy).rgb;
+		vec3 shadowColor = texture(shadowColorTex, shadowCoord.xy).rgb * GetCascadeDebugTint(cascadeIdx);
 		shadowCoeff = mix(vec3(1.0), shadow2DProj(shadowTex, vertexShadowPos).r * shadowColor, groundShadowDensity);
 	}
 	#endif
@@ -437,4 +487,3 @@ void main() {
 	fragColor.rgb = mix(gl_Fog.color.rgb, fragColor.rgb, fogFactor);
 #endif
 }
-

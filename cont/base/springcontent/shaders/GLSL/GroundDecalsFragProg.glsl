@@ -37,6 +37,10 @@ uniform vec2 screenSizeInverse; // 1/X, 1/Y
 uniform sampler2DShadow shadowTex;
 uniform sampler2D shadowColorTex;
 uniform mat4 shadowMatrix;
+uniform mat4 shadowDepthTransform;
+uniform mat4 shadowViewMat[4];
+uniform vec4 shadowCascadeAtlas[4];
+uniform float shadowCascadeSplits[4];
 #endif
 
 uniform float curAdjustedFrame;
@@ -184,13 +188,58 @@ float BiasedZ(float z0, vec2 dZduv, vec2 offset) {
 	return z0;
 }
 
+#ifdef HAVE_SHADOWS
+int SelectShadowCascade(float depthValue) {
+	if (depthValue <= shadowCascadeSplits[0]) return 0;
+	if (depthValue <= shadowCascadeSplits[1]) return 1;
+	if (depthValue <= shadowCascadeSplits[2]) return 2;
+	return 3;
+}
+
+vec3 GetCascadeDebugTint(int cascadeIdx) {
+	if (cascadeIdx == 0) return vec3(1.0, 0.25, 0.25);
+	if (cascadeIdx == 3) return vec3(1.25, 0.25, 1.0);
+	return vec3(0.25, 1.0, 0.25);
+}
+
+vec4 GetCascadeShadowCoord(vec3 worldPos) {
+	vec4 worldPos4 = vec4(worldPos, 1.0);
+	float depthValue = -(shadowDepthTransform * worldPos4).z;
+	int cascadeIdx = SelectShadowCascade(depthValue);
+
+	if (cascadeIdx == 0) {
+		vec4 sc = shadowViewMat[0] * worldPos4;
+		sc.xy += vec2(0.5);
+		sc.xy = sc.xy * shadowCascadeAtlas[0].xy + shadowCascadeAtlas[0].zw;
+		return sc;
+	}
+	if (cascadeIdx == 1) {
+		vec4 sc = shadowViewMat[1] * worldPos4;
+		sc.xy += vec2(0.5);
+		sc.xy = sc.xy * shadowCascadeAtlas[1].xy + shadowCascadeAtlas[1].zw;
+		return sc;
+	}
+	if (cascadeIdx == 2) {
+		vec4 sc = shadowViewMat[2] * worldPos4;
+		sc.xy += vec2(0.5);
+		sc.xy = sc.xy * shadowCascadeAtlas[2].xy + shadowCascadeAtlas[2].zw;
+		return sc;
+	}
+
+	vec4 sc = shadowViewMat[3] * worldPos4;
+	sc.xy += vec2(0.5);
+	sc.xy = sc.xy * shadowCascadeAtlas[3].xy + shadowCascadeAtlas[3].zw;
+	return sc;
+}
+#endif
+
 vec3 GetShadowColor(vec3 worldPos, float NdotL) {
 #ifdef HAVE_SHADOWS
-	vec4 shadowPos = shadowMatrix * vec4(worldPos, 1.0);
-	shadowPos.xy += vec2(0.5);
-	shadowPos /= shadowPos.w;
+	int cascadeIdx = SelectShadowCascade(-(shadowDepthTransform * vec4(worldPos, 1.0)).z);
+	vec4 shadowPosProj = GetCascadeShadowCoord(worldPos);
+	vec4 shadowPos = shadowPosProj / shadowPosProj.w;
 
-	vec3 shadowColor = texture(shadowColorTex, shadowPos.xy).rgb;
+	vec3 shadowColor = texture(shadowColorTex, shadowPos.xy).rgb * GetCascadeDebugTint(cascadeIdx);
 	#ifndef HIGH_QUALITY
 		float shadowFactor = texture(shadowTex, shadowPos.xyz);
 	#else
@@ -419,7 +468,7 @@ void main() {
 	vec3 lightCol = diffuseTerm * GetShadowColor(worldPos.xyz, dot(sunDir, N)) + groundAmbientColor.rgb;
 
 	fragColor.rgb = mainCol.rgb * lightCol;
-	
+
 	if (vGlowColor.a == 0.0) {
 		// overglow
 		glow += smoothstep(0.75, 1.0, glow) * 0.2 * abs(sin(0.02 * curAdjustedFrame));

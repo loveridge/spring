@@ -21,6 +21,7 @@ varying vec3 normal;
 varying vec4 shadingTexCoords;
 varying vec2 bladeTexCoords;
 varying vec3 ambientDiffuseLightTerm;
+varying vec4 vertexWorldPos;
 #if defined(HAVE_SHADOWS) || defined(SHADOW_GEN)
   varying vec4 shadowTexCoords;
 #endif
@@ -154,6 +155,7 @@ void main() {
 
 	shadingTexCoords = worldPos.xzxz * vec4(mapSizePO2, mapSize);
 	bladeTexCoords   = gl_MultiTexCoord0.st + texOffset;
+	vertexWorldPos   = worldPos;
 
 	gl_Position = gl_ProjectionMatrix * worldPos;
 

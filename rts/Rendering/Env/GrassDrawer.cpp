@@ -338,6 +338,7 @@ void CGrassDrawer::LoadGrassShaders() {
 		grassShaders[i]->SetUniform("groundShadowDensity", sunLighting->groundShadowDensity);
 		grassShaders[i]->SetUniformMatrix4x4("shadowMatrix", false, shadowHandler.GetShadowMatrixRaw());
 		grassShaders[i]->SetUniform4v("shadowParams", &shadowHandler.GetShadowParams().x);
+		shadowHandler.SetShadowSamplingUniforms(grassShaders[i]);
 		grassShaders[i]->Disable();
 		grassShaders[i]->Validate();
 
@@ -369,6 +370,7 @@ void CGrassDrawer::EnableShader(const GrassShaderProgram type) {
 	grassShader->SetUniform("groundShadowDensity", sunLighting->groundShadowDensity);
 	grassShader->SetUniformMatrix4x4("shadowMatrix", false, shadowHandler.GetShadowMatrixRaw());
 	grassShader->SetUniform4v("shadowParams", &shadowHandler.GetShadowParams().x);
+	shadowHandler.SetShadowSamplingUniforms(grassShader);
 
 	grassShader->SetUniform3v("ambientLightColor",  &sunLighting->modelAmbientColor.x);
 	grassShader->SetUniform3v("diffuseLightColor",  &sunLighting->modelDiffuseColor.x);
@@ -1062,5 +1064,4 @@ void CGrassDrawer::UnsyncedHeightMapUpdate(const SRectangle& rect)
 		}
 	}
 }
-
 

@@ -20,6 +20,7 @@
 #include "Rendering/Shaders/ShaderHandler.h"
 #include "Rendering/Shaders/Shader.h"
 #include "Rendering/GL/RenderBuffers.h"
+#include "Rendering/UniformConstants.h"
 #include "System/Config/ConfigHandler.h"
 #include "System/EventHandler.h"
 #include "System/Matrix44f.h"
@@ -124,14 +125,57 @@ void CShadowHandler::Kill()
 	shadowGenProgs.fill(nullptr);
 }
 
+float4 CShadowHandler::GetCascadeAtlasRect(unsigned int cascadeIdx) const
+{
+	// xy = scale, zw = bias
+	const unsigned int x = (cascadeIdx & 1u);
+	const unsigned int y = (cascadeIdx >> 1u);
 
+	return float4{
+		0.5f,
+		0.5f,
+		x * 0.5f,
+		y * 0.5f,
+	};
+}
+void CShadowHandler::ComputeCascadeSplits(CCamera* playerCam)
+{
+	const float n = std::max(1.0f, playerCam->GetNearPlaneDist());
+	const float f = std::max(n + 1.0f, playerCam->GetFarPlaneDist());
+	const float lambda = 0.65f;
+
+	cascades[0].splitNear = 0.0f;
+
+	for (unsigned int i = 1; i < SHADOW_CASCADE_COUNT; ++i) {
+		const float si = float(i) / float(SHADOW_CASCADE_COUNT);
+
+		const float logSplit = n * std::pow(f / n, si);
+		const float uniSplit = n + (f - n) * si;
+		const float splitDist = mix(uniSplit, logSplit, lambda);
+
+		cascades[i - 1].splitFar = (splitDist - n) / (f - n);
+		cascades[i].splitNear = cascades[i - 1].splitFar;
+	}
+
+	cascades[SHADOW_CASCADE_COUNT - 1].splitFar = 1.0f;
+
+	for (unsigned int i = 0; i < SHADOW_CASCADE_COUNT; ++i) {
+		cascades[i].atlasXform = GetCascadeAtlasRect(i);
+	}
+}
 void CShadowHandler::Update()
 {
 	CCamera* playCam = CCameraHandler::GetCamera(CCamera::CAMTYPE_PLAYER);
 	CCamera* shadCam = CCameraHandler::GetCamera(CCamera::CAMTYPE_SHADOW);
 
-	SetShadowMatrix(playCam, shadCam);
-	SetShadowCamera(shadCam);
+	ComputeCascadeSplits(playCam);
+
+	for (unsigned int i = 0; i < SHADOW_CASCADE_COUNT; ++i) {
+		SetShadowMatrix(playCam, shadCam, i);
+	}
+
+	// keep camera state sane for debug/legacy use
+	SetShadowCamera(shadCam, 0);
 }
 
 void CShadowHandler::SaveShadowMapTextures() const
@@ -527,63 +571,113 @@ static CMatrix44f ComposeScaleMatrix(const float4 scales)
 	return (CMatrix44f(FwdVector * 0.5f, RgtVector / scales.x, UpVector / scales.y, FwdVector / scales.w));
 }
 
-void CShadowHandler::SetShadowMatrix(CCamera* playerCam, CCamera* shadowCam)
+static float GetCascadeSplitViewDepth(const CCamera* playerCam, float splitFarNorm)
+{
+	const float nearDist = std::max(1.0f, playerCam->GetNearPlaneDist());
+	const float farDist = std::max(nearDist + 1.0f, playerCam->GetFarPlaneDist());
+	return mix(nearDist, farDist, splitFarNorm);
+}
+
+void CShadowHandler::SetShadowSamplingUniforms(Shader::IProgramObject* shader) const
+{
+	if (shader == nullptr)
+		return;
+
+	const CCamera* playerCam = CCameraHandler::GetCamera(CCamera::CAMTYPE_PLAYER);
+	const auto& playerView = playerCam->GetViewMatrix();
+	float cascadeAtlas[SHADOW_CASCADE_COUNT * 4] = {};
+	float cascadeSplits[SHADOW_CASCADE_COUNT] = {};
+
+	shader->SetUniformMatrix4x4("shadowDepthTransform", false, &playerView.m[0]);
+
+	for (unsigned int i = 0; i < SHADOW_CASCADE_COUNT; ++i) {
+		const std::string matName = fmt::format("shadowViewMat[{}]", i);
+		const float4& atlasXform = GetCascadeAtlasXform(i);
+
+		shader->SetUniformMatrix4x4(matName.c_str(), false, GetShadowViewMatrixRaw(i, SHADOWMAT_TYPE_DRAWING));
+		cascadeAtlas[i * 4 + 0] = atlasXform.x;
+		cascadeAtlas[i * 4 + 1] = atlasXform.y;
+		cascadeAtlas[i * 4 + 2] = atlasXform.z;
+		cascadeAtlas[i * 4 + 3] = atlasXform.w;
+		cascadeSplits[i] = GetCascadeSplitViewDepth(playerCam, GetCascadeSplitFar(i));
+	}
+
+	if (const GLint atlasLoc = glGetUniformLocation(shader->GetObjID(), "shadowCascadeAtlas[0]"); atlasLoc >= 0)
+		glUniform4fv(atlasLoc, SHADOW_CASCADE_COUNT, cascadeAtlas);
+
+	if (const GLint splitsLoc = glGetUniformLocation(shader->GetObjID(), "shadowCascadeSplits[0]"); splitsLoc >= 0)
+		glUniform1fv(splitsLoc, SHADOW_CASCADE_COUNT, cascadeSplits);
+}
+
+void CShadowHandler::SetShadowMatrix(CCamera* playerCam, CCamera* shadowCam, unsigned int cascadeIdx)
 {
 	const CMatrix44f lightMatrix = ComposeLightMatrix(playerCam, ISky::GetSky()->GetLight());
-	const CMatrix44f scaleMatrix = ComposeScaleMatrix(shadowProjScales = GetShadowProjectionScales(playerCam, lightMatrix));
+	const float4 projScales = GetShadowProjectionScales(playerCam, lightMatrix, cascadeIdx);
+	const CMatrix44f scaleMatrix = ComposeScaleMatrix(projScales);
 
-	// KISS; define only the world-to-light transform (P[CULLING] is unused anyway)
-	//
-	// we have two options: either place the camera such that it *looks at* projMidPos
-	// (along lightMatrix.GetZ()) or such that it is *at or behind* projMidPos looking
-	// in the inverse direction (the latter is chosen here since this matrix determines
-	// the shadow-camera's position and thereby terrain tessellation shadow-LOD)
-	// NOTE:
-	//   should be -X-Z, but particle-quads are sensitive to right being flipped
-	//   we can omit inverting X (does not impact VC) or disable PD face-culling
-	//   or just let objects end up behind znear since InView only tests against
-	//   zfar
-	viewMatrix[SHADOWMAT_TYPE_CULLING].LoadIdentity();
-	viewMatrix[SHADOWMAT_TYPE_CULLING].SetX(lightMatrix.GetX());
-	viewMatrix[SHADOWMAT_TYPE_CULLING].SetY(lightMatrix.GetY());
-	viewMatrix[SHADOWMAT_TYPE_CULLING].SetZ(lightMatrix.GetZ());
-	viewMatrix[SHADOWMAT_TYPE_CULLING].SetPos(projMidPos[2]);
+	cascades[cascadeIdx].projScales = projScales;
 
-	// shaders need this form, projection into SM-space is done by shadow2DProj()
-	// note: ShadowGenVertProg is a special case because it does not use uniforms
-	viewMatrix[SHADOWMAT_TYPE_DRAWING].LoadIdentity();
-	viewMatrix[SHADOWMAT_TYPE_DRAWING].SetX(lightMatrix.GetX());
-	viewMatrix[SHADOWMAT_TYPE_DRAWING].SetY(lightMatrix.GetY());
-	viewMatrix[SHADOWMAT_TYPE_DRAWING].SetZ(lightMatrix.GetZ());
-	viewMatrix[SHADOWMAT_TYPE_DRAWING].Scale(float3(scaleMatrix[0], scaleMatrix[5], scaleMatrix[10])); // extract (X.x, Y.y, Z.z)
-	viewMatrix[SHADOWMAT_TYPE_DRAWING].Transpose();
-	viewMatrix[SHADOWMAT_TYPE_DRAWING].SetPos(viewMatrix[SHADOWMAT_TYPE_DRAWING] * -projMidPos[2]);
-	viewMatrix[SHADOWMAT_TYPE_DRAWING].SetPos(viewMatrix[SHADOWMAT_TYPE_DRAWING].GetPos() + scaleMatrix.GetPos()); // add z-bias
+	// culling matrix
+	cascades[cascadeIdx].viewMatrix[SHADOWMAT_TYPE_CULLING].LoadIdentity();
+	cascades[cascadeIdx].viewMatrix[SHADOWMAT_TYPE_CULLING].SetX(lightMatrix.GetX());
+	cascades[cascadeIdx].viewMatrix[SHADOWMAT_TYPE_CULLING].SetY(lightMatrix.GetY());
+	cascades[cascadeIdx].viewMatrix[SHADOWMAT_TYPE_CULLING].SetZ(lightMatrix.GetZ());
+	cascades[cascadeIdx].viewMatrix[SHADOWMAT_TYPE_CULLING].SetPos(cascades[cascadeIdx].projMidPos);
+
+	// drawing matrix -> outputs [0,1] shadow texcoords before atlas packing
+	cascades[cascadeIdx].viewMatrix[SHADOWMAT_TYPE_DRAWING].LoadIdentity();
+	cascades[cascadeIdx].viewMatrix[SHADOWMAT_TYPE_DRAWING].SetX(lightMatrix.GetX());
+	cascades[cascadeIdx].viewMatrix[SHADOWMAT_TYPE_DRAWING].SetY(lightMatrix.GetY());
+	cascades[cascadeIdx].viewMatrix[SHADOWMAT_TYPE_DRAWING].SetZ(lightMatrix.GetZ());
+	cascades[cascadeIdx].viewMatrix[SHADOWMAT_TYPE_DRAWING].Scale(
+		float3(scaleMatrix[0], scaleMatrix[5], scaleMatrix[10])
+	);
+	cascades[cascadeIdx].viewMatrix[SHADOWMAT_TYPE_DRAWING].Transpose();
+	cascades[cascadeIdx].viewMatrix[SHADOWMAT_TYPE_DRAWING].SetPos(
+		cascades[cascadeIdx].viewMatrix[SHADOWMAT_TYPE_DRAWING] * -cascades[cascadeIdx].projMidPos
+	);
+	cascades[cascadeIdx].viewMatrix[SHADOWMAT_TYPE_DRAWING].SetPos(
+		cascades[cascadeIdx].viewMatrix[SHADOWMAT_TYPE_DRAWING].GetPos() + scaleMatrix.GetPos()
+	);
+
+	// all cascades share the same clip-control projection mapping
+	cascades[cascadeIdx].projMatrix[SHADOWMAT_TYPE_DRAWING] = projMatrix[SHADOWMAT_TYPE_DRAWING];
+	cascades[cascadeIdx].projMatrix[SHADOWMAT_TYPE_CULLING] = projMatrix[SHADOWMAT_TYPE_CULLING];
+
+	// preserve legacy aliases with cascade 0
+	if (cascadeIdx == 0) {
+		viewMatrix[SHADOWMAT_TYPE_CULLING] = cascades[0].viewMatrix[SHADOWMAT_TYPE_CULLING];
+		viewMatrix[SHADOWMAT_TYPE_DRAWING] = cascades[0].viewMatrix[SHADOWMAT_TYPE_DRAWING];
+		shadowProjScales = cascades[0].projScales;
+	}
 }
-
-void CShadowHandler::SetShadowCamera(CCamera* shadowCam)
+void CShadowHandler::SetShadowCamera(CCamera* shadowCam, unsigned int cascadeIdx)
 {
 	const int realShTexSize = shadowConfig > 0 ? shadowMapSize : 1;
+	const int cascadeTexSize = realShTexSize / 2;
 
-	// first set matrices needed by shaders (including ShadowGenVertProg)
-	shadowCam->SetProjMatrix(projMatrix[SHADOWMAT_TYPE_DRAWING]);
-	shadowCam->SetViewMatrix(viewMatrix[SHADOWMAT_TYPE_DRAWING]);
+	const auto& cascade = cascades[cascadeIdx];
+	const unsigned int atlasX = (cascadeIdx & 1u);
+	const unsigned int atlasY = (cascadeIdx >> 1u);
 
-	shadowCam->SetAspectRatio(shadowProjScales.x / shadowProjScales.y);
-	// convert xy-diameter to radius
-	shadowCam->SetFrustumScales(shadowProjScales * float4(0.5f, 0.5f, 1.0f, 1.0f));
+	shadowCam->SetProjMatrix(cascade.projMatrix[SHADOWMAT_TYPE_DRAWING]);
+	shadowCam->SetViewMatrix(cascade.viewMatrix[SHADOWMAT_TYPE_DRAWING]);
+
+	shadowCam->SetAspectRatio(cascade.projScales.x / cascade.projScales.y);
+	shadowCam->SetFrustumScales(cascade.projScales * float4(0.5f, 0.5f, 1.0f, 1.0f));
 	shadowCam->UpdateFrustum();
-	shadowCam->UpdateLoadViewport(0, 0, realShTexSize, realShTexSize);
-	// load matrices into gl_{ModelView,Projection}Matrix
+	shadowCam->UpdateLoadViewport(
+		atlasX * cascadeTexSize,
+		atlasY * cascadeTexSize,
+		cascadeTexSize,
+		cascadeTexSize
+	);
 	shadowCam->Update({false, false, false, false, false});
 
-	// next set matrices needed for SP visibility culling (these
-	// are *NEVER* loaded into gl_{ModelView,Projection}Matrix!)
-	shadowCam->SetProjMatrix(projMatrix[SHADOWMAT_TYPE_CULLING]);
-	shadowCam->SetViewMatrix(viewMatrix[SHADOWMAT_TYPE_CULLING]);
+	shadowCam->SetProjMatrix(cascade.projMatrix[SHADOWMAT_TYPE_CULLING]);
+	shadowCam->SetViewMatrix(cascade.viewMatrix[SHADOWMAT_TYPE_CULLING]);
 	shadowCam->UpdateFrustum();
 }
-
 
 void CShadowHandler::SetupShadowTexSampler(unsigned int texUnit, bool enable) const
 {
@@ -622,14 +716,8 @@ void CShadowHandler::ResetShadowTexSamplerRaw() const
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE);
 	glTexParameteri(GL_TEXTURE_2D, GL_DEPTH_TEXTURE_MODE, GL_LUMINANCE);
 }
-
-
 void CShadowHandler::CreateShadows()
 {
-	// NOTE:
-	//   we unbind later in WorldDrawer::GenerateIBLTextures() to save render
-	//   context switches (which are one of the slowest OpenGL operations!)
-	//   together with VP restoration
 	smOpaqFBO.Bind();
 
 	glDisable(GL_BLEND);
@@ -641,24 +729,48 @@ void CShadowHandler::CreateShadows()
 	glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 	glDepthMask(GL_TRUE);
 	glEnable(GL_DEPTH_TEST);
-	glClear(GL_DEPTH_BUFFER_BIT);
 
+	const int realShTexSize = shadowConfig > 0 ? shadowMapSize : 1;
+	const int cascadeTexSize = realShTexSize / 2;
 
-	//flickers without it. Why?
-	SetShadowCamera(CCameraHandler::GetCamera(CCamera::CAMTYPE_SHADOW));
-
+	CCamera* shadCam = CCameraHandler::GetCamera(CCamera::CAMTYPE_SHADOW);
 	CCamera* prvCam = CCameraHandler::GetSetActiveCamera(CCamera::CAMTYPE_SHADOW);
 
-	if (ISky::GetSky()->GetLight()->GetLightIntensity() > 0.0f)
-		DrawShadowPasses();
+	glEnable(GL_SCISSOR_TEST);
+
+	for (unsigned int i = 0; i < SHADOW_CASCADE_COUNT; ++i) {
+		const unsigned int atlasX = (i & 1u);
+		const unsigned int atlasY = (i >> 1u);
+
+		const int vx = atlasX * cascadeTexSize;
+		const int vy = atlasY * cascadeTexSize;
+
+		glViewport(vx, vy, cascadeTexSize, cascadeTexSize);
+		glScissor(vx, vy, cascadeTexSize, cascadeTexSize);
+
+		glClear(GL_DEPTH_BUFFER_BIT);
+
+		EnableColorOutput(true);
+		glClearColor(1.0f, 1.0f, 1.0f, 0.0f);
+		glClear(GL_COLOR_BUFFER_BIT);
+		EnableColorOutput(false);
+
+		SetActiveShadowCascade(i);
+		UniformConstants::GetInstance().UpdateMatrices();
+		SetShadowCamera(shadCam, i);
+
+		if (ISky::GetSky()->GetLight()->GetLightIntensity() > 0.0f)
+			DrawShadowPasses();
+	}
+
+	SetActiveShadowCascade(0);
+	UniformConstants::GetInstance().UpdateMatrices();
+	glDisable(GL_SCISSOR_TEST);
 
 	CCameraHandler::SetActiveCamera(prvCam->GetCamType());
 	prvCam->Update();
 
-
 	glShadeModel(GL_SMOOTH);
-
-	//revert to default, EnableColorOutput(true) is not enough
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 }
 
@@ -671,60 +783,27 @@ void CShadowHandler::EnableColorOutput(bool enable) const
 }
 
 
-
-float4 CShadowHandler::GetShadowProjectionScales(CCamera* playerCam, const CMatrix44f& lightViewMat) {
+float4 CShadowHandler::GetShadowProjectionScales(CCamera* playerCam, const CMatrix44f& lightViewMat, unsigned int cascadeIdx)
+{
 	float4 projScales;
-	float2 projRadius;
 
-	// NOTE:
-	//   the xy-scaling factors from CalcMinMaxView do not change linearly
-	//   or smoothly with camera movements, creating visible artefacts (eg.
-	//   large jumps in shadow resolution)
-	//
-	//   therefore, EITHER use "fixed" scaling values such that the entire
-	//   map barely fits into the sun's frustum (by pretending it is embedded
-	//   in a sphere and taking its diameter), OR variable scaling such that
-	//   everything that can be seen by the camera maximally fills the sun's
-	//   frustum (choice of projection-style is left to the user and can be
-	//   changed at run-time)
-	//
-	//   the first option means larger maps will have more blurred/aliased
-	//   shadows if the depth buffer is kept at the same size, but no (map)
-	//   geometry is ever omitted
-	//
-	//   the second option means shadows have higher average resolution, but
-	//   become less sharp as the viewing volume increases (through eg.camera
-	//   rotations) and geometry can be omitted in some cases
-	//
-	switch (shadowProMode) {
-		case SHADOWPROMODE_CAM_CENTER: {
-			projScales.x = GetOrthoProjectedFrustumRadius(playerCam, lightViewMat, projMidPos[2]);
-		} break;
-		case SHADOWPROMODE_MAP_CENTER: {
-			projScales.x = GetOrthoProjectedMapRadius(-lightViewMat.GetZ(), projMidPos[2]);
-		} break;
-		case SHADOWPROMODE_MIX_CAMMAP: {
-			projRadius.x = GetOrthoProjectedFrustumRadius(playerCam, lightViewMat, projMidPos[0]);
-			projRadius.y = GetOrthoProjectedMapRadius(-lightViewMat.GetZ(), projMidPos[1]);
-			projScales.x = std::min(projRadius.x, projRadius.y);
-
-			// pick the center position (0 or 1) for which radius is smallest
-			projMidPos[2] = projMidPos[projRadius.x >= projRadius.y];
-		} break;
-	}
+	// current init path forces CAM_CENTER anyway
+	projScales.x = GetOrthoProjectedFrustumRadius(
+		playerCam,
+		lightViewMat,
+		cascades[cascadeIdx].projMidPos,
+		cascades[cascadeIdx].splitNear,
+		cascades[cascadeIdx].splitFar
+	);
 
 	projScales.y = projScales.x;
-	#if 0
-	projScales.z = cam->GetNearPlaneDist();
-	projScales.w = cam->GetFarPlaneDist();
-	#else
-	// prefer slightly tighter fixed bounds
+
+	// keep fixed depth bounds for now
 	projScales.z = 0.0f;
 	projScales.w = readMap->GetBoundingRadius() * 2.0f;
-	#endif
+
 	return projScales;
 }
-
 float CShadowHandler::GetOrthoProjectedMapRadius(const float3& sunDir, float3& projPos) {
 	// to fit the map inside the frustum, we need to know
 	// the distance from one corner to its opposing corner
@@ -779,61 +858,50 @@ float CShadowHandler::GetOrthoProjectedMapRadius(const float3& sunDir, float3& p
 
 	return curMapDiameter;
 }
-
-float CShadowHandler::GetOrthoProjectedFrustumRadius(CCamera* playerCam, const CMatrix44f& lightViewMat, float3& centerPos) {
+float CShadowHandler::GetOrthoProjectedFrustumRadius(CCamera* playerCam, const CMatrix44f& lightViewMat, float3& centerPos, float splitNear, float splitFar)
+{
 	float3 frustumPoints[8];
 
-	#if 0
-	{
-		float sqRadius = 0.0f;
-		projPos = CalcShadowProjectionPos(playerCam, &frustumPoints[0]);
+	CMatrix44f lightViewCenterMat;
+	lightViewCenterMat.SetX(lightViewMat.GetX());
+	lightViewCenterMat.SetY(lightViewMat.GetY());
+	lightViewCenterMat.SetZ(lightViewMat.GetZ());
 
-		// calculate radius of the minimally-bounding sphere around projected frustum
-		for (unsigned int n = 0; n < 8; n++) {
-			sqRadius = std::max(sqRadius, (frustumPoints[n] - projPos).SqLength());
-		}
+	centerPos = CalcShadowProjectionPos(playerCam, &frustumPoints[0], splitNear, splitFar);
+	lightViewCenterMat.SetPos(centerPos);
 
-		const float maxMapDiameter = readMap->GetBoundingRadius() * 2.0f;
-		const float frustumDiameter = std::sqrt(sqRadius) * 2.0f;
+	float2 xbounds = { std::numeric_limits<float>::max(), -std::numeric_limits<float>::max() };
+	float2 ybounds = { std::numeric_limits<float>::max(), -std::numeric_limits<float>::max() };
 
-		return (std::min(maxMapDiameter, frustumDiameter));
+	for (unsigned int n = 0; n < 8; ++n) {
+		frustumPoints[n] = lightViewCenterMat * frustumPoints[n];
+
+		xbounds.x = std::min(xbounds.x, frustumPoints[n].x);
+		xbounds.y = std::max(xbounds.y, frustumPoints[n].x);
+		ybounds.x = std::min(ybounds.x, frustumPoints[n].y);
+		ybounds.y = std::max(ybounds.y, frustumPoints[n].y);
 	}
-	#else
-	{
-		CMatrix44f lightViewCenterMat;
-		lightViewCenterMat.SetX(lightViewMat.GetX());
-		lightViewCenterMat.SetY(lightViewMat.GetY());
-		lightViewCenterMat.SetZ(lightViewMat.GetZ());
-		centerPos = CalcShadowProjectionPos(playerCam, &frustumPoints[0]);
-		lightViewCenterMat.SetPos(centerPos);
 
-		// find projected width along {x,z}-axes (.x := min, .y := max)
-		float2 xbounds = {std::numeric_limits<float>::max(), -std::numeric_limits<float>::max()};
-		float2 zbounds = {std::numeric_limits<float>::max(), -std::numeric_limits<float>::max()};
-
-		for (unsigned int n = 0; n < 8; n++) {
-			frustumPoints[n] = lightViewCenterMat * frustumPoints[n];
-
-			xbounds.x = std::min(xbounds.x, frustumPoints[n].x);
-			xbounds.y = std::max(xbounds.y, frustumPoints[n].x);
-			zbounds.x = std::min(zbounds.x, frustumPoints[n].z);
-			zbounds.y = std::max(zbounds.y, frustumPoints[n].z);
-		}
-
-		// factor in z-bounds to prevent clipping
-		return (std::min(readMap->GetBoundingRadius() * 2.0f, std::max(xbounds.y - xbounds.x, zbounds.y - zbounds.x)));
-	}
-	#endif
+	// use XY footprint in light space; previous code mixed x/z, which is not appropriate once Z is light depth
+	const float diameter = std::max(xbounds.y - xbounds.x, ybounds.y - ybounds.x);
+	return std::min(readMap->GetBoundingRadius() * 2.0f, diameter);
 }
-
-float3 CShadowHandler::CalcShadowProjectionPos(CCamera* playerCam, float3* frustumPoints)
+float3 CShadowHandler::CalcShadowProjectionPos(CCamera* playerCam, float3* frustumPoints, float splitNear, float splitFar)
 {
 	static constexpr float T1 = 100.0f;
 	static constexpr float T2 = 200.0f;
 
 	float3 projPos;
-	for (int i = 0; i < 8; ++i)
-		frustumPoints[i] = playerCam->GetFrustumVert(i);
+
+	// build sliced frustum
+	for (int i = 0; i < 4; ++i) {
+		const float3 nearV = playerCam->GetFrustumVert(i + 0);
+		const float3 farV  = playerCam->GetFrustumVert(i + 4);
+		const float3 dir   = farV - nearV;
+
+		frustumPoints[i + 0] = nearV + dir * splitNear; // near slice
+		frustumPoints[i + 4] = nearV + dir * splitFar;  // far slice
+	}
 
 	const std::initializer_list<float4> clipPlanes = {
 		float4{-UpVector,  (readMap->GetCurrMaxHeight() + T1) },
@@ -841,21 +909,17 @@ float3 CShadowHandler::CalcShadowProjectionPos(CCamera* playerCam, float3* frust
 	};
 
 	for (int i = 0; i < 4; ++i) {
-		//near quadrilateral
 		ClipRayByPlanes(frustumPoints[4 + i], frustumPoints[i], clipPlanes);
-		//far quadrilateral
 		ClipRayByPlanes(frustumPoints[i], frustumPoints[4 + i], clipPlanes);
 
-		//hard clamp xz
-		frustumPoints[    i].x = std::clamp(frustumPoints[    i].x, -T2, mapDims.mapx * SQUARE_SIZE + T2);
-		frustumPoints[    i].z = std::clamp(frustumPoints[    i].z, -T2, mapDims.mapy * SQUARE_SIZE + T2);
-		frustumPoints[4 + i].x = std::clamp(frustumPoints[4 + i].x, -T2, mapDims.mapx * SQUARE_SIZE + T2);
-		frustumPoints[4 + i].z = std::clamp(frustumPoints[4 + i].z, -T2, mapDims.mapy * SQUARE_SIZE + T2);
+		frustumPoints[i + 0].x = std::clamp(frustumPoints[i + 0].x, -T2, mapDims.mapx * SQUARE_SIZE + T2);
+		frustumPoints[i + 0].z = std::clamp(frustumPoints[i + 0].z, -T2, mapDims.mapy * SQUARE_SIZE + T2);
+		frustumPoints[i + 4].x = std::clamp(frustumPoints[i + 4].x, -T2, mapDims.mapx * SQUARE_SIZE + T2);
+		frustumPoints[i + 4].z = std::clamp(frustumPoints[i + 4].z, -T2, mapDims.mapy * SQUARE_SIZE + T2);
 
-		projPos += frustumPoints[i] + frustumPoints[4 + i];
+		projPos += frustumPoints[i + 0] + frustumPoints[i + 4];
 	}
 
 	projPos *= 0.125f;
-
 	return projPos;
 }

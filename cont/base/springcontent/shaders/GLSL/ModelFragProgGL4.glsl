@@ -6,6 +6,10 @@ layout(binding = 1) uniform sampler2D tex2;
 #if (USE_SHADOWS == 1)
 	layout(binding = 2) uniform sampler2DShadow shadowTex;
 	layout(binding = 3) uniform sampler2D shadowColorTex;
+	uniform mat4 shadowDepthTransform;
+	uniform mat4 shadowViewMat[4];
+	uniform vec4 shadowCascadeAtlas[4];
+	uniform float shadowCascadeSplits[4];
 #endif
 
 layout(binding = 4) uniform samplerCube reflectTex;
@@ -80,6 +84,50 @@ vec3 GetShadowMult(vec3 shadowCoord, float NdotL) {
 	#endif
 }
 
+#if (USE_SHADOWS == 1)
+int SelectShadowCascade(float depthValue) {
+	if (depthValue <= shadowCascadeSplits[0]) return 0;
+	if (depthValue <= shadowCascadeSplits[1]) return 1;
+	if (depthValue <= shadowCascadeSplits[2]) return 2;
+	return 3;
+}
+
+vec3 GetCascadeDebugTint(int cascadeIdx) {
+	if (cascadeIdx == 0) return vec3(1.0, 0.25, 0.25);
+	if (cascadeIdx == 3) return vec3(1.25, 0.25, 1.0);
+	return vec3(0.25, 1.0, 0.25);
+}
+
+vec3 GetCascadeShadowCoord(vec4 worldPos, out int cascadeIdx) {
+	float depthValue = -(shadowDepthTransform * worldPos).z;
+	cascadeIdx = SelectShadowCascade(depthValue);
+
+	if (cascadeIdx == 0) {
+		vec4 sc = shadowViewMat[0] * worldPos;
+		sc.xy += vec2(0.5);
+		sc.xy = sc.xy * shadowCascadeAtlas[0].xy + shadowCascadeAtlas[0].zw;
+		return sc.xyz / sc.w;
+	}
+	if (cascadeIdx == 1) {
+		vec4 sc = shadowViewMat[1] * worldPos;
+		sc.xy += vec2(0.5);
+		sc.xy = sc.xy * shadowCascadeAtlas[1].xy + shadowCascadeAtlas[1].zw;
+		return sc.xyz / sc.w;
+	}
+	if (cascadeIdx == 2) {
+		vec4 sc = shadowViewMat[2] * worldPos;
+		sc.xy += vec2(0.5);
+		sc.xy = sc.xy * shadowCascadeAtlas[2].xy + shadowCascadeAtlas[2].zw;
+		return sc.xyz / sc.w;
+	}
+
+	vec4 sc = shadowViewMat[3] * worldPos;
+	sc.xy += vec2(0.5);
+	sc.xy = sc.xy * shadowCascadeAtlas[3].xy + shadowCascadeAtlas[3].zw;
+	return sc.xyz / sc.w;
+}
+#endif
+
 #if (DEFERRED_MODE == 1)
 	out vec4 fragColor[GBUFFER_ZVALTEX_IDX];
 #else
@@ -113,7 +161,12 @@ void main(void)
 		float NdotL = clamp(dot(N, L), 0.0, 1.0);
 		float HdotN = clamp(dot(N, H), 0.0, 1.0);
 
-		vec3 shadowMult = GetShadowMult(shadowVertexPos.xyz / shadowVertexPos.w, NdotL);
+		#if (USE_SHADOWS == 1)
+			int cascadeIdx = 0;
+			vec3 shadowMult = GetShadowMult(GetCascadeShadowCoord(worldPos, cascadeIdx), NdotL) * GetCascadeDebugTint(cascadeIdx);
+		#else
+			vec3 shadowMult = GetShadowMult(vec3(0.0), NdotL);
+		#endif
 
 		vec3 light = sunAmbientModel.rgb + (NdotL * sunDiffuseModel.rgb);
 

@@ -151,6 +151,7 @@ CModelDrawerStateGLSL::CModelDrawerStateGLSL()
 		modelShaders[n]->SetUniform3v("sunSpecular", &sunLighting->modelSpecularColor[0]);
 		modelShaders[n]->SetUniform("shadowDensity", sunLighting->modelShadowDensity);
 		modelShaders[n]->SetUniformMatrix4x4("shadowMatrix", false, shadowHandler.GetShadowMatrixRaw());
+		shadowHandler.SetShadowSamplingUniforms(modelShaders[n]);
 
 		modelShaders[n]->Disable();
 		modelShaders[n]->Validate();
@@ -206,6 +207,7 @@ void CModelDrawerStateGLSL::Enable(bool deferredPass, bool alphaPass) const
 	modelShader->SetUniform3v("sunSpecular", &sunLighting->modelSpecularColor[0]);
 	modelShader->SetUniform("shadowDensity", sunLighting->modelShadowDensity);
 	modelShader->SetUniformMatrix4x4("shadowMatrix", false, shadowHandler.GetShadowMatrixRaw());
+	shadowHandler.SetShadowSamplingUniforms(modelShader);
 
 	CModelDrawerConcept::GetLightHandler()->Update(modelShader);
 }
@@ -265,6 +267,7 @@ CModelDrawerStateGL4::CModelDrawerStateGL4()
 
 		modelShaders[n]->Link();
 		modelShaders[n]->Enable();
+		shadowHandler.SetShadowSamplingUniforms(modelShaders[n]);
 		modelShaders[n]->Disable();
 		modelShaders[n]->Validate();
 	}
@@ -325,6 +328,7 @@ void CModelDrawerStateGL4::Enable(bool deferredPass, bool alphaPass) const
 
 	float gtThreshold = mix(0.5, 0.1, static_cast<float>(alphaPass));
 	modelShader->SetUniform("alphaCtrl", gtThreshold, 1.0f, 0.0f, 0.0f); // test > 0.1 | 0.5
+	shadowHandler.SetShadowSamplingUniforms(modelShader);
 
 	// end of EnableCommon();
 }

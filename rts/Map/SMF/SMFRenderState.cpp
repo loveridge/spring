@@ -168,6 +168,7 @@ void SMFRenderStateGLSL::Update(
 				glslShaders[n]->SetUniform("groundShadowDensity", sunLighting->groundShadowDensity);
 
 				glslShaders[n]->SetUniformMatrix4x4("shadowMat", false, shadowHandler.GetShadowMatrixRaw());
+				shadowHandler.SetShadowSamplingUniforms(glslShaders[n]);
 
 				glslShaders[n]->SetUniform3v("waterMinColor", &waterRendering->minColor[0]);
 				glslShaders[n]->SetUniform3v("waterBaseColor", &waterRendering->baseColor[0]);
@@ -265,8 +266,10 @@ void SMFRenderStateGLSL::Enable(const CSMFGroundDrawer* smfGroundDrawer, const D
 
 	if (isAdv) {
 		currShader->SetUniform3v("cameraPos", &camera->GetPos()[0]);
-		if (shadowHandler.ShadowsLoaded())
+		if (shadowHandler.ShadowsLoaded()) {
 			currShader->SetUniformMatrix4x4("shadowMat", false, shadowHandler.GetShadowMatrixRaw());
+			shadowHandler.SetShadowSamplingUniforms(currShader);
+		}
 	}
 }
 

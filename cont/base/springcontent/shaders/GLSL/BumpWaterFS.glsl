@@ -85,14 +85,64 @@ vec4 waveIntensity(const vec4 v) {
   //uniform float shadowDensity;
   uniform sampler2DShadow shadowmap;
   uniform sampler2D shadowColorTex;
+  uniform mat4 shadowDepthTransform;
+  uniform mat4 shadowViewMat[4];
+  uniform vec4 shadowCascadeAtlas[4];
+  uniform float shadowCascadeSplits[4];
+#endif
+
+#ifdef opt_shadows
+int SelectShadowCascade(float depthValue) {
+	if (depthValue <= shadowCascadeSplits[0]) return 0;
+	if (depthValue <= shadowCascadeSplits[1]) return 1;
+	if (depthValue <= shadowCascadeSplits[2]) return 2;
+	return 3;
+}
+
+vec3 GetCascadeDebugTint(int cascadeIdx) {
+	if (cascadeIdx == 0) return vec3(1.0, 0.25, 0.25);
+	if (cascadeIdx == 3) return vec3(0.25, 0.25, 1.0);
+	return vec3(0.25, 1.0, 0.25);
+}
+
+vec4 GetCascadeShadowCoord(vec3 worldPos) {
+	vec4 worldPos4 = vec4(worldPos, 1.0);
+	float depthValue = -(shadowDepthTransform * worldPos4).z;
+	int cascadeIdx = SelectShadowCascade(depthValue);
+
+	if (cascadeIdx == 0) {
+		vec4 sc = shadowViewMat[0] * worldPos4;
+		sc.xy += vec2(0.5);
+		sc.xy = sc.xy * shadowCascadeAtlas[0].xy + shadowCascadeAtlas[0].zw;
+		return sc;
+	}
+	if (cascadeIdx == 1) {
+		vec4 sc = shadowViewMat[1] * worldPos4;
+		sc.xy += vec2(0.5);
+		sc.xy = sc.xy * shadowCascadeAtlas[1].xy + shadowCascadeAtlas[1].zw;
+		return sc;
+	}
+	if (cascadeIdx == 2) {
+		vec4 sc = shadowViewMat[2] * worldPos4;
+		sc.xy += vec2(0.5);
+		sc.xy = sc.xy * shadowCascadeAtlas[2].xy + shadowCascadeAtlas[2].zw;
+		return sc;
+	}
+
+	vec4 sc = shadowViewMat[3] * worldPos4;
+	sc.xy += vec2(0.5);
+	sc.xy = sc.xy * shadowCascadeAtlas[3].xy + shadowCascadeAtlas[3].zw;
+	return sc;
+}
 #endif
 
 vec3 GetShadowOcclusion(vec3 worldPos) {
 #ifdef opt_shadows
-	vec4 vertexShadowPos = shadowMatrix * vec4(worldPos, 1.0);
-	vertexShadowPos.xy += vec2(0.5, 0.5); // shadowParams.xy
+	int cascadeIdx = SelectShadowCascade(-(shadowDepthTransform * vec4(worldPos, 1.0)).z);
+	vec4 vertexShadowPos = GetCascadeShadowCoord(worldPos);
+	vec2 shadowUV = vertexShadowPos.xy / vertexShadowPos.w;
 	float sh = shadow2DProj(shadowmap, vertexShadowPos).r;
-	vec3 shColor = texture2D(shadowColorTex, vertexShadowPos.xy).rgb;
+	vec3 shColor = texture2D(shadowColorTex, shadowUV).rgb * GetCascadeDebugTint(cascadeIdx);
 	return mix(1.0, sh, shadowDensity) * shColor;
 #endif
 	return vec3(1.0);

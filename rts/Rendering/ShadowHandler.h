@@ -1,4 +1,4 @@
-/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+/* ShadowHandler.h */
 
 #ifndef SHADOW_HANDLER_H
 #define SHADOW_HANDLER_H
@@ -19,7 +19,7 @@ class CShadowHandler
 {
 public:
 	CShadowHandler()
-		:smOpaqFBO(true)
+		: smOpaqFBO(true)
 	{}
 
 	void Init();
@@ -42,11 +42,13 @@ public:
 		SHADOWGEN_BIT_PROJ  = 8,
 		SHADOWGEN_BIT_TREE  = 16,
 	};
+
 	enum ShadowProjectionMode {
-		SHADOWPROMODE_MAP_CENTER = 0, // use center of map-geometry as projection target (constant res.)
-		SHADOWPROMODE_CAM_CENTER = 1, // use center of camera-frustum as projection target (variable res.)
-		SHADOWPROMODE_MIX_CAMMAP = 2, // use whichever mode maximizes resolution this frame
+		SHADOWPROMODE_MAP_CENTER = 0,
+		SHADOWPROMODE_CAM_CENTER = 1,
+		SHADOWPROMODE_MIX_CAMMAP = 2,
 	};
+
 	enum ShadowMapSizes {
 		MIN_SHADOWMAP_SIZE =   512,
 		DEF_SHADOWMAP_SIZE =  2048,
@@ -66,19 +68,49 @@ public:
 		SHADOWMAT_TYPE_DRAWING = 1,
 	};
 
+	static constexpr unsigned int SHADOW_CASCADE_COUNT = 4;
+
+	struct ShadowCascade {
+		float splitNear = 0.0f; // normalized [0, 1] along camera depth range
+		float splitFar  = 1.0f; // normalized [0, 1] along camera depth range
+
+		float3 projMidPos;
+		float4 projScales;
+
+		// xy = atlas scale, zw = atlas bias
+		float4 atlasXform = {0.5f, 0.5f, 0.0f, 0.0f};
+
+		CMatrix44f projMatrix[2];
+		CMatrix44f viewMatrix[2];
+	};
+
 	Shader::IProgramObject* GetShadowGenProg(ShadowGenProgram p) {
 		return shadowGenProgs[p];
 	}
 
-	const CMatrix44f& GetShadowMatrix   (unsigned int idx = SHADOWMAT_TYPE_DRAWING) const { return  viewMatrix[idx];      }
-	const      float* GetShadowMatrixRaw(unsigned int idx = SHADOWMAT_TYPE_DRAWING) const { return &viewMatrix[idx].m[0]; }
+	// Legacy getters keep cascade 0 for compatibility
+	const CMatrix44f& GetShadowMatrix   (unsigned int idx = SHADOWMAT_TYPE_DRAWING) const { return cascades[0].viewMatrix[idx]; }
+	const      float* GetShadowMatrixRaw(unsigned int idx = SHADOWMAT_TYPE_DRAWING) const { return &cascades[0].viewMatrix[idx].m[0]; }
 
-	const CMatrix44f& GetShadowViewMatrix(unsigned int idx = SHADOWMAT_TYPE_DRAWING) const { return  viewMatrix[idx]; }
-	const CMatrix44f& GetShadowProjMatrix(unsigned int idx = SHADOWMAT_TYPE_DRAWING) const { return  projMatrix[idx]; }
-	const      float* GetShadowViewMatrixRaw(unsigned int idx = SHADOWMAT_TYPE_DRAWING) const { return &viewMatrix[idx].m[0]; }
-	const      float* GetShadowProjMatrixRaw(unsigned int idx = SHADOWMAT_TYPE_DRAWING) const { return &projMatrix[idx].m[0]; }
+	const CMatrix44f& GetShadowViewMatrix(unsigned int idx = SHADOWMAT_TYPE_DRAWING) const { return cascades[0].viewMatrix[idx]; }
+	const CMatrix44f& GetShadowProjMatrix(unsigned int idx = SHADOWMAT_TYPE_DRAWING) const { return cascades[0].projMatrix[idx]; }
+	const      float* GetShadowViewMatrixRaw(unsigned int idx = SHADOWMAT_TYPE_DRAWING) const { return &cascades[0].viewMatrix[idx].m[0]; }
+	const      float* GetShadowProjMatrixRaw(unsigned int idx = SHADOWMAT_TYPE_DRAWING) const { return &cascades[0].projMatrix[idx].m[0]; }
+
+	// New cascade getters
+	const CMatrix44f& GetShadowViewMatrix(unsigned int cascadeIdx, unsigned int matIdx) const { return cascades[cascadeIdx].viewMatrix[matIdx]; }
+	const CMatrix44f& GetShadowProjMatrix(unsigned int cascadeIdx, unsigned int matIdx) const { return cascades[cascadeIdx].projMatrix[matIdx]; }
+	const      float* GetShadowViewMatrixRaw(unsigned int cascadeIdx, unsigned int matIdx) const { return &cascades[cascadeIdx].viewMatrix[matIdx].m[0]; }
+	const      float* GetShadowProjMatrixRaw(unsigned int cascadeIdx, unsigned int matIdx) const { return &cascades[cascadeIdx].projMatrix[matIdx].m[0]; }
 
 	const float4& GetShadowParams() const { return shadowTexProjCenter; }
+
+	const float4& GetCascadeAtlasXform(unsigned int cascadeIdx) const { return cascades[cascadeIdx].atlasXform; }
+	float GetCascadeSplitFar(unsigned int cascadeIdx) const { return cascades[cascadeIdx].splitFar; }
+	unsigned int GetCascadeCount() const { return SHADOW_CASCADE_COUNT; }
+	unsigned int GetActiveShadowCascade() const { return activeShadowCascade; }
+	void SetActiveShadowCascade(unsigned int cascadeIdx) { activeShadowCascade = cascadeIdx; }
+	void SetShadowSamplingUniforms(Shader::IProgramObject* shader) const;
 
 	uint32_t GetShadowTextureID() const { return shadowDepthTexture; }
 	uint32_t GetColorTextureID() const { return shadowColorTexture; }
@@ -93,6 +125,7 @@ public:
 	void DrawFrustumDebug() const;
 
 	bool& DebugFrustumRef() { return debugFrustum; }
+
 private:
 	void FreeFBOAndTextures();
 	bool InitFBOAndTextures();
@@ -101,14 +134,17 @@ private:
 	void LoadProjectionMatrix(const CCamera* shadowCam);
 	void LoadShadowGenShaders();
 
-	void SetShadowMatrix(CCamera* playerCam, CCamera* shadowCam);
-	void SetShadowCamera(CCamera* shadowCam);
+	void ComputeCascadeSplits(CCamera* playerCam);
+	void SetShadowMatrix(CCamera* playerCam, CCamera* shadowCam, unsigned int cascadeIdx);
+	void SetShadowCamera(CCamera* shadowCam, unsigned int cascadeIdx);
 
-	float4 GetShadowProjectionScales(CCamera*, const CMatrix44f&);
-	float3 CalcShadowProjectionPos(CCamera*, float3*);
+	float4 GetShadowProjectionScales(CCamera* playerCam, const CMatrix44f& lightViewMat, unsigned int cascadeIdx);
+	float3 CalcShadowProjectionPos(CCamera* playerCam, float3* frustumPoints, float splitNear, float splitFar);
 
 	float GetOrthoProjectedMapRadius(const float3&, float3&);
-	float GetOrthoProjectedFrustumRadius(CCamera*, const CMatrix44f&, float3&);
+	float GetOrthoProjectedFrustumRadius(CCamera*, const CMatrix44f&, float3&, float splitNear, float splitFar);
+
+	float4 GetCascadeAtlasRect(unsigned int cascadeIdx) const;
 
 public:
 	int shadowConfig;
@@ -125,8 +161,6 @@ private:
 	inline static bool firstInit = true;
 	inline static bool shadowsSupported = false;
 
-	// these project geometry into light-space
-	// to write the (FBO) depth-buffer texture
 	std::array<Shader::IProgramObject*, SHADOWGEN_PROGRAM_COUNT> shadowGenProgs;
 
 	float3 projMidPos[2 + 1];
@@ -134,26 +168,26 @@ private:
 
 	float4 shadowProjScales;
 
-	// culling and drawing versions of both matrices
+	// retained for compatibility; cascade 0 mirrors these semantics
 	CMatrix44f projMatrix[2];
 	CMatrix44f viewMatrix[2];
+
+	std::array<ShadowCascade, SHADOW_CASCADE_COUNT> cascades;
+	unsigned int activeShadowCascade = 0;
 
 	uint32_t shadowDepthTexture;
 	uint32_t shadowColorTexture;
 
 	FBO smOpaqFBO;
 
-	/// xmid, ymid, p17, p18
 	static constexpr float4 shadowTexProjCenter = {
-		// .xy are used to bias the SM-space projection; the values
-		// of .z and .w are such that (invsqrt(xy + zz) + ww) ~= 1
-		0.5f                             , //x
-		0.5f                             , //y
-		std::numeric_limits<float>::max(), //z
-		1.0f                               //w
+		0.5f,
+		0.5f,
+		std::numeric_limits<float>::max(),
+		1.0f
 	};
 };
 
 extern CShadowHandler shadowHandler;
 
-#endif /* SHADOW_HANDLER_H */
+#endif

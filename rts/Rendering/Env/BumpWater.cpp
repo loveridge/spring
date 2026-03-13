@@ -498,6 +498,7 @@ void CBumpWater::InitResources(bool loadShader)
 		waterShader->SetUniform("infotex"       , 10);
 		waterShader->SetUniform("shadowColorTex", 11);
 		waterShader->SetUniform("windVector"    , 15.0f, 15.0f);
+		shadowHandler.SetShadowSamplingUniforms(waterShader);
 
 		waterShader->Disable();
 		waterShader->Validate();
@@ -934,6 +935,7 @@ void CBumpWater::Draw()
 
 	if (shadowHandler.ShadowsLoaded()) {
 		waterShader->SetUniformMatrix4x4("shadowMatrix", false, shadowHandler.GetShadowMatrixRaw());
+		shadowHandler.SetShadowSamplingUniforms(waterShader);
 
 		shadowHandler.SetupShadowTexSampler(GL_TEXTURE9);
 		glActiveTexture(GL_TEXTURE11); glBindTexture(GL_TEXTURE_2D, shadowHandler.GetColorTextureID());
