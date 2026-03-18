@@ -3043,7 +3043,7 @@ unsigned CGameServer::BindConnection(
 	}
 
 	// inform player of the current frame
-	if (newPlayer.isMidgameJoin) {
+	if (gameHasStarted) {
 		CBaseNetProtocol::PacketType progressPacket = CBaseNetProtocol::Get().SendCurrentFrameProgress(serverFrameNum);
 		newPlayer.SendData(progressPacket);
 	}
