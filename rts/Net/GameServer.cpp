@@ -3042,6 +3042,12 @@ unsigned CGameServer::BindConnection(
 		}
 	}
 
+	// inform player of the current frame
+	if (newPlayer.isMidgameJoin) {
+		CBaseNetProtocol::PacketType progressPacket = CBaseNetProtocol::Get().SendCurrentFrameProgress(serverFrameNum);
+		newPlayer.SendData(progressPacket);
+	}
+
 	// finally send player all packets he missed until now
 	for (const std::shared_ptr<const netcode::RawPacket>& p: packetCache)
 		newPlayer.SendData(p);
