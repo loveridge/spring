@@ -231,7 +231,7 @@ void ElementLuaTexture::GenerateGeometry()
 	float opacity = computed.opacity();
 	Rml::ColourbPremultiplied quad_colour = computed.image_color().ToPremultiplied(opacity);
 
-	Rml::Vector2f quad_size = GetBox().GetSize(Rml::BoxArea::Content).Round();
+	Rml::Vector2f quad_size = GetRenderBox(Rml::BoxArea::Content).GetFillSize().Round();
 
 	if (
 		computed.border_top_left_radius() > 0 ||
@@ -239,18 +239,12 @@ void ElementLuaTexture::GenerateGeometry()
 		computed.border_bottom_left_radius() > 0 ||
 		computed.border_bottom_right_radius() > 0
 	) {
-		Rml::Vector4f radii{
-			computed.border_top_left_radius(),
-			computed.border_top_right_radius(),
-			computed.border_bottom_left_radius(),
-			computed.border_bottom_right_radius(),
-		};
-
 		const Rml::ColourbPremultiplied clear_colors[4] = {{0, 0},
 														   {0, 0},
 														   {0, 0},
 														   {0, 0}};
-		const Rml::RenderBox render_box = GetRenderBox(Rml::BoxArea::Padding);
+
+		const Rml::RenderBox render_box = GetRenderBox(Rml::BoxArea::Content);
 		Rml::MeshUtilities::GenerateBackgroundBorder(mesh, render_box, quad_colour, clear_colors);
 
 		// GenerateBackgroundBorder does *not* set UV coords, so we must do that ourselves.
