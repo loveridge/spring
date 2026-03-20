@@ -44,6 +44,7 @@
 #include "RmlUi/Core/ElementUtilities.h"
 #include "RmlUi/Core/MeshUtilities.h"
 #include "RmlUi/Core/PropertyIdSet.h"
+#include "RmlUi/Core/Types.h"
 
 namespace RmlGui
 {
@@ -75,7 +76,7 @@ bool ElementLuaTexture::GetIntrinsicDimensions(Rml::Vector2f& _dimensions, float
 		LoadTexture();
 
 	auto texDimensions = GetTextureDimensions();
-	
+
 	// Calculate the x dimension.
 	if (HasAttribute("width"))
 		dimensions.x = GetAttribute<float>("width", -1);
@@ -108,7 +109,7 @@ void ElementLuaTexture::OnRender()
 	// in a resize).
 	if (geometry_dirty)
 		GenerateGeometry();
-	
+
 	glBindTexture(GL_TEXTURE_2D, luaTexture.GetTextureID());
 	GetRenderInterface()->RenderGeometry(
 		geometry_handle,
@@ -249,7 +250,8 @@ void ElementLuaTexture::GenerateGeometry()
 														   {0, 0},
 														   {0, 0},
 														   {0, 0}};
-		Rml::MeshUtilities::GenerateBackgroundBorder(mesh, GetBox(), Rml::Vector2f(), radii, quad_colour, clear_colors);
+		const Rml::RenderBox render_box = GetRenderBox(Rml::BoxArea::Padding);
+		Rml::MeshUtilities::GenerateBackgroundBorder(mesh, render_box, quad_colour, clear_colors);
 
 		// GenerateBackgroundBorder does *not* set UV coords, so we must do that ourselves.
 		Rml::Vector<Rml::Vertex>& vertices = mesh.vertices;
@@ -269,7 +271,7 @@ void ElementLuaTexture::GenerateGeometry()
 			quad_colour, tex_coords[0], tex_coords[1]
 		);
 	}
-	
+
 	geometry_handle = render_interface->CompileGeometry(mesh.vertices, mesh.indices);
 	geometry_dirty = false;
 }
