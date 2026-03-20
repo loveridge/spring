@@ -1,4 +1,4 @@
-﻿/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
 /*
  * This source file is derived from the code
@@ -29,48 +29,18 @@
  *
  */
 
-#include "RmlSolLua.h"
-
-#include <sol2/sol.hpp>
-#include <RmlUi/Core.h>
-
-#include "bind/bind.h"
-
+#include "bind.h"
 
 namespace Rml::SolLua
 {
-	SolLuaPlugin* Initialise(sol::state_view* state, const Rml::String& lua_environment_identifier)
-	{
-		SolLuaPlugin* slp;
-		if (state != nullptr)
-		{
-			slp = new SolLuaPlugin(*state, lua_environment_identifier);
-			::Rml::RegisterPlugin(slp);
-			RegisterLua(state, slp);
-		}
-		return slp;
-	}
 
-	void RegisterLua(sol::state_view* state, SolLuaPlugin* slp)
+	void bind_stylesheet(sol::table& namespace_table)
 	{
-		/***
-		 * Global functions for Recoil's RmlUi implementation.
-		 * @table RmlUi
-		 */
-		sol::table namespace_table = state->create_named_table("RmlUi");
-
-		bind_color(namespace_table);
-		bind_context(namespace_table, slp);
-		bind_datamodel(namespace_table);
-		bind_element(namespace_table);
-		bind_element_derived(namespace_table);
-		bind_element_form(namespace_table);
-		bind_document(namespace_table);
-		bind_event(namespace_table);
-		bind_global(namespace_table, slp);
-		bind_vector(namespace_table);
-		bind_convert(namespace_table);
-		bind_stylesheet(namespace_table);
+		namespace_table.new_usertype<Rml::StyleSheet>("StyleSheet", sol::no_constructor,
+			// M
+			//--
+			"MergeStyleSheet", &Rml::StyleSheet::MergeStyleSheet
+		);
 	}
 
 } // end namespace Rml::SolLua
