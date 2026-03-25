@@ -109,10 +109,8 @@ using font::text::ITextMeasurer;
 	return MakeWord("\n", anchor.sourceByteOffset, 0, anchor.printableOffset, 0, 0.0f, false, true, false);
 }
 
-[[nodiscard]] WrappedWord MakeEllipsisWord(std::string_view ellipsis, float width, const WrappedWord* anchor = nullptr)
+[[nodiscard]] WrappedWord MakeEllipsisWord(std::string_view ellipsis, float width, std::size_t sourceByteOffset, std::size_t printableOffset)
 {
-	const std::size_t sourceByteOffset = (anchor != nullptr) ? anchor->sourceByteOffset : 0;
-	const std::size_t printableOffset = (anchor != nullptr) ? (anchor->printableOffset + anchor->printableLength) : 0;
 	return MakeWord(std::string(ellipsis), sourceByteOffset, 0, printableOffset, 1, width, false, false, false);
 }
 
@@ -470,9 +468,7 @@ void TextWrapper::WrapConsole(std::vector<WrappedWord>& words, std::vector<WrapL
 	bool exceededHeight = false;
 
 	for (std::size_t wi = 0; wi < words.size(); ) {
-		WrappedWord& word = words[wi];
-
-		if (word.word.isLineBreak) {
+		if (words[wi].word.isLineBreak) {
 			currentWidth = 0.0f;
 			++currentLineCount;
 			++wi;
@@ -485,27 +481,28 @@ void TextWrapper::WrapConsole(std::vector<WrappedWord>& words, std::vector<WrapL
 			continue;
 		}
 
-		currentWidth += word.word.width;
+		currentWidth += words[wi].word.width;
 		if (currentWidth <= effectiveMaxWidth || !options.HasWidthConstraint()) {
 			++wi;
 			continue;
 		}
 
-		currentWidth -= word.word.width;
+		currentWidth -= words[wi].word.width;
 
 		const bool splitCandidate =
-			options.splitWords &&
-			!word.word.isWhitespace &&
-			!word.word.isControlCode &&
-			(word.word.width > (0.5f * effectiveMaxWidth));
+			!words[wi].word.isControlCode &&
+			(
+				words[wi].word.isWhitespace ||
+				(options.splitWords && (words[wi].word.width > (0.5f * effectiveMaxWidth)))
+			);
 
 		if (splitCandidate) {
-			auto split = SplitWordPair(GetMeasurerRef(), word, effectiveMaxWidth - currentWidth, options, options.smartWordSplit);
+			auto split = SplitWordPair(GetMeasurerRef(), words[wi], effectiveMaxWidth - currentWidth, options, options.smartWordSplit);
 			if (split.first.Empty() && options.smartWordSplit)
-				split = SplitWordPair(GetMeasurerRef(), word, effectiveMaxWidth - currentWidth, options, false);
+				split = SplitWordPair(GetMeasurerRef(), words[wi], effectiveMaxWidth - currentWidth, options, false);
 
 			if (!split.first.Empty()) {
-				word = std::move(split.second);
+				words[wi] = std::move(split.second);
 				words.insert(words.begin() + wi, std::move(split.first));
 				currentWidth += words[wi].word.width;
 				++wi;
@@ -513,7 +510,7 @@ void TextWrapper::WrapConsole(std::vector<WrappedWord>& words, std::vector<WrapL
 		}
 
 		if (currentWidth == 0.0f) {
-			currentWidth = word.word.width;
+			currentWidth = words[wi].word.width;
 			++wi;
 			continue;
 		}
@@ -635,12 +632,16 @@ void TextWrapper::AddEllipsis(std::vector<WrapLine>& lines, std::vector<WrappedW
 			break;
 	}
 
-	const WrappedWord* anchor = nullptr;
-	if (!words.empty() && targetLine.firstWord < words.size())
-		anchor = &words[std::min(targetLine.lastWord, words.size() - 1)];
+	std::size_t ellipsisSourceOffset = 0;
+	std::size_t ellipsisPrintableOffset = 0;
+	if (!words.empty() && targetLine.firstWord < words.size()) {
+		const WrappedWord& anchor = words[std::min(targetLine.lastWord, words.size() - 1)];
+		ellipsisSourceOffset = anchor.sourceByteOffset;
+		ellipsisPrintableOffset = anchor.printableOffset + anchor.printableLength;
+	}
 
 	const std::size_t insertPos = std::min(targetLine.lastWord + 1, words.size());
-	words.insert(words.begin() + insertPos, MakeEllipsisWord(EllipsisUtf8, ellipsisWidth, anchor));
+	words.insert(words.begin() + insertPos, MakeEllipsisWord(EllipsisUtf8, ellipsisWidth, ellipsisSourceOffset, ellipsisPrintableOffset));
 	RebuildLines(words, lines);
 
 	if (lines.size() > visibleLineCount) {

@@ -166,9 +166,9 @@ protected:
 	LaidOutLine PositionRuns(std::span<const ShapedRun> runs, const LayoutContext& ctx, std::size_t sourceOffset, std::size_t sourceLength, bool explicitBreak) const;
 
 	float ComputeHorizontalLineOffset(float lineWidth, const LayoutOptions& options) const;
-	float ComputeVerticalBlockOffset(const TextMeasurement& measurement, const LayoutOptions& options) const;
+	float ComputeVerticalBlockOffset(const TextMeasurement& measurement, const LayoutOptions& options, float fontDescender) const;
 	void ApplyHorizontalAlignment(std::vector<LaidOutLine>& lines, const LayoutOptions& options) const;
-	void ApplyVerticalAlignment(std::vector<LaidOutLine>& lines, const TextMeasurement& measurement, const LayoutOptions& options) const;
+	void ApplyVerticalAlignment(std::vector<LaidOutLine>& lines, const TextMeasurement& measurement, const LayoutOptions& options, float fontDescender) const;
 
 	TextMeasurement BuildMeasurement(std::span<const LaidOutLine> lines, const ParsedSpanBuffer& parsed, const LayoutOptions& options) const;
 

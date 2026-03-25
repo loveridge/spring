@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <memory>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -193,10 +194,6 @@ public:
 		: layouter(std::move(layouter_))
 	{}
 
-	explicit TextLayouterMeasurer(const TextLayouter* layouter_)
-		: layouterRaw(layouter_)
-	{}
-
 	TextMeasurement MeasureText(std::string_view utf8, const LayoutOptions& options) const override
 	{
 		return GetLayouter().MeasureText(utf8, options);
@@ -209,14 +206,14 @@ public:
 
 	const TextLayouter& GetLayouter() const
 	{
-		if (layouter)
-			return *layouter;
-		return *layouterRaw;
+		if (layouter == nullptr)
+			throw std::logic_error("TextLayouterMeasurer requires a non-null TextLayouter");
+
+		return *layouter;
 	}
 
 private:
 	std::shared_ptr<TextLayouter> layouter;
-	const TextLayouter* layouterRaw = nullptr;
 };
 
 

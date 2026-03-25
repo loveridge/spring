@@ -121,7 +121,7 @@ TextLayout TextLayouter::LayoutText(std::string_view utf8, const LayoutOptions& 
 
 	layout.measurement = BuildMeasurement(layout.lines, parsed, options);
 	ApplyHorizontalAlignment(layout.lines, options);
-	ApplyVerticalAlignment(layout.lines, layout.measurement, options);
+	ApplyVerticalAlignment(layout.lines, layout.measurement, options, ctx.defaultDescender);
 	layout.valid = true;
 	return layout;
 }
@@ -318,8 +318,16 @@ std::vector<ShapedRun> TextLayouter::ShapeLineSpans(std::span<const TextSpan> li
 		}
 
 		ShapeResult result = textShaper->ShapeSpan(shapeSpan, options.shapeOptions);
-		for (ShapedRun& run : result.runs)
+		for (ShapedRun& run : result.runs) {
+			// ShapeSpan may preserve a view into the provided span text. When tabs
+			// were expanded locally, that backing storage dies at the end of this
+			// loop iteration, so keep renderer-facing source metadata anchored to
+			// the original caller-owned span instead.
+			if (!expandedStorage.empty())
+				run.sourceSpan = span;
+
 			runs.emplace_back(std::move(run));
+		}
 	}
 
 	return runs;
@@ -430,16 +438,18 @@ float TextLayouter::ComputeHorizontalLineOffset(float lineWidth, const LayoutOpt
 	return 0.0f;
 }
 
-float TextLayouter::ComputeVerticalBlockOffset(const TextMeasurement& measurement, const LayoutOptions& options) const
+float TextLayouter::ComputeVerticalBlockOffset(const TextMeasurement& measurement, const LayoutOptions& options, float fontDescender) const
 {
+	const float baselineDescender = (fontDescender != 0.0f) ? fontDescender : measurement.descent;
+
 	if (HasOption(options.options, FontOption::Descender)) {
-		return -measurement.descent;
+		return -baselineDescender;
 	} else if (HasOption(options.options, FontOption::VCenter)) {
 		return -0.5f * measurement.height - 0.5f * measurement.descent;
 	} else if (HasOption(options.options, FontOption::Top)) {
 		return -measurement.height;
 	} else if (HasOption(options.options, FontOption::Ascender)) {
-		return -(measurement.descent + 1.0f);
+		return -(baselineDescender + 1.0f);
 	} else if (HasOption(options.options, FontOption::Bottom)) {
 		return -measurement.descent;
 	}
@@ -463,9 +473,9 @@ void TextLayouter::ApplyHorizontalAlignment(std::vector<LaidOutLine>& lines, con
 	}
 }
 
-void TextLayouter::ApplyVerticalAlignment(std::vector<LaidOutLine>& lines, const TextMeasurement& measurement, const LayoutOptions& options) const
+void TextLayouter::ApplyVerticalAlignment(std::vector<LaidOutLine>& lines, const TextMeasurement& measurement, const LayoutOptions& options, float fontDescender) const
 {
-	const float blockOffsetY = ComputeVerticalBlockOffset(measurement, options);
+	const float blockOffsetY = ComputeVerticalBlockOffset(measurement, options, fontDescender);
 	float penY = blockOffsetY;
 
 	for (LaidOutLine& line : lines) {

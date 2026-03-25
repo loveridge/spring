@@ -26,6 +26,19 @@ static constexpr float FTMetricScale = 64.0f;
 	return utf8::GetNextChar(utf8Copy, pos);
 }
 
+[[nodiscard]] std::size_t CountUtf8Codepoints(std::string_view utf8)
+{
+	const std::string utf8Copy(utf8);
+	std::size_t count = 0;
+
+	for (int pos = 0; pos < static_cast<int>(utf8Copy.size()); ) {
+		utf8::GetNextChar(utf8Copy, pos);
+		++count;
+	}
+
+	return count;
+}
+
 [[nodiscard]] hb_feature_t MakeFeature(const char* tag, std::uint32_t value)
 {
 	hb_feature_t feature{};
@@ -140,7 +153,7 @@ ShapeResult HarfBuzzTextShaper::ShapeUtf8Span(std::string_view utf8, const Shape
 	TextSpan span;
 	span.text = utf8;
 	span.sourceLength = utf8.size();
-	span.printableLength = utf8.size();
+	span.printableLength = CountUtf8Codepoints(utf8);
 	return ShapeSpan(span, options);
 }
 
@@ -163,6 +176,8 @@ ShapeResult HarfBuzzTextShaper::ShapeSpan(const TextSpan& span, const ShapeOptio
 	struct FaceSegment {
 		std::size_t start = 0;
 		std::size_t end = 0;
+		std::size_t printableStart = 0;
+		std::size_t printableLength = 0;
 		std::shared_ptr<font::FontFace> face;
 		FT_Face ftFace = nullptr;
 	};
@@ -171,9 +186,11 @@ ShapeResult HarfBuzzTextShaper::ShapeSpan(const TextSpan& span, const ShapeOptio
 	const std::string utf8Copy(span.text);
 
 	std::size_t segmentStart = 0;
+	std::size_t segmentPrintableStart = 0;
 	std::shared_ptr<font::FontFace> currentFace = nullptr;
 	FT_Face currentFTFace = initialFTFace;
 	bool haveSegment = false;
+	std::size_t printableIndex = 0;
 
 	for (int pos = 0; pos < static_cast<int>(utf8Copy.size()); ) {
 		const int charStart = pos;
@@ -184,30 +201,35 @@ ShapeResult HarfBuzzTextShaper::ShapeSpan(const TextSpan& span, const ShapeOptio
 
 		if (!haveSegment) {
 			segmentStart = static_cast<std::size_t>(charStart);
+			segmentPrintableStart = printableIndex;
 			currentFace = resolvedFace;
 			currentFTFace = resolvedFTFace;
 			haveSegment = true;
-			continue;
-		}
-
-		if ((resolvedFace != currentFace) || (resolvedFTFace != currentFTFace)) {
+		} else if ((resolvedFace != currentFace) || (resolvedFTFace != currentFTFace)) {
 			segments.push_back(FaceSegment{
 				.start = segmentStart,
 				.end = static_cast<std::size_t>(charStart),
+				.printableStart = segmentPrintableStart,
+				.printableLength = printableIndex - segmentPrintableStart,
 				.face = currentFace,
 				.ftFace = currentFTFace,
 			});
 
 			segmentStart = static_cast<std::size_t>(charStart);
+			segmentPrintableStart = printableIndex;
 			currentFace = resolvedFace;
 			currentFTFace = resolvedFTFace;
 		}
+
+		++printableIndex;
 	}
 
 	if (haveSegment) {
 		segments.push_back(FaceSegment{
 			.start = segmentStart,
 			.end = span.text.size(),
+			.printableStart = segmentPrintableStart,
+			.printableLength = printableIndex - segmentPrintableStart,
 			.face = currentFace,
 			.ftFace = currentFTFace,
 		});
@@ -217,6 +239,8 @@ ShapeResult HarfBuzzTextShaper::ShapeSpan(const TextSpan& span, const ShapeOptio
 		segments.push_back(FaceSegment{
 			.start = 0,
 			.end = span.text.size(),
+			.printableStart = 0,
+			.printableLength = span.printableLength,
 			.face = primaryFace,
 			.ftFace = GetPrimaryFTFace(),
 		});
@@ -235,8 +259,8 @@ ShapeResult HarfBuzzTextShaper::ShapeSpan(const TextSpan& span, const ShapeOptio
 		segmentSpan.text = segmentText;
 		segmentSpan.sourceOffset += segment.start;
 		segmentSpan.sourceLength = segmentText.size();
-		segmentSpan.printableOffset += segment.start;
-		segmentSpan.printableLength = segmentText.size();
+		segmentSpan.printableOffset += segment.printableStart;
+		segmentSpan.printableLength = segment.printableLength;
 
 		ConfigureBuffer(buffer.get(), segmentText, options);
 
@@ -249,7 +273,11 @@ ShapeResult HarfBuzzTextShaper::ShapeSpan(const TextSpan& span, const ShapeOptio
 		if (!options.allowKerning)
 			features.emplace_back(MakeFeature("kern", 0));
 
-		hb_shape(GetOrCreateHbFont(segment.ftFace), buffer.get(), features.empty() ? nullptr : features.data(), features.size());
+		hb_font_t* hbFont = GetOrCreateHbFont(segment.ftFace);
+		if (hbFont == nullptr)
+			continue;
+
+		hb_shape(hbFont, buffer.get(), features.empty() ? nullptr : features.data(), features.size());
 
 		ShapedRun run = ConvertBufferToRun(segmentText, segmentSpan, options, segment.face, buffer.get(), result);
 		if (run.Empty())
@@ -361,6 +389,9 @@ HarfBuzzTextShaper::HbBufferPtr HarfBuzzTextShaper::CreateBuffer() const
 
 HarfBuzzTextShaper::HbFontPtr HarfBuzzTextShaper::CreateHbFont(FT_Face ftFace) const
 {
+	if (ftFace == nullptr)
+		return HbFontPtr(nullptr, &hb_font_destroy);
+
 	return HbFontPtr(hb_ft_font_create_referenced(ftFace), &hb_font_destroy);
 }
 
