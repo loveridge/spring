@@ -143,10 +143,25 @@ set(sources_engine_Rendering
 		"${CMAKE_CURRENT_SOURCE_DIR}/UniformConstants.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/VerticalSync.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/WorldDrawer.cpp"
+
 		"${CMAKE_CURRENT_SOURCE_DIR}/Fonts/FontHandler.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Fonts/CFontTexture.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Fonts/glFont.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Fonts/glFontRenderer.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/Fonts/TextWrap.cpp"
+
+		"${CMAKE_CURRENT_SOURCE_DIR}/FontsModern/FontRegistry.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/FontsModern/FreeType/FontFace.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/FontsModern/FreeType/FontFaceSet.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/FontsModern/FreeType/FontLibrary.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/FontsModern/Glyphs/GlyphAtlasCache.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/FontsModern/Glyphs/GlyphAtlasTexture.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/FontsModern/Render/FontRendererFactory.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/FontsModern/Render/ShaderFontRenderer.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/FontsModern/Text/HarfBuzzTextShaper.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/FontsModern/Text/TextControlCodes.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/FontsModern/Text/TextLayouter.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/FontsModern/Text/TextWrapper.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/FontsModern/glFont.cpp"
 		PARENT_SCOPE
 	)

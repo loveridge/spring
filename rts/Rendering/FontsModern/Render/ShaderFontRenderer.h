@@ -9,8 +9,9 @@
 
 #include "IFontRenderer.h"
 
-class Shader;
-class ShaderProgram;
+namespace Shader {
+	struct IProgramObject;
+}
 class VAO;
 class VBO;
 class CMatrix44f;
@@ -120,13 +121,12 @@ private:
 	};
 
 	struct ProgramResources {
-		std::unique_ptr<Shader> vertexShader;
-		std::unique_ptr<Shader> fragmentShader;
-		std::unique_ptr<ShaderProgram> program;
+		std::unique_ptr<Shader::IProgramObject> program;
 	};
 
 	void InitializeProgram();
 	void InitializeBuffers();
+	void ConfigureVertexAttributes(BufferResources& bufferResources);
 	void EnsureBufferCapacity(RenderBatch& batch, BufferResources& bufferResources);
 	void QueueQuad(RenderBatch& batch, const PreparedGlyphQuad& quad);
 	void UploadBatch(RenderBatch& batch, BufferResources& bufferResources);
