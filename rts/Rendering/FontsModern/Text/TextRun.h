@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include "FontTypes.h"
+#include "../FontTypes.h"
 
 namespace font { class FontFace; }
 

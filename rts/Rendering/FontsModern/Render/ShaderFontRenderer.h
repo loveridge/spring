@@ -7,7 +7,7 @@
 #include <memory>
 #include <vector>
 
-#include "Render/IFontRenderer.h"
+#include "IFontRenderer.h"
 
 class Shader;
 class ShaderProgram;
