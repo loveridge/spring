@@ -76,6 +76,7 @@ namespace {
 
 } // namespace
 
+namespace fonts {
 GlyphAtlasCache::GlyphAtlasCache(FaceSetPtr faceSet, int fontSize_, int outlineSize_, float outlineWeight_)
 	: faces(std::move(faceSet))
 	, fontSize(fontSize_ > 0 ? fontSize_ : 14)
@@ -650,4 +651,5 @@ void GlyphAtlasCache::UploadAtlasTextures()
 {
 	atlasTexture.Upload();
 	shadowAtlasTexture.Upload();
+}
 }

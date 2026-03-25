@@ -15,7 +15,9 @@
 #include "TextRun.h"
 #include "TextShaper.h"
 
+namespace fonts {
 class GlyphAtlasCache;
+}
 
 namespace fonts::text {
 
@@ -181,4 +183,4 @@ private:
 	GlyphCachePtr glyphCache;
 };
 
-} // namespace font::text
+} // namespace fonts::text

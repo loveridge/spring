@@ -128,6 +128,24 @@ void ConvertNormalizedToPixels(float& x, float& y)
 	y *= globalRendering->viewSizeY;
 }
 
+[[nodiscard]] std::string NormalizeFontPath(std::string fontFile)
+{
+	if (fontFile.empty())
+		return fontFile;
+
+	if (fontFile.find_first_of("/\\") != std::string::npos)
+		return fontFile;
+
+	if (CFileHandler(fontFile).FileExists())
+		return fontFile;
+
+	std::string prefixedPath = "fonts/" + fontFile;
+	if (CFileHandler(prefixedPath).FileExists())
+		return prefixedPath;
+
+	return fontFile;
+}
+
 [[nodiscard]] bool LoadFontFileBytes(const std::string& fontFile, std::shared_ptr<fonts::FontFileBytes>& fileBytes)
 {
 	CFileHandler fileHandler(fontFile);
@@ -216,7 +234,7 @@ std::shared_ptr<fonts::FontFaceSet> BuildFaceSet(const FontDescriptor& descripto
 [[nodiscard]] FontDescriptor ResolveDescriptor(const std::string& fontFile, bool isSmallFont)
 {
 	FontDescriptor descriptor;
-	descriptor.filePath = fontFile.empty() ? ResolveConfiguredFontFile(isSmallFont) : fontFile;
+	descriptor.filePath = NormalizeFontPath(fontFile.empty() ? ResolveConfiguredFontFile(isSmallFont) : fontFile);
 	descriptor.pixelSize = configHandler->GetInt(isSmallFont ? "SmallFontSize" : "FontSize");
 	descriptor.outlineSize = configHandler->GetInt(isSmallFont ? "SmallFontOutlineWidth" : "FontOutlineWidth");
 	descriptor.outlineWeight = configHandler->GetFloat(isSmallFont ? "SmallFontOutlineWeight" : "FontOutlineWeight");
@@ -366,10 +384,10 @@ public:
 		state.useShadow = HasOption(options, FontOption::Shadow);
 		state.buffered = buffered;
 
-		CCamera* camera = CCamera::GetActive();
-		if (camera != nullptr) {
-			worldViewMatrix = camera->GetViewMatrix() * camera->GetBillBoardMatrix();
-			worldProjMatrix = camera->GetProjectionMatrix();
+		CCamera* activeCam = CCamera::GetActive();
+		if (activeCam != nullptr) {
+			worldViewMatrix = activeCam->GetViewMatrix() * activeCam->GetBillBoardMatrix();
+			worldProjMatrix = activeCam->GetProjectionMatrix();
 			state.modelViewMatrix = &worldViewMatrix;
 			state.projectionMatrix = &worldProjMatrix;
 		} else {
@@ -561,13 +579,14 @@ std::shared_ptr<CglFont> CglFont::LoadFont(const std::string& fontFile, bool sma
 std::shared_ptr<CglFont> CglFont::LoadFont(const std::string& fontFile, int size, int outlineWidth, float outlineWeight)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+	const std::string normalizedFontFile = NormalizeFontPath(fontFile);
 
-	if (auto existing = FindFont(fontFile, size, outlineWidth, outlineWeight); existing != nullptr)
+	if (auto existing = FindFont(normalizedFontFile, size, outlineWidth, outlineWeight); existing != nullptr)
 		return existing;
 
 	try {
-		auto loadedFont = std::make_shared<CglFont>(fontFile, size, outlineWidth, outlineWeight);
-		GetLoadedFonts().emplace_back(loadedFont);
+		auto loadedFont = std::make_shared<CglFont>(normalizedFontFile, size, outlineWidth, outlineWeight);
+		::GetLoadedFonts().emplace_back(loadedFont);
 		return loadedFont;
 	} catch (const content_error& ex) {
 		LOG_L(L_ERROR, "Failed creating font: %s", ex.what());
@@ -579,8 +598,8 @@ std::shared_ptr<CglFont> CglFont::FindFont(const std::string& fontFile, int size
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 
-	FontDescriptor wanted {fontFile, size, outlineWidth, outlineWeight};
-	auto& loadedFonts = GetLoadedFonts();
+	FontDescriptor wanted {NormalizeFontPath(fontFile), size, outlineWidth, outlineWeight};
+	auto& loadedFonts = ::GetLoadedFonts();
 
 	for (std::size_t i = 0; i < loadedFonts.size(); ) {
 		auto loadedFont = loadedFonts[i].lock();
@@ -866,10 +885,13 @@ void CglFont::PrintWorld(const float3& position, float size, const std::string& 
 	if (renderSize <= 0.0f)
 		return;
 
-	CCamera* camera = CCamera::GetActive();
-	const float3 billboardPosition = (camera != nullptr)
-		? (camera->GetBillBoardMatrix().Transpose() * position)
-		: position;
+	CCamera* activeCam = CCamera::GetActive();
+	float3 billboardPosition = position;
+
+	if (activeCam != nullptr) {
+		CMatrix44f billboardMatrix = activeCam->GetBillBoardMatrix();
+		billboardPosition = billboardMatrix.Transpose() * position;
+	}
 
 	fonts::text::LayoutOptions layoutOptions = impl->MakeLayoutOptions(billboardPosition.x, billboardPosition.y, renderSize, options);
 	layoutOptions.z = position.z;
