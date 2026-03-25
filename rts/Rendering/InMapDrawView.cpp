@@ -3,7 +3,7 @@
 
 #include "InMapDrawView.h"
 #include "Rendering/Colors.h"
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "Rendering/GlobalRendering.h"
 
 #include "Game/Camera.h"
@@ -235,7 +235,7 @@ void CInMapDrawView::Draw()
 			const SColor color = point->IsBySpectator() ? color4::white : SColor{ team->color };
 
 			font->SetTextColor(color);
-			font->glWorldPrint(pos, 26.0f, point->GetLabel());
+			font->PrintWorld(pos, 26.0f, point->GetLabel());
 		}
 
 		font->DrawWorldBuffered();

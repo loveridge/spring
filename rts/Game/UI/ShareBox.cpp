@@ -9,7 +9,7 @@
 #include "Game/SelectedUnitsHandler.h"
 #include "Game/Players/Player.h"
 #include "Game/Players/PlayerHandler.h"
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/GL/glExtra.h"
 #include "Rendering/GlobalRendering.h"
@@ -197,25 +197,25 @@ void CShareBox::Draw()
 	}
 
 	font->SetTextColor(1.0f, 1.0f, 1.0f, 0.8f);
-	font->glPrint(box.x1 + (okBox.x1 + okBox.x2) * 0.5f, box.y1 + (okBox.y1 + okBox.y2) * 0.5f, 1.0f, FONT_CENTER | FONT_VCENTER | FONT_SCALE | FONT_NORM | FONT_BUFFERED, "Ok");
-	font->glPrint(box.x1 + (applyBox.x1 + applyBox.x2) * 0.5f, box.y1 + (applyBox.y1 + applyBox.y2) * 0.5f, 1.0f, FONT_CENTER | FONT_VCENTER | FONT_SCALE | FONT_NORM | FONT_BUFFERED, "Apply");
-	font->glPrint(box.x1 + (cancelBox.x1 + cancelBox.x2) * 0.5f, box.y1 + (cancelBox.y1 + cancelBox.y2) * 0.5f, 1.0f, FONT_CENTER | FONT_VCENTER | FONT_SCALE | FONT_NORM | FONT_BUFFERED, "Cancel");
+	font->Print(box.x1 + (okBox.x1 + okBox.x2) * 0.5f, box.y1 + (okBox.y1 + okBox.y2) * 0.5f, 1.0f, FONT_CENTER | FONT_VCENTER | FONT_SCALE | FONT_NORM | FONT_BUFFERED, "Ok");
+	font->Print(box.x1 + (applyBox.x1 + applyBox.x2) * 0.5f, box.y1 + (applyBox.y1 + applyBox.y2) * 0.5f, 1.0f, FONT_CENTER | FONT_VCENTER | FONT_SCALE | FONT_NORM | FONT_BUFFERED, "Apply");
+	font->Print(box.x1 + (cancelBox.x1 + cancelBox.x2) * 0.5f, box.y1 + (cancelBox.y1 + cancelBox.y2) * 0.5f, 1.0f, FONT_CENTER | FONT_VCENTER | FONT_SCALE | FONT_NORM | FONT_BUFFERED, "Cancel");
 
-	font->glPrint(box.x1 + 0.06f, box.y1 + 0.085f, 0.7f, FONT_SCALE | FONT_NORM | FONT_BUFFERED, "Share selected units");
+	font->Print(box.x1 + 0.06f, box.y1 + 0.085f, 0.7f, FONT_SCALE | FONT_NORM | FONT_BUFFERED, "Share selected units");
 
 	font->SetTextColor(1.0f, 1.0f, 0.4f, 0.8f);
-	font->glPrint(box.x1 + 0.01f, box.y1 + 0.16f, 0.7f, FONT_SCALE | FONT_NORM | FONT_BUFFERED, "Share Energy");
+	font->Print(box.x1 + 0.01f, box.y1 + 0.16f, 0.7f, FONT_SCALE | FONT_NORM | FONT_BUFFERED, "Share Energy");
 
 	font->SetTextColor(1.0f, 1.0f, 1.0f, 0.8f);
-	font->glFormat(box.x1 + 0.25f, box.y1 + 0.12f, 0.7f, FONT_SCALE | FONT_NORM | FONT_BUFFERED, "%.0f", float(teamHandler.Team(gu->myTeam)->res.energy));
-	font->glFormat(box.x1 + 0.14f, box.y1 + 0.12f, 0.7f, FONT_SCALE | FONT_NORM | FONT_BUFFERED, "%.0f", teamHandler.Team(gu->myTeam)->res.energy * energyShare);
+	font->Format(box.x1 + 0.25f, box.y1 + 0.12f, 0.7f, FONT_SCALE | FONT_NORM | FONT_BUFFERED, "%.0f", float(teamHandler.Team(gu->myTeam)->res.energy));
+	font->Format(box.x1 + 0.14f, box.y1 + 0.12f, 0.7f, FONT_SCALE | FONT_NORM | FONT_BUFFERED, "%.0f", teamHandler.Team(gu->myTeam)->res.energy * energyShare);
 
 	font->SetTextColor(0.8f, 0.8f, 0.9f, 0.8f);
-	font->glPrint(box.x1 + 0.01f, box.y1 + 0.22f, 0.7f, FONT_SCALE | FONT_NORM | FONT_BUFFERED, "Share Metal");
+	font->Print(box.x1 + 0.01f, box.y1 + 0.22f, 0.7f, FONT_SCALE | FONT_NORM | FONT_BUFFERED, "Share Metal");
 
 	font->SetTextColor(1.0f, 1.0f, 1.0f, 0.8f);
-	font->glFormat(box.x1 + 0.25f, box.y1 + 0.18f, 0.7f, FONT_SCALE | FONT_NORM | FONT_BUFFERED, "%.0f", float(teamHandler.Team(gu->myTeam)->res.metal));
-	font->glFormat(box.x1 + 0.14f, box.y1 + 0.18f, 0.7f, FONT_SCALE | FONT_NORM | FONT_BUFFERED, "%.0f", teamHandler.Team(gu->myTeam)->res.metal * metalShare);
+	font->Format(box.x1 + 0.25f, box.y1 + 0.18f, 0.7f, FONT_SCALE | FONT_NORM | FONT_BUFFERED, "%.0f", float(teamHandler.Team(gu->myTeam)->res.metal));
+	font->Format(box.x1 + 0.14f, box.y1 + 0.18f, 0.7f, FONT_SCALE | FONT_NORM | FONT_BUFFERED, "%.0f", teamHandler.Team(gu->myTeam)->res.metal * metalShare);
 
 	for (int teamNum = startTeam, teamPos = 0; teamNum < MAX_SHARE_TEAMS && teamPos < numTeamsDisp; ++teamNum, ++teamPos) {
 		const int actualTeam = teamNum + (teamNum >= gu->myTeam);
@@ -243,7 +243,7 @@ void CShareBox::Draw()
 			ally = " <Gaia>";
 		}
 
-		font->glFormat(
+		font->Format(
 			box.x1 + teamBox.x1 + 0.002f,
 			box.y1 + teamBox.y2 - 0.025f - teamPos * 0.025f,
 			0.7f,

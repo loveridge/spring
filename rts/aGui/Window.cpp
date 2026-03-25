@@ -3,7 +3,7 @@
 #include "Window.h"
 
 #include "Rendering/GL/myGL.h"
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "Rendering/GL/RenderBuffers.h"
 
 namespace agui
@@ -64,7 +64,7 @@ void Window::DrawSelf()
 	font->Begin();
 	font->SetTextColor(1.0f, 1.0f, 1.0f, opacity);
 	font->SetOutlineColor(0.0f, 0.0f, 0.0f, opacity);
-	font->glPrint(pos[0]+0.01, pos[1]+size[1]-titleHeight/2, 1.0, FONT_VCENTER | FONT_SCALE | FONT_SHADOW | FONT_NORM, title);
+	font->Print(pos[0]+0.01, pos[1]+size[1]-titleHeight/2, 1.0, FONT_VCENTER | FONT_SCALE | FONT_SHADOW | FONT_NORM, title);
 	font->End();
 }
 #endif

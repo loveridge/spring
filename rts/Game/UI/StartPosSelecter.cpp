@@ -14,7 +14,7 @@
 #include "Map/ReadMap.h"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/GL/glExtra.h"
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "Net/Protocol/NetProtocol.h"
 #include "Sim/Misc/TeamHandler.h"
 #include "Sim/Misc/ModInfo.h"
@@ -172,7 +172,7 @@ void CStartPosSelecter::Draw()
 		const float fontScale = 0.9f * std::min(xSize / unitWidth, ySize / unitHeight);
 
 		font->SetColors(); // default
-		font->glPrint(xPos, yPos, fontScale, FONT_OUTLINE | FONT_CENTER | FONT_VCENTER | FONT_SCALE | FONT_NORM | FONT_BUFFERED, "Ready");
+		font->Print(xPos, yPos, fontScale, FONT_OUTLINE | FONT_CENTER | FONT_VCENTER | FONT_SCALE | FONT_NORM | FONT_BUFFERED, "Ready");
 		font->DrawBuffered();
 	}
 }

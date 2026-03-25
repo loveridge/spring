@@ -12,7 +12,7 @@
 #include "Net/GameServer.h"
 #include "Sim/Misc/GlobalSynced.h"
 #include "Sim/Misc/TeamHandler.h"
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "Net/Protocol/NetProtocol.h"
 #include "System/Config/ConfigHandler.h"
 #include "System/EventHandler.h"
@@ -145,7 +145,7 @@ void GameSetupDrawer::Draw()
 
 	font->Begin();
 	font->SetColors(); // default
-	font->glPrint(0.3f, 0.7f, 1.0f, FONT_OUTLINE | FONT_SCALE | FONT_NORM, startState);
+	font->Print(0.3f, 0.7f, 1.0f, FONT_OUTLINE | FONT_SCALE | FONT_NORM, startState);
 
 	for (unsigned int a = 0; a <= numPlayers; a++) {
 		static constexpr float4      red(1.0f, 0.2f, 0.2f, 1.0f);
@@ -190,7 +190,7 @@ void GameSetupDrawer::Draw()
 		}
 
 		font->SetColors(color, nullptr);
-		font->glPrint(xPos, yPos, fontSize, FONT_OUTLINE | FONT_NORM, name);
+		font->Print(xPos, yPos, fontSize, FONT_OUTLINE | FONT_NORM, name);
 	}
 	font->End();
 }

@@ -23,7 +23,7 @@
 #include "Sim/Path/QTPFS/Components/PathSpeedModInfo.h"
 #include "Sim/Path/QTPFS/Registry.h"
 
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/QTPFSPathDrawer.h"
 #include "Rendering/GL/glExtra.h"
@@ -120,9 +120,9 @@ void QTPFSPathDrawer::DrawCosts(const std::vector<const QTPFS::QTNode*>& nodes) 
 			continue;
 
 		font->SetTextColor(0.0f, 0.0f, 0.0f, 1.0f);
-		font->glWorldPrint(pos, 5.0f, FloatToString(node->GetMoveCost(), "%8.2f"));
-		// font->glWorldPrint(pos, 5.0f, IntToString(node->GetNodeNumber(), "%08x"));
-		// font->glWorldPrint(pos, 5.0f, IntToString(node->GetDepth(), "%d"));
+		font->PrintWorld(pos, 5.0f, FloatToString(node->GetMoveCost(), "%8.2f"));
+		// font->PrintWorld(pos, 5.0f, IntToString(node->GetNodeNumber(), "%08x"));
+		// font->PrintWorld(pos, 5.0f, IntToString(node->GetDepth(), "%d"));
 	}
 
 	font->DrawWorldBuffered();

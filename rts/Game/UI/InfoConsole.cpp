@@ -2,7 +2,7 @@
 
 #include "InfoConsole.h"
 #include "GuiHandler.h"
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "System/EventHandler.h"
 #include "System/SafeUtil.h"
 #include "System/Config/ConfigHandler.h"
@@ -101,7 +101,7 @@ void CInfoConsole::Draw()
 	assert(guihandler != nullptr);
 
 	{
-		// make copies s.t. mutex is not locked during glPrint calls
+		// make copies s.t. mutex is not locked during Print calls
 		std::lock_guard<decltype(infoConsoleMutex)> scoped_lock(infoConsoleMutex);
 
 		if (infoLines.empty())
@@ -121,7 +121,7 @@ void CInfoConsole::Draw()
 	float curY = ypos - IC_BORDER * globalRendering->pixelY;
 
 	for (size_t i = 0, n = drawInfoLines.size(); i < n; ++i) {
-		smallFont->glPrint(curX, curY -= fontHeight, fontSize, fontOptions, drawInfoLines[i].text);
+		smallFont->Print(curX, curY -= fontHeight, fontSize, fontOptions, drawInfoLines[i].text);
 	}
 
 	smallFont->End();

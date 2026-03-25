@@ -14,7 +14,7 @@
 #include "Lua/LuaIntro.h"
 #include "Lua/LuaMenu.h"
 #include "Map/MapInfo.h"
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/Textures/NamedTextures.h"
 #include "Sim/Misc/TeamHandler.h"
@@ -162,7 +162,6 @@ void CLoadScreen::Kill()
 	// has finished and deregistered itself from WatchDog
 	gameLoadThread.join();
 
-	CFontTexture::sync.SetThreadSafety(false);
 	CLoadLock::SetThreadSafety(false);
 	// set last time and forever
 	globalRendering->MakeCurrentContext(false);
@@ -348,4 +347,3 @@ void CLoadScreen::SetLoadMessage(const std::string& text, bool replaceLast)
 	Update();
 	Draw();
 }
-

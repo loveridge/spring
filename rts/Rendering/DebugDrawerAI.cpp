@@ -3,7 +3,7 @@
 #include "ExternalAI/SkirmishAIHandler.h"
 #include "Game/GlobalUnsynced.h"
 #include "Rendering/DebugDrawerAI.h"
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/GL/RenderBuffers.h"
@@ -289,7 +289,7 @@ void DebugDrawerAI::Graph::Draw()
 				const float tx = (pos.x + size.x) + (size.x * 0.025f);
 				const float ty = pos.y + (s / scale.y) * size.y;
 
-				font->glFormat(tx, ty, 1.0f, FONT_SCALE | FONT_NORM, "%2.1e", s + minScale.y);
+				font->Format(tx, ty, 1.0f, FONT_SCALE | FONT_NORM, "%2.1e", s + minScale.y);
 			}
 
 			// vertical grid lines
@@ -304,7 +304,7 @@ void DebugDrawerAI::Graph::Draw()
 				const float tx = (pos.x + (s / scale.x) * size.x) - (size.x * 0.05f);
 				const float ty = pos.y - size.y * 0.1f;
 
-				font->glFormat(tx, ty, 1.0f, FONT_SCALE | FONT_NORM, "%2.1e", s + minScale.x);
+				font->Format(tx, ty, 1.0f, FONT_SCALE | FONT_NORM, "%2.1e", s + minScale.x);
 			}
 
 			font->End();
@@ -331,7 +331,7 @@ void DebugDrawerAI::Graph::Draw()
 				const float ty = pos.y + ((lineNum * linePad * 2.0f) + linePad) * size.y;
 
 				font->SetTextColor(line.lineColor.x, line.lineColor.y, line.lineColor.z, 1.0f);
-				font->glPrint(tx, ty, 1.0f, FONT_SCALE | FONT_NORM, line.lineLabel);
+				font->Print(tx, ty, 1.0f, FONT_SCALE | FONT_NORM, line.lineLabel);
 
 				SColor color = {
 					line.lineColor.x,
@@ -469,7 +469,7 @@ void DebugDrawerAI::TexSet::Draw() {
 		const float tx = pos.x + size.x * 0.5f - ((tex.GetLabelWidth() * 0.5f) / globalRendering->viewSizeX) * size.x;
 		const float ty = pos.y + size.y        + ((tex.GetLabelHeight() * 0.5f) / globalRendering->viewSizeY) * size.y;
 
-		font->glFormat(tx, ty, 1.0f, FONT_SCALE | FONT_NORM, "%s", (tex.GetLabel()).c_str());
+		font->Format(tx, ty, 1.0f, FONT_SCALE | FONT_NORM, "%s", (tex.GetLabel()).c_str());
 	}
 	glDisable(GL_TEXTURE_2D);
 

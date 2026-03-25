@@ -13,7 +13,6 @@
 
 #undef GetCharWidth // winapi.h
 
-struct float2;
 struct float3;
 struct float4;
 struct SColor;
@@ -25,6 +24,8 @@ public:
 	class Impl;
 
 public:
+	static constexpr float MAX_HEIGHT_DEFAULT = 1000.0f;
+
 	static bool LoadConfigFonts();
 	static bool LoadCustomFonts(const std::string& smallFontFile, const std::string& largeFontFile);
 
@@ -108,11 +109,29 @@ public:
 	}
 
 public:
+	int GetSize() const;
+	int GetTextureWidth() const;
+	int GetTextureHeight() const;
+	int GetOutlineWidth() const;
+	float GetOutlineWeight() const;
+	float GetLineHeight() const;
+	float GetDescender() const;
+	int GetTexture() const;
+
+	const std::string& GetFamily() const;
+	const std::string& GetStyle() const;
+
 	float GetCharacterWidth(char32_t c) const;
 
+	float GetTextWidth(const char* text) const {
+		return GetTextWidth(std::string(text != nullptr ? text : ""));
+	}
 	float GetTextWidth(const std::string& text) const;
 	float GetTextWidth(const spring::u8string& text) const;
 
+	float GetTextHeight(const char* text, float* descender = nullptr, int* numLines = nullptr) const {
+		return GetTextHeight(std::string(text != nullptr ? text : ""), descender, numLines);
+	}
 	float GetTextHeight(const std::string& text, float* descender = nullptr, int* numLines = nullptr) const;
 	float GetTextHeight(const spring::u8string& text, float* descender = nullptr, int* numLines = nullptr) const;
 

@@ -522,11 +522,18 @@ public:
 	CMatrix44f projMatrix = CMatrix44f::Identity();
 	CMatrix44f worldViewMatrix = CMatrix44f::Identity();
 	CMatrix44f worldProjMatrix = CMatrix44f::Identity();
+	std::string familyName;
+	std::string styleName;
 };
 
 CglFont::CglFont(const std::string& fontFile, int size, int outlineWidth, float outlineWeight)
 	: impl(std::make_unique<Impl>(FontDescriptor {fontFile, size > 0 ? size : 14, outlineWidth, outlineWeight}))
-{}
+{
+	if (const auto& primaryFace = impl->faceSet->GetPrimaryFace(); primaryFace != nullptr) {
+		impl->familyName = primaryFace->GetFamilyNameString();
+		impl->styleName = primaryFace->GetStyleNameString();
+	}
+}
 
 CglFont::~CglFont() = default;
 
@@ -910,6 +917,61 @@ float CglFont::GetCharacterWidth(char32_t c) const
 	RECOIL_DETAILED_TRACY_ZONE;
 	std::scoped_lock lock(impl->mutex);
 	return impl->glyphCache->GetGlyphByCodepoint(c).advance;
+}
+
+int CglFont::GetSize() const
+{
+	return impl->descriptor.pixelSize;
+}
+
+int CglFont::GetTextureWidth() const
+{
+	std::scoped_lock lock(impl->mutex);
+	return impl->glyphCache->GetAtlasTexture().GetWidth();
+}
+
+int CglFont::GetTextureHeight() const
+{
+	std::scoped_lock lock(impl->mutex);
+	return impl->glyphCache->GetAtlasTexture().GetHeight();
+}
+
+int CglFont::GetOutlineWidth() const
+{
+	return impl->descriptor.outlineSize;
+}
+
+float CglFont::GetOutlineWeight() const
+{
+	return impl->descriptor.outlineWeight;
+}
+
+float CglFont::GetLineHeight() const
+{
+	std::scoped_lock lock(impl->mutex);
+	return impl->glyphCache->GetLineHeight();
+}
+
+float CglFont::GetDescender() const
+{
+	std::scoped_lock lock(impl->mutex);
+	return impl->glyphCache->GetDescender();
+}
+
+int CglFont::GetTexture() const
+{
+	std::scoped_lock lock(impl->mutex);
+	return impl->glyphCache->GetAtlasTexture().GetTextureId();
+}
+
+const std::string& CglFont::GetFamily() const
+{
+	return impl->familyName;
+}
+
+const std::string& CglFont::GetStyle() const
+{
+	return impl->styleName;
 }
 
 float CglFont::GetTextWidth(const std::string& text) const

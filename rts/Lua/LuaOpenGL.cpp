@@ -43,7 +43,7 @@
 #include "Map/BaseGroundDrawer.h"
 #include "Map/MapInfo.h"
 #include "Map/ReadMap.h"
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/LineDrawer.h"
 #include "Rendering/ShadowHandler.h"
@@ -1439,7 +1439,7 @@ int LuaOpenGL::Text(lua_State* L)
 	}
 
 	font->SetTextColor(SColor(color.data()));
-	font->glPrint(x, y, size, options, text);
+	font->Print(x, y, size, options, text);
 
 	return 0;
 }

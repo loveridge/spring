@@ -36,8 +36,7 @@
 #include "Rendering/Env/IWater.h"
 #include "Rendering/Env/WaterRendering.h"
 #include "Rendering/Env/MapRendering.h"
-#include "Rendering/Fonts/CFontTexture.h"
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "Rendering/CommandDrawer.h"
 #include "Rendering/LineDrawer.h"
 #include "Rendering/GlobalRendering.h"
@@ -1392,9 +1391,6 @@ bool CGame::UpdateUnsynced(const spring_time currentTime)
 	infoConsole->PushNewLinesToEventHandler();
 	infoConsole->Update();
 
-	//infoConsole->Update() can in theory cause the need to update fonts, so update here
-	CFontTexture::Update();
-
 	mouse->Update();
 	mouse->UpdateCursors();
 	guihandler->Update();
@@ -1599,22 +1595,22 @@ void CGame::DrawInterfaceWidgets()
 
 		const int seconds = (gs->frameNum / GAME_SPEED);
 		if (seconds < 3600) {
-			smallFont->glFormat(0.99f, 0.94f, 1.0f, INF_FONT_FLAGS, "%02i:%02i", seconds / 60, seconds % 60);
+			smallFont->Format(0.99f, 0.94f, 1.0f, INF_FONT_FLAGS, "%02i:%02i", seconds / 60, seconds % 60);
 		} else {
-			smallFont->glFormat(0.99f, 0.94f, 1.0f, INF_FONT_FLAGS, "%02i:%02i:%02i", seconds / 3600, (seconds / 60) % 60, seconds % 60);
+			smallFont->Format(0.99f, 0.94f, 1.0f, INF_FONT_FLAGS, "%02i:%02i:%02i", seconds / 3600, (seconds / 60) % 60, seconds % 60);
 		}
 	}
 
 	if (showFPS) {
 		static constexpr float4 yellow(1.0f, 1.0f, 0.25f, 1.0f);
 		smallFont->SetColors(&yellow,NULL);
-		smallFont->glFormat(0.99f, 0.92f, 1.0f, INF_FONT_FLAGS, "%.0f", globalRendering->FPS);
+		smallFont->Format(0.99f, 0.92f, 1.0f, INF_FONT_FLAGS, "%.0f", globalRendering->FPS);
 	}
 
 	if (showSpeed) {
 		const float4 speedcol(1.0f, gs->speedFactor < gs->wantedSpeedFactor * 0.99f ? 0.25f : 1.0f, 0.25f, 1.0f);
 		smallFont->SetColors(&speedcol, NULL);
-		smallFont->glFormat(0.99f, 0.90f, 1.0f, INF_FONT_FLAGS, "%2.2f", gs->speedFactor);
+		smallFont->Format(0.99f, 0.90f, 1.0f, INF_FONT_FLAGS, "%2.2f", gs->speedFactor);
 	}
 
 	CPlayerRosterDrawer::Draw();
@@ -2070,9 +2066,9 @@ void CGame::DrawSkip(bool blackscreen) {
 		glClear(GL_COLOR_BUFFER_BIT);
 	}
 	glColor3f(0.5f, 1.0f, 0.5f);
-	font->glFormat(0.5f, 0.55f, 2.5f, FONT_CENTER | FONT_SCALE | FONT_NORM, "Skipping %.1f game seconds", skipSeconds);
+	font->Format(0.5f, 0.55f, 2.5f, FONT_CENTER | FONT_SCALE | FONT_NORM, "Skipping %.1f game seconds", skipSeconds);
 	glColor3f(1.0f, 1.0f, 1.0f);
-	font->glFormat(0.5f, 0.45f, 2.0f, FONT_CENTER | FONT_SCALE | FONT_NORM, "(%i frames left)", framesLeft);
+	font->Format(0.5f, 0.45f, 2.0f, FONT_CENTER | FONT_SCALE | FONT_NORM, "(%i frames left)", framesLeft);
 
 	const float ff = (float)framesLeft / (float)skipTotalFrames;
 	glDisable(GL_TEXTURE_2D);
@@ -2204,4 +2200,3 @@ const ActionList& CGame::GetLastActionList()
 {
 	return gameInputReceiver.lastActionList;
 }
-

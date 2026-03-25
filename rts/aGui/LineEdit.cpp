@@ -3,7 +3,7 @@
 #include "LineEdit.h"
 
 #include "Rendering/GL/myGL.h"
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "System/Misc/SpringTime.h"
 
 
@@ -77,7 +77,7 @@ void LineEdit::DrawSelf()
 	}
 
 	font->SetTextColor(); //default
-	font->glPrint(pos[0] + 0.01, textCenter, 1.0, FONT_VCENTER | FONT_SCALE | FONT_NORM, tempText);
+	font->Print(pos[0] + 0.01, textCenter, 1.0, FONT_VCENTER | FONT_SCALE | FONT_NORM, tempText);
 }
 #endif
 

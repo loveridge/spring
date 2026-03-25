@@ -10,7 +10,7 @@
 #include "Sim/Units/CommandAI/Command.h"
 #include "Game/Camera.h"
 #include "Game/GameHelper.h"
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "Rendering/Units/UnitDrawer.h"
 #include "Rendering/GL/myGL.h"
 #include "Sim/Units/UnitDef.h"
@@ -166,9 +166,9 @@ void CCursorIcons::DrawTexts() const
 			const float y = (vpPos.y * globalRendering->pixelY) + yOffset;
 
 			if (guihandler->GetOutlineFonts()) {
-				font->glPrint(x, y, fontScale, FONT_OUTLINE | FONT_CENTER | FONT_TOP | FONT_SCALE | FONT_NORM, text.text);
+				font->Print(x, y, fontScale, FONT_OUTLINE | FONT_CENTER | FONT_TOP | FONT_SCALE | FONT_NORM, text.text);
 			} else {
-				font->glPrint(x, y, fontScale, FONT_SCALE | FONT_CENTER | FONT_TOP | FONT_NORM, text.text);
+				font->Print(x, y, fontScale, FONT_SCALE | FONT_CENTER | FONT_TOP | FONT_NORM, text.text);
 			}
 		}
 	}

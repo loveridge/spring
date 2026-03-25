@@ -9,7 +9,7 @@
 #include "Map/ReadMap.h"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/GL/glExtra.h"
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "Sim/Misc/Team.h"
 #include "Sim/Misc/Wind.h"
 #include "Sim/Misc/ModInfo.h"
@@ -273,8 +273,8 @@ void CGameInfo::Draw()
 
 		const float y = box.y2 - (dy * (i + 1)) + yBorder;
 
-		font->glPrint(box.x1 + xBorder, y, 1.0f, FONT_SCALE | FONT_NORM | FONT_BUFFERED, lfs.msg);
-		font->glPrint(box.x2 - xBorder, y, 1.0f, FONT_RIGHT | FONT_SCALE | FONT_NORM | FONT_BUFFERED, vfs.msg);
+		font->Print(box.x1 + xBorder, y, 1.0f, FONT_SCALE | FONT_NORM | FONT_BUFFERED, lfs.msg);
+		font->Print(box.x2 - xBorder, y, 1.0f, FONT_RIGHT | FONT_SCALE | FONT_NORM | FONT_BUFFERED, vfs.msg);
 	}
 
 	font->DrawBuffered();

@@ -10,7 +10,7 @@
 #include "Game/Camera.h"
 #include "Map/BaseGroundDrawer.h"
 #include "Map/ReadMap.h"
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/IconHandler.h"
 #include "Rendering/ShadowHandler.h"

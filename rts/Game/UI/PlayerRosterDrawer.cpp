@@ -8,7 +8,7 @@
 #include "Game/UI/GuiHandler.h"
 #include "Game/Players/Player.h"
 #include "Game/Players/PlayerHandler.h"
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "Rendering/GlobalRendering.h"
 #include "Sim/Misc/GlobalConstants.h"
 #include "Sim/Misc/GlobalSynced.h"
@@ -131,7 +131,7 @@ void CPlayerRosterDrawer::Draw()
 	const int fontFlags = FONT_RIGHT | FONT_BOTTOM | FONT_SCALE | FONT_NORM | (guihandler->GetOutlineFonts() * FONT_OUTLINE);
 
 	smallFont->SetColors();
-	smallFont->glPrintTable(1.0f - 5.0f * globalRendering->pixelX, 0.00f + 5.0f * globalRendering->pixelY, 1.0f, fontFlags, chart);
+	smallFont->PrintTable(1.0f - 5.0f * globalRendering->pixelX, 0.00f + 5.0f * globalRendering->pixelY, 1.0f, fontFlags, chart);
 }
 
 /******************************************************************************/

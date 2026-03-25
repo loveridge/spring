@@ -6,7 +6,7 @@
 #include "Game/GameVersion.h"
 #include "System/Config/ConfigHandler.h"
 #include "System/Platform/Misc.h"
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "Rendering/Fonts/FontHandler.h"
 
 /******************************************************************************

@@ -11,7 +11,7 @@
 #include "Map/MetalMap.h"
 #include "Map/ReadMap.h"
 #include "Rendering/GL/myGL.h"
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "Sim/Features/Feature.h"
 #include "Sim/Features/FeatureDef.h"
 #include "Sim/Misc/ResourceHandler.h"
@@ -84,9 +84,9 @@ void CTooltipConsole::Draw()
 	smallFont->SetColors(); //default
 
 	if (outFont) {
-		smallFont->glPrint(curX, curY, fontSize, FONT_ASCENDER | FONT_OUTLINE | FONT_NORM, s);
+		smallFont->Print(curX, curY, fontSize, FONT_ASCENDER | FONT_OUTLINE | FONT_NORM, s);
 	} else {
-		smallFont->glPrint(curX, curY, fontSize, FONT_ASCENDER | FONT_NORM, s);
+		smallFont->Print(curX, curY, fontSize, FONT_ASCENDER | FONT_NORM, s);
 	}
 
 	smallFont->End();

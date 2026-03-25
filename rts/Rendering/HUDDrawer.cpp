@@ -2,7 +2,7 @@
 
 #include "HUDDrawer.h"
 
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/GL/SubState.h"
@@ -133,10 +133,10 @@ void HUDDrawer::DrawWeaponStates(const CUnit* unit)
 
 	glEnable(GL_TEXTURE_2D);
 	glColor4f(0.2f, 0.8f, 0.2f, 0.8f);
-	font->glFormat(-0.9f, 0.35f, 1.0f, FONT_SCALE | FONT_NORM, "Health: %.0f / %.0f", (float) unit->health, (float) unit->maxHealth);
+	font->Format(-0.9f, 0.35f, 1.0f, FONT_SCALE | FONT_NORM, "Health: %.0f / %.0f", (float) unit->health, (float) unit->maxHealth);
 
 	if (playerHandler.Player(gu->myPlayerNum)->fpsController.mouse2)
-		font->glPrint(-0.9f, 0.30f, 1.0f, FONT_SCALE | FONT_NORM, "Free-Fire Mode");
+		font->Print(-0.9f, 0.30f, 1.0f, FONT_SCALE | FONT_NORM, "Free-Fire Mode");
 
 	int numWeaponsToPrint = 0;
 
@@ -166,21 +166,21 @@ void HUDDrawer::DrawWeaponStates(const CUnit* unit)
 				if (wd->stockpile && !w->numStockpiled) {
 					if (w->numStockpileQued) {
 						glColor4f(0.8f, 0.2f, 0.2f, 0.8f);
-						font->glFormat(-0.9f, yPos, fontSize, FONT_SCALE | FONT_NORM, "%s: Stockpiling (%i%%)", wd->description.c_str(), int(100.0f * w->buildPercent + 0.5f));
+						font->Format(-0.9f, yPos, fontSize, FONT_SCALE | FONT_NORM, "%s: Stockpiling (%i%%)", wd->description.c_str(), int(100.0f * w->buildPercent + 0.5f));
 					}
 					else {
 						glColor4f(0.8f, 0.2f, 0.2f, 0.8f);
-						font->glFormat(-0.9f, yPos, fontSize, FONT_SCALE | FONT_NORM, "%s: No ammo", wd->description.c_str());
+						font->Format(-0.9f, yPos, fontSize, FONT_SCALE | FONT_NORM, "%s: No ammo", wd->description.c_str());
 					}
 				} else if (w->reloadStatus > gs->frameNum) {
 					glColor4f(0.8f, 0.2f, 0.2f, 0.8f);
-					font->glFormat(-0.9f, yPos, fontSize, FONT_SCALE | FONT_NORM, "%s: Reloading (%i%%)", wd->description.c_str(), 100 - int(100.0f * (w->reloadStatus - gs->frameNum) / int(w->reloadTime / unit->reloadSpeed) + 0.5f));
+					font->Format(-0.9f, yPos, fontSize, FONT_SCALE | FONT_NORM, "%s: Reloading (%i%%)", wd->description.c_str(), 100 - int(100.0f * (w->reloadStatus - gs->frameNum) / int(w->reloadTime / unit->reloadSpeed) + 0.5f));
 				} else if (!w->angleGood) {
 					glColor4f(0.6f, 0.6f, 0.2f, 0.8f);
-					font->glFormat(-0.9f, yPos, fontSize, FONT_SCALE | FONT_NORM, "%s: Aiming", wd->description.c_str());
+					font->Format(-0.9f, yPos, fontSize, FONT_SCALE | FONT_NORM, "%s: Aiming", wd->description.c_str());
 				} else {
 					glColor4f(0.2f, 0.8f, 0.2f, 0.8f);
-					font->glFormat(-0.9f, yPos, fontSize, FONT_SCALE | FONT_NORM, "%s: Ready", wd->description.c_str());
+					font->Format(-0.9f, yPos, fontSize, FONT_SCALE | FONT_NORM, "%s: Ready", wd->description.c_str());
 				}
 			}
 		}

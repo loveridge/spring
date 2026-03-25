@@ -11,7 +11,7 @@
 #include "WordCompletion.h"
 #include "Game/UI/GuiHandler.h"
 #include "Game/UI/KeyCodes.h"
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/GlobalRendering.h"
 #include "System/SpringMath.h"
@@ -93,7 +93,7 @@ void GameControllerTextInput::Draw() {
 	// draw the text
 	font->Begin();
 	font->SetColors(textColor, nullptr);
-	font->glPrint(inputTextPosX, inputTextPosY, fontSize, FONT_DESCENDER | (FONT_OUTLINE * guihandler->GetOutlineFonts()) | FONT_NORM, userString);
+	font->Print(inputTextPosX, inputTextPosY, fontSize, FONT_DESCENDER | (FONT_OUTLINE * guihandler->GetOutlineFonts()) | FONT_NORM, userString);
 	font->End();
 	font->SetColors(nullptr, nullptr);
 }

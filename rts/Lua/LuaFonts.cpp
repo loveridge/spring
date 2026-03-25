@@ -12,7 +12,8 @@
 #include "LuaOpenGL.h"
 
 #include "Rendering/GL/myGL.h"
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/FontRegistry.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "System/Exceptions.h"
 
 #include "System/Misc/TracyDefs.h"
@@ -239,7 +240,7 @@ int LuaFonts::AddFallbackFont(lua_State* L)
 
 	const auto font = luaL_checkstring(L, 1);
 
-	const bool res = CFontTexture::AddFallbackFont(font);
+	const bool res = spring::font::FontRegistry::AddFallbackFont(font);
 	lua_pushboolean(L, res);
 	return 1;
 }
@@ -256,7 +257,7 @@ int LuaFonts::ClearFallbackFonts(lua_State* L)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 
-	CFontTexture::ClearFallbackFonts();
+	spring::font::FontRegistry::ClearFallbackFonts();
 	return 0;
 }
 
@@ -307,7 +308,7 @@ int LuaFonts::Print(lua_State* L)
 		}
 	}
 
-	f->glPrint(x, y, size, options, text);
+	f->Print(x, y, size, options, text);
 	return 0;
 }
 
@@ -358,7 +359,7 @@ int LuaFonts::PrintWorld(lua_State* L)
 		}
 	}
 
-	f->glWorldPrint(pos, size, text, options);
+	f->PrintWorld(pos, size, text, options);
 	return 0;
 }
 

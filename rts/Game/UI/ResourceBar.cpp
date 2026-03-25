@@ -6,7 +6,7 @@
 #include "Game/GlobalUnsynced.h"
 #include "Rendering/GL/myGL.h"
 #include "Rendering/GL/glExtra.h"
-#include "Rendering/Fonts/glFont.h"
+#include "Rendering/FontsModern/glFont.h"
 #include "Sim/Misc/TeamHandler.h"
 #include "Net/Protocol/NetProtocol.h"
 #include "System/SpringMath.h"
@@ -133,29 +133,29 @@ void CResourceBar::Draw()
 
 
 	smallFont->SetTextColor(0.8f, 0.8f, 1.0f, 0.8f);
-	smallFont->glPrint(metalx - 0.004f,  (box.y1 + box.y2) * 0.5f, headerFontSize, FONT_VCENTER | fontOptions | FONT_BUFFERED, "Metal");
+	smallFont->Print(metalx - 0.004f,  (box.y1 + box.y2) * 0.5f, headerFontSize, FONT_VCENTER | fontOptions | FONT_BUFFERED, "Metal");
 
 	smallFont->SetTextColor(1.0f, 1.0f, 0.4f, 0.8f);
-	smallFont->glPrint(energyx - 0.018f, (box.y1 + box.y2) * 0.5f, headerFontSize, FONT_VCENTER | fontOptions | FONT_BUFFERED, "Energy");
+	smallFont->Print(energyx - 0.018f, (box.y1 + box.y2) * 0.5f, headerFontSize, FONT_VCENTER | fontOptions | FONT_BUFFERED, "Energy");
 
 	smallFont->SetTextColor(1.0f, 0.3f, 0.3f, 1.0f); // Expenses
-	smallFont->glFormat(metalx  + 0.044f, box.y1, labelsFontSize, FONT_DESCENDER | fontOptions | FONT_BUFFERED, "-%s(-%s)",
+	smallFont->Format(metalx  + 0.044f, box.y1, labelsFontSize, FONT_DESCENDER | fontOptions | FONT_BUFFERED, "-%s(-%s)",
 		FloatToSmallString(math::fabs( rpp.metal)).c_str(),
 		FloatToSmallString(math::fabs(rsnt.metal)).c_str());
-	smallFont->glFormat(energyx + 0.044f, box.y1, labelsFontSize, FONT_DESCENDER | fontOptions | FONT_BUFFERED, "-%s(-%s)",
+	smallFont->Format(energyx + 0.044f, box.y1, labelsFontSize, FONT_DESCENDER | fontOptions | FONT_BUFFERED, "-%s(-%s)",
 		FloatToSmallString(math::fabs( rpp.energy)).c_str(),
 		FloatToSmallString(math::fabs(rsnt.energy)).c_str());
 
 	smallFont->SetTextColor(0.4f, 1.0f, 0.4f, 0.95f); // Income (sans portion received from allies)
-	smallFont->glFormat(metalx  + 0.044f, box.y2 - 2.0f * globalRendering->pixelY, labelsFontSize, FONT_ASCENDER | fontOptions | FONT_BUFFERED, "+%s", FloatToSmallString(rpi.metal ).c_str());
-	smallFont->glFormat(energyx + 0.044f, box.y2 - 2.0f * globalRendering->pixelY, labelsFontSize, FONT_ASCENDER | fontOptions | FONT_BUFFERED, "+%s", FloatToSmallString(rpi.energy).c_str());
+	smallFont->Format(metalx  + 0.044f, box.y2 - 2.0f * globalRendering->pixelY, labelsFontSize, FONT_ASCENDER | fontOptions | FONT_BUFFERED, "+%s", FloatToSmallString(rpi.metal ).c_str());
+	smallFont->Format(energyx + 0.044f, box.y2 - 2.0f * globalRendering->pixelY, labelsFontSize, FONT_ASCENDER | fontOptions | FONT_BUFFERED, "+%s", FloatToSmallString(rpi.energy).c_str());
 
 	smallFont->SetTextColor(1.0f, 1.0f, 1.0f, 0.8f);
-	smallFont->glPrint(energybarx2 - 0.01f              , energyy - 0.005f, labelsFontSize, fontOptions | FONT_BUFFERED, FloatToSmallString(rcs.energy));
-	smallFont->glPrint(energybarx1 + energybarlen / 2.0f, energyy - 0.005f, labelsFontSize, fontOptions | FONT_BUFFERED, FloatToSmallString(rcr.energy));
+	smallFont->Print(energybarx2 - 0.01f              , energyy - 0.005f, labelsFontSize, fontOptions | FONT_BUFFERED, FloatToSmallString(rcs.energy));
+	smallFont->Print(energybarx1 + energybarlen / 2.0f, energyy - 0.005f, labelsFontSize, fontOptions | FONT_BUFFERED, FloatToSmallString(rcr.energy));
 
-	smallFont->glPrint(metalbarx2 - 0.01f             , metaly - 0.005f, labelsFontSize, fontOptions | FONT_BUFFERED, FloatToSmallString(rcs.metal));
-	smallFont->glPrint(metalbarx1 + metalbarlen / 2.0f, metaly - 0.005f, labelsFontSize, fontOptions | FONT_BUFFERED, FloatToSmallString(rcr.metal));
+	smallFont->Print(metalbarx2 - 0.01f             , metaly - 0.005f, labelsFontSize, fontOptions | FONT_BUFFERED, FloatToSmallString(rcs.metal));
+	smallFont->Print(metalbarx1 + metalbarlen / 2.0f, metaly - 0.005f, labelsFontSize, fontOptions | FONT_BUFFERED, FloatToSmallString(rcr.metal));
 	smallFont->SetTextColor(1.0f, 1.0f, 1.0f, 1.0f);
 
 	smallFont->DrawBuffered();
