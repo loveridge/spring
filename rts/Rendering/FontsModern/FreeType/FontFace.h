@@ -26,12 +26,8 @@ public:
 
 public:
 	FontFileBytes() = default;
-	explicit FontFileBytes(std::size_t size)
-		: bytes(size)
-	{}
-	explicit FontFileBytes(container_type data)
-		: bytes(std::move(data))
-	{}
+	explicit FontFileBytes(std::size_t size);
+	explicit FontFileBytes(container_type data);
 
 	FontFileBytes(const FontFileBytes&) = default;
 	FontFileBytes& operator=(const FontFileBytes&) = default;
@@ -39,17 +35,17 @@ public:
 	FontFileBytes& operator=(FontFileBytes&&) noexcept = default;
 	~FontFileBytes() = default;
 
-	value_type* Data() noexcept { return bytes.data(); }
-	const value_type* Data() const noexcept { return bytes.data(); }
+	value_type* Data() noexcept;
+	const value_type* Data() const noexcept;
 
-	std::size_t Size() const noexcept { return bytes.size(); }
-	bool Empty() const noexcept { return bytes.empty(); }
+	std::size_t Size() const noexcept;
+	bool Empty() const noexcept;
 
-	container_type& Storage() noexcept { return bytes; }
-	const container_type& Storage() const noexcept { return bytes; }
+	container_type& Storage() noexcept;
+	const container_type& Storage() const noexcept;
 
-	void Resize(std::size_t size) { bytes.resize(size); }
-	void Clear() noexcept { bytes.clear(); bytes.shrink_to_fit(); }
+	void Resize(std::size_t size);
+	void Clear() noexcept;
 
 private:
 	container_type bytes;
@@ -68,43 +64,20 @@ private:
 class FontFace {
 public:
 	FontFace() = default;
-	explicit FontFace(FT_Face ftFace, std::shared_ptr<FontFileBytes> fileBytes = {}) noexcept
-		: face(ftFace)
-		, memory(std::move(fileBytes))
-	{}
+	explicit FontFace(FT_Face ftFace, std::shared_ptr<FontFileBytes> fileBytes = {}) noexcept;
 
-	~FontFace() { Reset(); }
+	~FontFace();
 
 	FontFace(const FontFace&) = delete;
 	FontFace& operator=(const FontFace&) = delete;
 
-	FontFace(FontFace&& other) noexcept
-		: face(std::exchange(other.face, nullptr))
-		, memory(std::move(other.memory))
-	{}
+	FontFace(FontFace&& other) noexcept;
 
-	FontFace& operator=(FontFace&& other) noexcept
-	{
-		if (this == &other)
-			return *this;
+	FontFace& operator=(FontFace&& other) noexcept;
 
-		Reset();
-		face = std::exchange(other.face, nullptr);
-		memory = std::move(other.memory);
-		return *this;
-	}
+	void Reset(FT_Face newFace = nullptr, std::shared_ptr<FontFileBytes> newMemory = {}) noexcept;
 
-	void Reset(FT_Face newFace = nullptr, std::shared_ptr<FontFileBytes> newMemory = {}) noexcept
-	{
-		if (face != nullptr) {
-			FT_Done_Face(face);
-		}
-
-		face = newFace;
-		memory = std::move(newMemory);
-	}
-
-	FT_Face GetFTFace() const noexcept { return face; }
+	FT_Face GetFTFace() const noexcept;
 	operator FT_Face() const noexcept { return face; }
 
 	bool IsValid() const noexcept { return face != nullptr; }
@@ -114,50 +87,23 @@ public:
 	std::shared_ptr<FontFileBytes>& GetBackingBytes() noexcept { return memory; }
 	bool HasBackingBytes() const noexcept { return static_cast<bool>(memory); }
 
-	const char* GetFamilyName() const noexcept
-	{
-		return (face != nullptr) ? face->family_name : nullptr;
-	}
+	const char* GetFamilyName() const noexcept;
 
-	const char* GetStyleName() const noexcept
-	{
-		return (face != nullptr) ? face->style_name : nullptr;
-	}
+	const char* GetStyleName() const noexcept;
 
-	std::string GetFamilyNameString() const
-	{
-		return (GetFamilyName() != nullptr) ? std::string(GetFamilyName()) : std::string();
-	}
+	std::string GetFamilyNameString() const;
 
-	std::string GetStyleNameString() const
-	{
-		return (GetStyleName() != nullptr) ? std::string(GetStyleName()) : std::string();
-	}
+	std::string GetStyleNameString() const;
 
-	long GetFaceIndex() const noexcept
-	{
-		return (face != nullptr) ? face->face_index : 0;
-	}
+	long GetFaceIndex() const noexcept;
 
-	long GetNumGlyphs() const noexcept
-	{
-		return (face != nullptr) ? face->num_glyphs : 0;
-	}
+	long GetNumGlyphs() const noexcept;
 
-	bool HasKerning() const noexcept
-	{
-		return (face != nullptr) && FT_HAS_KERNING(face);
-	}
+	bool HasKerning() const noexcept;
 
-	FT_UInt GetCharIndex(char32_t codepoint) const noexcept
-	{
-		return (face != nullptr) ? FT_Get_Char_Index(face, static_cast<FT_ULong>(codepoint)) : 0u;
-	}
+	FT_UInt GetCharIndex(char32_t codepoint) const noexcept;
 
-	FT_Error LoadGlyph(FT_UInt glyphIndex, FT_Int32 loadFlags) const noexcept
-	{
-		return (face != nullptr) ? FT_Load_Glyph(face, glyphIndex, loadFlags) : static_cast<FT_Error>(1);
-	}
+	FT_Error LoadGlyph(FT_UInt glyphIndex, FT_Int32 loadFlags) const noexcept;
 
 private:
 	FT_Face face = nullptr;

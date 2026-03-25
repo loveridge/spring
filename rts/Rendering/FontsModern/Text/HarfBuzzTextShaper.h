@@ -88,8 +88,8 @@ private:
 	void ConfigureBuffer(hb_buffer_t* buffer, std::string_view utf8, const ShapeOptions& options) const;
 	void ApplyFeatures(hb_buffer_t* buffer, const ShapeOptions& options, ShapeResult& result, ShapedRun& run) const;
 
-	const hb_font_t* GetOrCreateHbFont(FT_Face ftFace) const;
-	const hb_font_t* GetOrCreateHbFont(const std::shared_ptr<font::FontFace>& face) const;
+	hb_font_t* GetOrCreateHbFont(FT_Face ftFace) const;
+	hb_font_t* GetOrCreateHbFont(const std::shared_ptr<font::FontFace>& face) const;
 	std::shared_ptr<font::FontFace> ResolveFaceForCodepoint(char32_t codepoint) const;
 	std::shared_ptr<font::FontFace> ResolveFaceForGlyphInfo(char32_t codepoint, hb_codepoint_t glyphIndex) const;
 
@@ -108,6 +108,7 @@ private:
 	std::shared_ptr<font::FontFace> primaryFace;
 	std::shared_ptr<font::FontFaceSet> faces;
 	ScriptDetectionHooks detectionHooks{};
+	FT_Face primaryFTFace = nullptr;
 
 	mutable std::mutex hbFontCacheMutex;
 	mutable std::unordered_map<const FT_FaceRec_*, HbFontCacheEntry> hbFontCache;
@@ -116,4 +117,3 @@ private:
 using HarfBuzzTextShaperPtr = std::shared_ptr<HarfBuzzTextShaper>;
 
 } // namespace font::text
-
