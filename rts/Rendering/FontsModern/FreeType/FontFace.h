@@ -12,7 +12,7 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
-namespace font {
+namespace spring::font {
 
 /**
  * Owns the raw font file bytes used to construct an FT_Face via

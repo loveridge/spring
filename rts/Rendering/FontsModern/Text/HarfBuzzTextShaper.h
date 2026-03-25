@@ -15,12 +15,12 @@
 
 #include "TextShaper.h"
 
-namespace font {
+namespace spring::font {
 class FontFace;
 class FontFaceSet;
 }
 
-namespace font::text {
+namespace spring::font::text {
 
 /**
  * HarfBuzz-backed TextShaper implementation.
@@ -44,8 +44,8 @@ public:
 public:
 	HarfBuzzTextShaper();
 	explicit HarfBuzzTextShaper(FT_Face ftFace);
-	explicit HarfBuzzTextShaper(std::shared_ptr<font::FontFace> primaryFace);
-	explicit HarfBuzzTextShaper(std::shared_ptr<font::FontFaceSet> faceSet);
+	explicit HarfBuzzTextShaper(std::shared_ptr<spring::font::FontFace> primaryFace);
+	explicit HarfBuzzTextShaper(std::shared_ptr<spring::font::FontFaceSet> faceSet);
 	~HarfBuzzTextShaper() override = default;
 
 	HarfBuzzTextShaper(const HarfBuzzTextShaper&) = delete;
@@ -54,12 +54,12 @@ public:
 	HarfBuzzTextShaper& operator=(HarfBuzzTextShaper&&) noexcept = default;
 
 	void SetPrimaryFace(FT_Face ftFace);
-	void SetPrimaryFace(std::shared_ptr<font::FontFace> primaryFace);
-	void SetFaceSet(std::shared_ptr<font::FontFaceSet> faceSet);
+	void SetPrimaryFace(std::shared_ptr<spring::font::FontFace> primaryFace);
+	void SetFaceSet(std::shared_ptr<spring::font::FontFaceSet> faceSet);
 
 	FT_Face GetPrimaryFTFace() const noexcept;
-	const std::shared_ptr<font::FontFace>& GetPrimaryFace() const noexcept { return primaryFace; }
-	const std::shared_ptr<font::FontFaceSet>& GetFaceSet() const noexcept { return faces; }
+	const std::shared_ptr<spring::font::FontFace>& GetPrimaryFace() const noexcept { return primaryFace; }
+	const std::shared_ptr<spring::font::FontFaceSet>& GetFaceSet() const noexcept { return faces; }
 
 	const ScriptDetectionHooks& GetScriptDetectionHooks() const noexcept { return detectionHooks; }
 	void SetScriptDetectionHooks(const ScriptDetectionHooks& hooks) noexcept { detectionHooks = hooks; }
@@ -71,7 +71,7 @@ public:
 
 private:
 	struct HbFontCacheEntry {
-		std::shared_ptr<font::FontFace> face;
+		std::shared_ptr<spring::font::FontFace> face;
 		HbFontPtr hbFont{nullptr, &hb_font_destroy};
 	};
 
@@ -84,20 +84,20 @@ private:
 
 	HbBufferPtr CreateBuffer() const;
 	HbFontPtr CreateHbFont(FT_Face ftFace) const;
-	HbFontPtr CreateHbFont(const std::shared_ptr<font::FontFace>& face) const;
+	HbFontPtr CreateHbFont(const std::shared_ptr<spring::font::FontFace>& face) const;
 	void ConfigureBuffer(hb_buffer_t* buffer, std::string_view utf8, const ShapeOptions& options) const;
 	void ApplyFeatures(hb_buffer_t* buffer, const ShapeOptions& options, ShapeResult& result, ShapedRun& run) const;
 
 	hb_font_t* GetOrCreateHbFont(FT_Face ftFace) const;
-	hb_font_t* GetOrCreateHbFont(const std::shared_ptr<font::FontFace>& face) const;
-	std::shared_ptr<font::FontFace> ResolveFaceForCodepoint(char32_t codepoint) const;
-	std::shared_ptr<font::FontFace> ResolveFaceForGlyphInfo(char32_t codepoint, hb_codepoint_t glyphIndex) const;
+	hb_font_t* GetOrCreateHbFont(const std::shared_ptr<spring::font::FontFace>& face) const;
+	std::shared_ptr<spring::font::FontFace> ResolveFaceForCodepoint(char32_t codepoint) const;
+	std::shared_ptr<spring::font::FontFace> ResolveFaceForGlyphInfo(char32_t codepoint, hb_codepoint_t glyphIndex) const;
 
 	ShapedRun ConvertBufferToRun(
 		std::string_view utf8,
 		const TextSpan& sourceSpan,
 		const ShapeOptions& options,
-		const std::shared_ptr<font::FontFace>& runFace,
+		const std::shared_ptr<spring::font::FontFace>& runFace,
 		hb_buffer_t* buffer,
 		ShapeResult& result
 	) const;
@@ -105,8 +105,8 @@ private:
 	void ClearCachedHbFonts() const;
 
 private:
-	std::shared_ptr<font::FontFace> primaryFace;
-	std::shared_ptr<font::FontFaceSet> faces;
+	std::shared_ptr<spring::font::FontFace> primaryFace;
+	std::shared_ptr<spring::font::FontFaceSet> faces;
 	ScriptDetectionHooks detectionHooks{};
 	FT_Face primaryFTFace = nullptr;
 

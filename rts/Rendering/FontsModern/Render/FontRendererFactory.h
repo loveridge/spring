@@ -6,7 +6,7 @@
 
 #include "IFontRenderer.h"
 
-namespace font::render {
+namespace spring::font::render {
 
 /**
  * @brief Supported renderer backend kinds.

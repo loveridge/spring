@@ -11,7 +11,7 @@
 
 #include "FontTypes.h"
 
-namespace font {
+namespace spring::font {
 
 class FontFace;
 class FontLibrary;
@@ -120,4 +120,3 @@ private:
 };
 
 } // namespace font
-

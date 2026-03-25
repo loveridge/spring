@@ -17,7 +17,7 @@ class VBO;
 class CMatrix44f;
 class GlyphAtlasTexture;
 
-namespace font::render {
+namespace spring::font::render {
 
 class ShaderFontRenderer final : public IFontRenderer {
 public:
@@ -64,8 +64,8 @@ public:
 
 	void AddPrimaryQuad(const PreparedGlyphQuad& quad) override;
 	void AddOutlineQuad(const PreparedGlyphQuad& quad) override;
-	void AddPrimaryGlyph(const font::text::LaidOutGlyph& glyph) override;
-	void AddOutlineGlyph(const font::text::LaidOutGlyph& glyph) override;
+	void AddPrimaryGlyph(const spring::font::text::LaidOutGlyph& glyph) override;
+	void AddOutlineGlyph(const spring::font::text::LaidOutGlyph& glyph) override;
 	void DrawQueued() override;
 
 	void HandleTextureUpdate(const GlyphAtlasTexture& primaryAtlas,

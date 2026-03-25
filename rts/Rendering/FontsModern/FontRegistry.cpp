@@ -13,7 +13,7 @@
 #include <fontconfig/fontconfig.h>
 #endif
 
-namespace font {
+namespace spring::font {
 
 std::once_flag FontRegistry::initOnce;
 bool FontRegistry::initialized = false;

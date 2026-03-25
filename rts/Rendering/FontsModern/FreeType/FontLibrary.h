@@ -12,7 +12,7 @@
 #include <fontconfig/fontconfig.h>
 #endif
 
-namespace font {
+namespace spring::font {
 
 class FontLibrary {
 public:

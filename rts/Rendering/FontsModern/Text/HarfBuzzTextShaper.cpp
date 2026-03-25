@@ -58,7 +58,7 @@ static constexpr float FTMetricScale = 64.0f;
 	return 1.0f / (static_cast<float>(yPpem) * FTMetricScale);
 }
 
-[[nodiscard]] GlyphMetrics LoadGlyphMetrics(const std::shared_ptr<font::FontFace>& face, hb_codepoint_t glyphIndex)
+[[nodiscard]] GlyphMetrics LoadGlyphMetrics(const std::shared_ptr<spring::font::FontFace>& face, hb_codepoint_t glyphIndex)
 {
 	GlyphMetrics metrics{};
 
@@ -92,7 +92,7 @@ static constexpr float FTMetricScale = 64.0f;
 
 } // namespace
 
-namespace font::text {
+namespace spring::font::text {
 
 HarfBuzzTextShaper::HarfBuzzTextShaper() = default;
 
@@ -101,12 +101,12 @@ HarfBuzzTextShaper::HarfBuzzTextShaper(FT_Face ftFace)
 	SetPrimaryFace(ftFace);
 }
 
-HarfBuzzTextShaper::HarfBuzzTextShaper(std::shared_ptr<font::FontFace> primaryFace_)
+HarfBuzzTextShaper::HarfBuzzTextShaper(std::shared_ptr<spring::font::FontFace> primaryFace_)
 {
 	SetPrimaryFace(std::move(primaryFace_));
 }
 
-HarfBuzzTextShaper::HarfBuzzTextShaper(std::shared_ptr<font::FontFaceSet> faceSet)
+HarfBuzzTextShaper::HarfBuzzTextShaper(std::shared_ptr<spring::font::FontFaceSet> faceSet)
 {
 	SetFaceSet(std::move(faceSet));
 }
@@ -119,7 +119,7 @@ void HarfBuzzTextShaper::SetPrimaryFace(FT_Face ftFace)
 	ClearCachedHbFonts();
 }
 
-void HarfBuzzTextShaper::SetPrimaryFace(std::shared_ptr<font::FontFace> primaryFace_)
+void HarfBuzzTextShaper::SetPrimaryFace(std::shared_ptr<spring::font::FontFace> primaryFace_)
 {
 	primaryFace = std::move(primaryFace_);
 	faces.reset();
@@ -127,7 +127,7 @@ void HarfBuzzTextShaper::SetPrimaryFace(std::shared_ptr<font::FontFace> primaryF
 	ClearCachedHbFonts();
 }
 
-void HarfBuzzTextShaper::SetFaceSet(std::shared_ptr<font::FontFaceSet> faceSet)
+void HarfBuzzTextShaper::SetFaceSet(std::shared_ptr<spring::font::FontFaceSet> faceSet)
 {
 	faces = std::move(faceSet);
 	primaryFace = (faces != nullptr) ? faces->GetPrimaryFace() : nullptr;
@@ -178,7 +178,7 @@ ShapeResult HarfBuzzTextShaper::ShapeSpan(const TextSpan& span, const ShapeOptio
 		std::size_t end = 0;
 		std::size_t printableStart = 0;
 		std::size_t printableLength = 0;
-		std::shared_ptr<font::FontFace> face;
+		std::shared_ptr<spring::font::FontFace> face;
 		FT_Face ftFace = nullptr;
 	};
 
@@ -187,7 +187,7 @@ ShapeResult HarfBuzzTextShaper::ShapeSpan(const TextSpan& span, const ShapeOptio
 
 	std::size_t segmentStart = 0;
 	std::size_t segmentPrintableStart = 0;
-	std::shared_ptr<font::FontFace> currentFace = nullptr;
+	std::shared_ptr<spring::font::FontFace> currentFace = nullptr;
 	FT_Face currentFTFace = initialFTFace;
 	bool haveSegment = false;
 	std::size_t printableIndex = 0;
@@ -196,7 +196,7 @@ ShapeResult HarfBuzzTextShaper::ShapeSpan(const TextSpan& span, const ShapeOptio
 		const int charStart = pos;
 		const char32_t codepoint = utf8::GetNextChar(utf8Copy, pos);
 
-		std::shared_ptr<font::FontFace> resolvedFace = ResolveFaceForCodepoint(codepoint);
+		std::shared_ptr<spring::font::FontFace> resolvedFace = ResolveFaceForCodepoint(codepoint);
 		FT_Face resolvedFTFace = (resolvedFace != nullptr) ? resolvedFace->GetFTFace() : GetPrimaryFTFace();
 
 		if (!haveSegment) {
@@ -395,7 +395,7 @@ HarfBuzzTextShaper::HbFontPtr HarfBuzzTextShaper::CreateHbFont(FT_Face ftFace) c
 	return HbFontPtr(hb_ft_font_create_referenced(ftFace), &hb_font_destroy);
 }
 
-HarfBuzzTextShaper::HbFontPtr HarfBuzzTextShaper::CreateHbFont(const std::shared_ptr<font::FontFace>& face) const
+HarfBuzzTextShaper::HbFontPtr HarfBuzzTextShaper::CreateHbFont(const std::shared_ptr<spring::font::FontFace>& face) const
 {
 	return (face != nullptr) ? CreateHbFont(face->GetFTFace()) : HbFontPtr(nullptr, &hb_font_destroy);
 }
@@ -452,7 +452,7 @@ hb_font_t* HarfBuzzTextShaper::GetOrCreateHbFont(FT_Face ftFace) const
 	return insertedIt->second.hbFont.get();
 }
 
-hb_font_t* HarfBuzzTextShaper::GetOrCreateHbFont(const std::shared_ptr<font::FontFace>& face) const
+hb_font_t* HarfBuzzTextShaper::GetOrCreateHbFont(const std::shared_ptr<spring::font::FontFace>& face) const
 {
 	if (face == nullptr)
 		return GetOrCreateHbFont(GetPrimaryFTFace());
@@ -476,7 +476,7 @@ hb_font_t* HarfBuzzTextShaper::GetOrCreateHbFont(const std::shared_ptr<font::Fon
 	return insertedIt->second.hbFont.get();
 }
 
-std::shared_ptr<font::FontFace> HarfBuzzTextShaper::ResolveFaceForCodepoint(char32_t codepoint) const
+std::shared_ptr<spring::font::FontFace> HarfBuzzTextShaper::ResolveFaceForCodepoint(char32_t codepoint) const
 {
 	if (faces != nullptr) {
 		if (auto face = faces->FindFaceForCodepoint(codepoint); face != nullptr)
@@ -488,7 +488,7 @@ std::shared_ptr<font::FontFace> HarfBuzzTextShaper::ResolveFaceForCodepoint(char
 	return primaryFace;
 }
 
-std::shared_ptr<font::FontFace> HarfBuzzTextShaper::ResolveFaceForGlyphInfo(char32_t codepoint, hb_codepoint_t glyphIndex) const
+std::shared_ptr<spring::font::FontFace> HarfBuzzTextShaper::ResolveFaceForGlyphInfo(char32_t codepoint, hb_codepoint_t glyphIndex) const
 {
 	if (faces != nullptr) {
 		if (glyphIndex != 0u) {
@@ -509,7 +509,7 @@ ShapedRun HarfBuzzTextShaper::ConvertBufferToRun(
 	std::string_view utf8,
 	const TextSpan& sourceSpan,
 	const ShapeOptions& options,
-	const std::shared_ptr<font::FontFace>& runFace,
+	const std::shared_ptr<spring::font::FontFace>& runFace,
 	hb_buffer_t* buffer,
 	ShapeResult& result
 ) const {

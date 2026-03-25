@@ -62,28 +62,28 @@ static constexpr float4 WhiteColor(1.00f, 1.00f, 1.00f, 0.95f);
 static constexpr float4 DarkOutlineColor(0.05f, 0.05f, 0.05f, 0.95f);
 static constexpr float4 LightOutlineColor(0.95f, 0.95f, 0.95f, 0.80f);
 
-using font::FontFace;
-using font::FontFaceSet;
-using font::FontFileBytes;
-using font::GlyphAtlasCache;
-using font::FontRegistry;
-using font::render::FontRenderState;
-using font::render::FontRendererFactory;
-using font::render::FontRendererPtr;
-using font::render::PreparedGlyphQuad;
-using font::text::ColorCodeIndicator;
-using font::text::ColorCodeIndicatorEx;
-using font::text::ColorResetIndicator;
-using font::text::CR;
-using font::text::InlineColorBytes;
-using font::text::LF;
-using font::text::OldColorCodeIndicator;
-using font::text::OldColorCodeIndicatorEx;
-using font::text::ParsedColorCode;
-using font::text::TextLayout;
-using font::text::TextLayouter;
-using font::text::TextWrapper;
-using font::text::TryParseColorCode;
+using spring::font::FontFace;
+using spring::font::FontFaceSet;
+using spring::font::FontFileBytes;
+using spring::font::GlyphAtlasCache;
+using spring::font::FontRegistry;
+using spring::font::render::FontRenderState;
+using spring::font::render::FontRendererFactory;
+using spring::font::render::FontRendererPtr;
+using spring::font::render::PreparedGlyphQuad;
+using spring::font::text::ColorCodeIndicator;
+using spring::font::text::ColorCodeIndicatorEx;
+using spring::font::text::ColorResetIndicator;
+using spring::font::text::CR;
+using spring::font::text::InlineColorBytes;
+using spring::font::text::LF;
+using spring::font::text::OldColorCodeIndicator;
+using spring::font::text::OldColorCodeIndicatorEx;
+using spring::font::text::ParsedColorCode;
+using spring::font::text::TextLayout;
+using spring::font::text::TextLayouter;
+using spring::font::text::TextWrapper;
+using spring::font::text::TryParseColorCode;
 
 std::vector<std::weak_ptr<CglFont>>& GetLoadedFonts()
 {
@@ -246,7 +246,7 @@ std::shared_ptr<FontFaceSet> BuildFaceSet(const FontDescriptor& descriptor)
 	return descriptor;
 }
 
-[[nodiscard]] bool SameSpan(const font::text::TextSpan& lhs, const font::text::TextSpan& rhs) noexcept
+[[nodiscard]] bool SameSpan(const spring::font::text::TextSpan& lhs, const spring::font::text::TextSpan& rhs) noexcept
 {
 	return
 		(lhs.sourceOffset == rhs.sourceOffset) &&
@@ -282,9 +282,9 @@ public:
 			throw content_error("Failed to load font file: " + descriptor.filePath);
 
 		glyphCache = std::make_shared<GlyphAtlasCache>(faceSet, descriptor.pixelSize, descriptor.outlineSize, descriptor.outlineWeight);
-		shaper = std::make_shared<font::text::HarfBuzzTextShaper>(faceSet);
+		shaper = std::make_shared<spring::font::text::HarfBuzzTextShaper>(faceSet);
 		layouter = std::make_shared<TextLayouter>(shaper, glyphCache);
-		wrapper = std::make_shared<TextWrapper>(std::make_shared<font::text::TextLayouterMeasurer>(layouter));
+		wrapper = std::make_shared<TextWrapper>(std::make_shared<spring::font::text::TextLayouterMeasurer>(layouter));
 		renderer = FontRendererFactory::Create();
 		if (renderer == nullptr)
 			throw content_error("Failed to create modern font renderer");
@@ -343,9 +343,9 @@ public:
 		FlushCommands(worldCommands, userDefinedBlending);
 	}
 
-	font::text::LayoutOptions MakeLayoutOptions(float x, float y, float size, FontOption options) const
+	spring::font::text::LayoutOptions MakeLayoutOptions(float x, float y, float size, FontOption options) const
 	{
-		font::text::LayoutOptions layoutOptions;
+		spring::font::text::LayoutOptions layoutOptions;
 		layoutOptions.options = NormalizeOptions(options);
 		layoutOptions.fontSize = std::max(size, 1.0f);
 		layoutOptions.x = x;
@@ -405,7 +405,7 @@ public:
 
 	void QueueLayout(const RenderCommand& command)
 	{
-		std::vector<const font::text::LaidOutRun*> orderedRuns;
+		std::vector<const spring::font::text::LaidOutRun*> orderedRuns;
 		for (const auto& line: command.layout.lines) {
 			for (const auto& run: line.runs)
 				orderedRuns.emplace_back(&run);
@@ -453,7 +453,7 @@ public:
 		}
 	}
 
-	void QueueRun(const font::text::LaidOutRun& run, const RenderCommand& command, const float4& currentTextColor, const float4& currentOutlineColor)
+	void QueueRun(const spring::font::text::LaidOutRun& run, const RenderCommand& command, const float4& currentTextColor, const float4& currentOutlineColor)
 	{
 		const float outlineExpand = (descriptor.pixelSize > 0)
 			? (command.renderSize * descriptor.outlineSize / static_cast<float>(descriptor.pixelSize))
@@ -500,7 +500,7 @@ public:
 	FontDescriptor descriptor;
 	std::shared_ptr<FontFaceSet> faceSet;
 	std::shared_ptr<GlyphAtlasCache> glyphCache;
-	std::shared_ptr<font::text::HarfBuzzTextShaper> shaper;
+	std::shared_ptr<spring::font::text::HarfBuzzTextShaper> shaper;
 	std::shared_ptr<TextLayouter> layouter;
 	std::shared_ptr<TextWrapper> wrapper;
 	FontRendererPtr renderer;
@@ -691,7 +691,7 @@ void CglFont::Print(float x, float y, float size, FontOption options, const std:
 	if (HasOption(options, FontOption::Norm))
 		ConvertNormalizedToPixels(x, y);
 
-	font::text::LayoutOptions layoutOptions = impl->MakeLayoutOptions(x, y, renderSize, options);
+	spring::font::text::LayoutOptions layoutOptions = impl->MakeLayoutOptions(x, y, renderSize, options);
 	TextLayout layout = impl->layouter->LayoutText(text, layoutOptions);
 
 	CglFont::Impl::RenderCommand command;
@@ -882,7 +882,7 @@ void CglFont::PrintWorld(const float3& position, float size, const std::string& 
 		? (camera->GetBillBoardMatrix().Transpose() * position)
 		: position;
 
-	font::text::LayoutOptions layoutOptions = impl->MakeLayoutOptions(billboardPosition.x, billboardPosition.y, renderSize, options);
+	spring::font::text::LayoutOptions layoutOptions = impl->MakeLayoutOptions(billboardPosition.x, billboardPosition.y, renderSize, options);
 	layoutOptions.z = position.z;
 	TextLayout layout = impl->layouter->LayoutText(text, layoutOptions);
 
@@ -950,7 +950,7 @@ int CglFont::WrapInPlace(std::string& text, float fontSize, float maxWidth, floa
 	RECOIL_DETAILED_TRACY_ZONE;
 	std::scoped_lock lock(impl->mutex);
 
-	font::text::WrapOptions wrapOptions;
+	spring::font::text::WrapOptions wrapOptions;
 	wrapOptions.fontSize = fontSize;
 	wrapOptions.maxWidth = maxWidth;
 	wrapOptions.maxHeight = maxHeight;
@@ -967,7 +967,7 @@ std::string CglFont::Wrap(const std::string& text, float fontSize, float maxWidt
 	RECOIL_DETAILED_TRACY_ZONE;
 	std::scoped_lock lock(impl->mutex);
 
-	font::text::WrapOptions wrapOptions;
+	spring::font::text::WrapOptions wrapOptions;
 	wrapOptions.fontSize = fontSize;
 	wrapOptions.maxWidth = maxWidth;
 	wrapOptions.maxHeight = maxHeight;
@@ -1195,7 +1195,7 @@ void CglFont::ScanForWantedGlyphs(const spring::u8string& text)
 				continue;
 			}
 
-			idx = static_cast<int>(font::text::SkipColorCodes(text, idx - 1, nullptr, true));
+			idx = static_cast<int>(spring::font::text::SkipColorCodes(text, idx - 1, nullptr, true));
 			continue;
 		}
 

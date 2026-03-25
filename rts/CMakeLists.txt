@@ -86,7 +86,7 @@ endif (UNIX AND NOT MINGW)
 find_package_static(ZLIB 1.2.7 REQUIRED)
 list(APPEND engineCommonLibraries DevIL::IL)
 list(APPEND engineCommonLibraries 7zip prd::jsoncpp ${SPRING_MINIZIP_LIBRARY} ZLIB::ZLIB Tracy::TracyClient)
-list(APPEND engineCommonLibraries lua luasocket archives assimp simdjson::simdjson fastgltf
+list(APPEND engineCommonLibraries lua luasocket archives assimp harfbuzz::harfbuzz simdjson::simdjson fastgltf
 	gflags_nothreads_static)
 if(CMAKE_SYSTEM_NAME MATCHES "OpenBSD")
 	list(APPEND engineCommonLibraries execinfo)

@@ -164,6 +164,25 @@ endif()
 find_freetype_hack() # hack to find different named freetype.dll
 find_package_static(Freetype 2.8.1 REQUIRED)
 
+if (NOT TARGET freetype)
+	add_library(freetype INTERFACE IMPORTED GLOBAL)
+	set_target_properties(freetype PROPERTIES
+		INTERFACE_LINK_LIBRARIES Freetype::Freetype
+	)
+endif()
+
+set(HB_BUILD_SUBSET OFF CACHE BOOL "forced by Recoil build env" FORCE)
+set(HB_BUILD_UTILS OFF CACHE BOOL "forced by Recoil build env" FORCE)
+set(HB_HAVE_GOBJECT OFF CACHE BOOL "forced by Recoil build env" FORCE)
+set(HB_HAVE_GLIB OFF CACHE BOOL "forced by Recoil build env" FORCE)
+set(HB_HAVE_GRAPHITE2 OFF CACHE BOOL "forced by Recoil build env" FORCE)
+set(HB_HAVE_ICU OFF CACHE BOOL "forced by Recoil build env" FORCE)
+ADD_SUBDIRECTORY(harfbuzz)
+
+if (TARGET harfbuzz AND NOT TARGET harfbuzz::harfbuzz)
+	add_library(harfbuzz::harfbuzz ALIAS harfbuzz)
+endif()
+
 # lunasvg does not expect number constants to be floats, so we undo this cmake flag for its compilation
 string(REPLACE "-fsingle-precision-constant" "" NEW_CMAKE_FLAGS ${CMAKE_CXX_FLAGS})
 set(SAVED_CMAKE_FLAGS ${CMAKE_CXX_FLAGS})

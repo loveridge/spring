@@ -19,7 +19,7 @@ class CBitmap;
 class CRowAtlasAlloc;
 struct SRectangle;
 
-namespace font {
+namespace spring::font {
 class FontFace;
 class FontFaceSet;
 }
@@ -42,8 +42,8 @@ class FontFaceSet;
  */
 class GlyphAtlasCache {
 public:
-	using FacePtr = std::shared_ptr<font::FontFace>;
-	using FaceSetPtr = std::shared_ptr<font::FontFaceSet>;
+	using FacePtr = std::shared_ptr<spring::font::FontFace>;
+	using FaceSetPtr = std::shared_ptr<spring::font::FontFaceSet>;
 
 	struct GlyphIndexKey {
 		std::uintptr_t faceIdentity = 0;
@@ -167,4 +167,3 @@ private:
 	std::vector<SRectangle> blurRectangles;
 	std::unordered_map<std::string, std::size_t> glyphNameToBitmapIndex;
 };
-

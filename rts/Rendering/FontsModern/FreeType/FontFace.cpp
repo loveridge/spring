@@ -4,7 +4,7 @@
 
 #include <utility>
 
-namespace font {
+namespace spring::font {
 
 FontFileBytes::FontFileBytes(std::size_t size)
 	: bytes(size)

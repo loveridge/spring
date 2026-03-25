@@ -17,7 +17,7 @@
 #include "System/Color.h"
 #include "System/Matrix44f.h"
 
-namespace font::render {
+namespace spring::font::render {
 namespace {
 
 static constexpr const char* vsFont330 = R"(
@@ -231,7 +231,7 @@ void main()
 	return state->primaryColor;
 }
 
-[[nodiscard]] float ResolveGlyphDepth(const font::text::LaidOutGlyph& glyph, const FontRenderState* state, bool outlinePass) noexcept
+[[nodiscard]] float ResolveGlyphDepth(const spring::font::text::LaidOutGlyph& glyph, const FontRenderState* state, bool outlinePass) noexcept
 {
 	if (glyph.z != 0.0f)
 		return glyph.z;
@@ -242,7 +242,7 @@ void main()
 	return outlinePass ? state->depth.outline : state->depth.text;
 }
 
-[[nodiscard]] PreparedGlyphQuad MakePreparedGlyphQuad(const font::text::LaidOutGlyph& glyph, const FontRenderState* state, bool outlinePass)
+[[nodiscard]] PreparedGlyphQuad MakePreparedGlyphQuad(const spring::font::text::LaidOutGlyph& glyph, const FontRenderState* state, bool outlinePass)
 {
 	PreparedGlyphQuad quad;
 	quad.position = NormalizeRect(glyph.shaped.metrics.bounds);
@@ -328,12 +328,12 @@ void ShaderFontRenderer::AddOutlineQuad(const PreparedGlyphQuad& quad)
 		stats.queuedOutlineQuads += 1;
 }
 
-void ShaderFontRenderer::AddPrimaryGlyph(const font::text::LaidOutGlyph& glyph)
+void ShaderFontRenderer::AddPrimaryGlyph(const spring::font::text::LaidOutGlyph& glyph)
 {
 	AddPrimaryQuad(MakePreparedGlyphQuad(glyph, GetActiveState(stateStack), false));
 }
 
-void ShaderFontRenderer::AddOutlineGlyph(const font::text::LaidOutGlyph& glyph)
+void ShaderFontRenderer::AddOutlineGlyph(const spring::font::text::LaidOutGlyph& glyph)
 {
 	if (!glyph.usesOutline) {
 		if (createOptions.enableStatistics)

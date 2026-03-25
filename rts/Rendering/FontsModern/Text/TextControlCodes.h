@@ -18,7 +18,7 @@
  *  - provide small parsing helpers usable from multiple layers
  *  - keep the interface data-oriented and dependency-light
  */
-namespace font::text {
+namespace spring::font::text {
 
 static constexpr char8_t OldColorCodeIndicator   = 0xFF; // legacy \xffRGB
 static constexpr char8_t OldColorCodeIndicatorEx = 0xFE; // legacy \xfeRGBA,RGBA

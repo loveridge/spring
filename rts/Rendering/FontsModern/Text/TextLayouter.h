@@ -17,7 +17,7 @@
 
 class GlyphAtlasCache;
 
-namespace font::text {
+namespace spring::font::text {
 
 /**
  * High-level layout configuration.

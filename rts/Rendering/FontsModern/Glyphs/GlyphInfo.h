@@ -7,7 +7,7 @@
 
 #include "../FontTypes.h"
 
-namespace font {
+namespace spring::font {
 class FontFace;
 }
 
@@ -38,7 +38,7 @@ struct GlyphInfo {
 	std::uint32_t glyphIndex   = 0; //!< FT/HarfBuzz glyph index within the owning face.
 	char32_t sourceCodepoint   = 0; //!< Unicode source codepoint, if applicable.
 
-	std::shared_ptr<font::FontFace> face; //!< Face that owns glyphIndex and metrics.
+	std::shared_ptr<spring::font::FontFace> face; //!< Face that owns glyphIndex and metrics.
 
 	constexpr bool HasGlyphIndex() const noexcept { return glyphIndex != 0; }
 	constexpr bool HasSourceCodepoint() const noexcept { return sourceCodepoint != 0; }
@@ -65,4 +65,3 @@ struct GlyphInfo {
 		return GlyphKey::FromCodepoint(sourceCodepoint);
 	}
 };
-
