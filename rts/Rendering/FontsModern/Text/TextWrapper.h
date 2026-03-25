@@ -88,7 +88,67 @@ struct WrappedWord {
 	std::size_t printableOffset = 0;
 	std::size_t printableLength = 0;
 
+	WrappedWord() = default;
+
+	WrappedWord(const WrappedWord& other)
+		: word(other.word)
+		, text(other.text)
+		, sourceByteOffset(other.sourceByteOffset)
+		, sourceByteLength(other.sourceByteLength)
+		, printableOffset(other.printableOffset)
+		, printableLength(other.printableLength)
+	{
+		RebindViews();
+	}
+
+	WrappedWord& operator=(const WrappedWord& other)
+	{
+		if (this == &other)
+			return *this;
+
+		word = other.word;
+		text = other.text;
+		sourceByteOffset = other.sourceByteOffset;
+		sourceByteLength = other.sourceByteLength;
+		printableOffset = other.printableOffset;
+		printableLength = other.printableLength;
+		RebindViews();
+		return *this;
+	}
+
+	WrappedWord(WrappedWord&& other) noexcept
+		: word(std::move(other.word))
+		, text(std::move(other.text))
+		, sourceByteOffset(other.sourceByteOffset)
+		, sourceByteLength(other.sourceByteLength)
+		, printableOffset(other.printableOffset)
+		, printableLength(other.printableLength)
+	{
+		RebindViews();
+	}
+
+	WrappedWord& operator=(WrappedWord&& other) noexcept
+	{
+		if (this == &other)
+			return *this;
+
+		word = std::move(other.word);
+		text = std::move(other.text);
+		sourceByteOffset = other.sourceByteOffset;
+		sourceByteLength = other.sourceByteLength;
+		printableOffset = other.printableOffset;
+		printableLength = other.printableLength;
+		RebindViews();
+		return *this;
+	}
+
 	bool Empty() const noexcept { return text.empty() && printableLength == 0; }
+
+private:
+	void RebindViews()
+	{
+		word.sourceSpan.text = text;
+	}
 };
 
 
@@ -214,7 +274,7 @@ protected:
 	WrappedWord SplitWord(const WrappedWord& word, float wantedWidth, const WrapOptions& options) const;
 	void WrapConsole(std::vector<WrappedWord>& words, std::vector<WrapLine>& lines, const WrapOptions& options) const;
 	void AddEllipsis(std::vector<WrapLine>& lines, std::vector<WrappedWord>& words, const WrapOptions& options) const;
-	void RemergeColorCodes(std::vector<WrappedWord>& words, const std::vector<ExtractedColorCode>& colorCodes) const;
+	void RemergeColorCodes(std::vector<WrappedWord>& words, const std::vector<ExtractedColorCode>& colorCodes, const WrapOptions& options) const;
 
 	float MeasureWidth(std::string_view utf8, const WrapOptions& options) const;
 	std::size_t CountOutputLines(std::span<const WrapLine> lines) const;

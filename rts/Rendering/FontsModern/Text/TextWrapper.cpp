@@ -266,7 +266,7 @@ void RebuildLines(std::vector<WrappedWord>& words, std::vector<WrapLine>& lines)
 		lineHasWords = true;
 	}
 
-	if (lineHasWords || current.firstWord < words.size())
+	if (lineHasWords || current.firstWord < words.size() || (!words.empty() && words.back().word.isLineBreak))
 		lines.emplace_back(current);
 }
 
@@ -512,6 +512,12 @@ void TextWrapper::WrapConsole(std::vector<WrappedWord>& words, std::vector<WrapL
 			}
 		}
 
+		if (currentWidth == 0.0f) {
+			currentWidth = word.word.width;
+			++wi;
+			continue;
+		}
+
 		words.insert(words.begin() + wi, MakeInsertedLineBreak(words[wi]));
 		++wi;
 
@@ -647,7 +653,7 @@ void TextWrapper::AddEllipsis(std::vector<WrapLine>& lines, std::vector<WrappedW
 		lines[std::min(visibleLineCount - 1, lines.size() - 1)].wasEllipsized = true;
 }
 
-void TextWrapper::RemergeColorCodes(std::vector<WrappedWord>& words, const std::vector<ExtractedColorCode>& colorCodes) const
+void TextWrapper::RemergeColorCodes(std::vector<WrappedWord>& words, const std::vector<ExtractedColorCode>& colorCodes, const WrapOptions& options) const
 {
 	for (const ExtractedColorCode& colorCode : colorCodes) {
 		std::size_t insertIndex = words.size();
@@ -692,7 +698,7 @@ void TextWrapper::RemergeColorCodes(std::vector<WrappedWord>& words, const std::
 				false,
 				false
 			);
-			left.word.width = MeasureWidth(left.text, {});
+			left.word.width = MeasureWidth(left.text, options);
 
 			WrappedWord right = MakeWord(
 				word.text.substr(pos),
@@ -705,7 +711,7 @@ void TextWrapper::RemergeColorCodes(std::vector<WrappedWord>& words, const std::
 				false,
 				false
 			);
-			right.word.width = MeasureWidth(right.text, {});
+			right.word.width = MeasureWidth(right.text, options);
 
 			words[i] = std::move(right);
 			words.insert(words.begin() + i, std::move(left));
@@ -751,7 +757,7 @@ WrappedText TextWrapper::BuildWrappedText(std::vector<WrappedWord> words, std::v
 	wrapped.colorCodes = std::move(colorCodes);
 
 	if (options.remergeColorCodes)
-		RemergeColorCodes(wrapped.words, wrapped.colorCodes);
+		RemergeColorCodes(wrapped.words, wrapped.colorCodes, options);
 
 	for (const WrappedWord& word : wrapped.words) {
 		if (word.word.isLineBreak) {

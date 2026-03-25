@@ -55,6 +55,15 @@ namespace {
 	return count;
 }
 
+[[nodiscard]] std::size_t ResolveLineSourceOffset(std::span<const font::text::TextSpan> spans, std::size_t begin)
+{
+	if (begin < spans.size())
+		return spans[begin].sourceOffset;
+	if (!spans.empty())
+		return spans.back().sourceOffset + spans.back().sourceLength;
+	return 0;
+}
+
 } // namespace
 
 namespace font::text {
@@ -96,16 +105,15 @@ TextLayout TextLayouter::LayoutText(std::string_view utf8, const LayoutOptions& 
 	layout.lines.reserve(lineRanges.size());
 
 	for (const LineSpanRange& range : lineRanges) {
-		if (range.Empty())
-			continue;
-
 		const std::span<const TextSpan> lineSpans(parsed.spans.data() + range.begin, range.end - range.begin);
 		std::vector<ShapedRun> runs = ShapeLineSpans(lineSpans, options);
 		if (options.preloadGlyphs)
 			EnsureGlyphsForRuns(runs);
 
-		const std::size_t sourceOffset = parsed.spans[range.begin].sourceOffset;
-		const std::size_t sourceEnd = parsed.spans[range.end - 1].sourceOffset + parsed.spans[range.end - 1].sourceLength;
+		const std::size_t sourceOffset = ResolveLineSourceOffset(parsed.spans, range.begin);
+		const std::size_t sourceEnd = range.Empty()
+			? sourceOffset
+			: (parsed.spans[range.end - 1].sourceOffset + parsed.spans[range.end - 1].sourceLength);
 
 		LaidOutLine line = PositionRuns(runs, ctx, sourceOffset, sourceEnd - sourceOffset, range.endsWithExplicitBreak);
 		layout.lines.emplace_back(std::move(line));
@@ -132,6 +140,17 @@ std::vector<TextSpan> TextLayouter::SplitIntoLines(std::span<const TextSpan> spa
 {
 	std::vector<TextSpan> lines;
 
+	auto makeEmptyLine = [&spans](std::size_t begin) {
+		TextSpan line;
+		line.sourceOffset = ResolveLineSourceOffset(spans, begin);
+		line.sourceLength = 0;
+		line.printableOffset = (begin < spans.size())
+			? spans[begin].printableOffset
+			: (!spans.empty() ? (spans.back().printableOffset + spans.back().printableLength) : 0);
+		line.printableLength = 0;
+		return line;
+	};
+
 	std::size_t lineBegin = 0;
 	for (std::size_t i = 0; i < spans.size(); ++i) {
 		if (!spans[i].isLineBreak)
@@ -145,6 +164,8 @@ std::vector<TextSpan> TextLayouter::SplitIntoLines(std::span<const TextSpan> spa
 			merged.printableOffset = spans[lineBegin].printableOffset;
 			merged.printableLength = spans[i - 1].printableOffset + spans[i - 1].printableLength - spans[lineBegin].printableOffset;
 			lines.emplace_back(std::move(merged));
+		} else {
+			lines.emplace_back(makeEmptyLine(lineBegin));
 		}
 
 		lineBegin = i + 1;
@@ -158,6 +179,8 @@ std::vector<TextSpan> TextLayouter::SplitIntoLines(std::span<const TextSpan> spa
 		merged.printableOffset = spans[lineBegin].printableOffset;
 		merged.printableLength = spans.back().printableOffset + spans.back().printableLength - spans[lineBegin].printableOffset;
 		lines.emplace_back(std::move(merged));
+	} else if (!spans.empty() && spans.back().isLineBreak) {
+		lines.emplace_back(makeEmptyLine(lineBegin));
 	}
 
 	return lines;
@@ -270,7 +293,7 @@ std::vector<TextLayouter::LineSpanRange> TextLayouter::BuildLineRanges(std::span
 		begin = i + 1;
 	}
 
-	if (begin < spans.size() || ranges.empty())
+	if (begin < spans.size() || ranges.empty() || spans.back().isLineBreak)
 		ranges.push_back(LineSpanRange{begin, spans.size(), false});
 
 	return ranges;
@@ -400,28 +423,25 @@ LaidOutLine TextLayouter::PositionRuns(std::span<const ShapedRun> runs, const La
 
 float TextLayouter::ComputeHorizontalLineOffset(float lineWidth, const LayoutOptions& options) const
 {
-	const float scale = ResolveLayoutScale(options);
 	if (HasOption(options.options, FontOption::Center))
-		return -0.5f * lineWidth * scale;
+		return -0.5f * lineWidth;
 	if (HasOption(options.options, FontOption::Right))
-		return -lineWidth * scale;
+		return -lineWidth;
 	return 0.0f;
 }
 
 float TextLayouter::ComputeVerticalBlockOffset(const TextMeasurement& measurement, const LayoutOptions& options) const
 {
-	const float scale = ResolveLayoutScale(options);
-
 	if (HasOption(options.options, FontOption::Descender)) {
-		return -measurement.descent * scale;
+		return -measurement.descent;
 	} else if (HasOption(options.options, FontOption::VCenter)) {
-		return -0.5f * measurement.height * scale - 0.5f * measurement.descent * scale;
+		return -0.5f * measurement.height - 0.5f * measurement.descent;
 	} else if (HasOption(options.options, FontOption::Top)) {
-		return -measurement.height * scale;
+		return -measurement.height;
 	} else if (HasOption(options.options, FontOption::Ascender)) {
-		return -(measurement.descent + 1.0f) * scale;
+		return -(measurement.descent + 1.0f);
 	} else if (HasOption(options.options, FontOption::Bottom)) {
-		return -measurement.descent * scale;
+		return -measurement.descent;
 	}
 
 	return 0.0f;
@@ -445,7 +465,6 @@ void TextLayouter::ApplyHorizontalAlignment(std::vector<LaidOutLine>& lines, con
 
 void TextLayouter::ApplyVerticalAlignment(std::vector<LaidOutLine>& lines, const TextMeasurement& measurement, const LayoutOptions& options) const
 {
-	const float scale = ResolveLayoutScale(options);
 	const float blockOffsetY = ComputeVerticalBlockOffset(measurement, options);
 	float penY = blockOffsetY;
 
@@ -462,7 +481,7 @@ void TextLayouter::ApplyVerticalAlignment(std::vector<LaidOutLine>& lines, const
 			}
 		}
 
-		penY -= ((line.height * scale) + (options.lineSpacing * scale));
+		penY -= (line.height + options.lineSpacing);
 	}
 }
 
