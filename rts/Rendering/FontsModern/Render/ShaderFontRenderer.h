@@ -1,3 +1,5 @@
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
 #pragma once
 
 #include <cstddef>
@@ -12,10 +14,7 @@ class ShaderProgram;
 class VAO;
 class VBO;
 class CMatrix44f;
-
-namespace font {
 class GlyphAtlasTexture;
-}
 
 namespace font::render {
 
@@ -53,7 +52,8 @@ public:
 	};
 
 public:
-	explicit ShaderFontRenderer(const CreateOptions& options = {});
+	ShaderFontRenderer();
+	explicit ShaderFontRenderer(const CreateOptions& options);
 	~ShaderFontRenderer() override;
 
 	ShaderFontRenderer(const ShaderFontRenderer&) = delete;
@@ -63,16 +63,20 @@ public:
 
 	void AddPrimaryQuad(const PreparedGlyphQuad& quad) override;
 	void AddOutlineQuad(const PreparedGlyphQuad& quad) override;
+	void AddPrimaryGlyph(const font::text::LaidOutGlyph& glyph) override;
+	void AddOutlineGlyph(const font::text::LaidOutGlyph& glyph) override;
 	void DrawQueued() override;
 
-	void HandleTextureUpdate(const font::GlyphAtlasTexture& atlas) override;
+	void HandleTextureUpdate(const GlyphAtlasTexture& primaryAtlas,
+	                        const GlyphAtlasTexture* outlineAtlas = nullptr,
+	                        bool onlyUpload = false) override;
 	void PushState(const FontRenderState& state) override;
-	void PopState() override;
+	void PopState(const FontRenderState& state) override;
 
 	[[nodiscard]] FontRendererStats GetStats() const override;
-	void ResetStats() override;
-	void ClearQueued() override;
+	void ClearStats() override;
 
+	[[nodiscard]] bool IsValid() const override;
 	[[nodiscard]] bool IsReady() const;
 	[[nodiscard]] bool HasQueuedGeometry() const;
 	[[nodiscard]] QueuedQuadBuffers GetQueuedBufferStats() const;
@@ -129,7 +133,7 @@ private:
 	void SubmitBatch(const RenderBatch& batch, const BufferResources& bufferResources, const TextureBinding& binding, bool outlinePass);
 	void ApplyUniforms(bool outlinePass);
 	void BindTexture(const TextureBinding& binding);
-	void UpdateTextureBindingFromAtlas(const font::GlyphAtlasTexture& atlas);
+	void UpdateTextureBindingFromAtlas(const GlyphAtlasTexture& atlas);
 
 private:
 	CreateOptions createOptions;
@@ -147,4 +151,3 @@ private:
 };
 
 } // namespace font::render
-

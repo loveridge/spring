@@ -1,10 +1,12 @@
+/* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
+
 #pragma once
 
 #include <memory>
 
 #include "Render/IFontRenderer.h"
 
-namespace font {
+namespace font::render {
 
 /**
  * @brief Supported renderer backend kinds.
@@ -47,5 +49,4 @@ public:
 	[[nodiscard]] static FontRendererBackend GetDefaultBackend();
 };
 
-} // namespace font
-
+} // namespace font::render
