@@ -240,7 +240,7 @@ int LuaFonts::AddFallbackFont(lua_State* L)
 
 	const auto font = luaL_checkstring(L, 1);
 
-	const bool res = spring::font::FontRegistry::AddFallbackFont(font);
+	const bool res = fonts::FontRegistry::AddFallbackFont(font);
 	lua_pushboolean(L, res);
 	return 1;
 }
@@ -257,7 +257,7 @@ int LuaFonts::ClearFallbackFonts(lua_State* L)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 
-	spring::font::FontRegistry::ClearFallbackFonts();
+	fonts::FontRegistry::ClearFallbackFonts();
 	return 0;
 }
 

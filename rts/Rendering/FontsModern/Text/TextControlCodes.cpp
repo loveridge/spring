@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-namespace spring::font::text {
+namespace fonts::text {
 
 std::size_t LineBreakLength(std::string_view text, std::size_t offset)
 {

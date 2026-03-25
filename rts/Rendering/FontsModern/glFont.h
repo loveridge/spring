@@ -6,9 +6,11 @@
 #include <deque>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "FontOptions.h"
 #include "FontTypes.h"
+#include "Text/TextControlCodes.h"
 #include "ustring.h"
 
 #undef GetCharWidth // winapi.h
@@ -25,6 +27,11 @@ public:
 
 public:
 	static constexpr float MAX_HEIGHT_DEFAULT = 1000.0f;
+	static constexpr char8_t OldColorCodeIndicator   = fonts::text::OldColorCodeIndicator;
+	static constexpr char8_t OldColorCodeIndicatorEx = fonts::text::OldColorCodeIndicatorEx;
+	static constexpr char8_t ColorCodeIndicator      = fonts::text::ColorCodeIndicator;
+	static constexpr char8_t ColorCodeIndicatorEx    = fonts::text::ColorCodeIndicatorEx;
+	static constexpr char8_t ColorResetIndicator     = fonts::text::ColorResetIndicator;
 
 	static bool LoadConfigFonts();
 	static bool LoadCustomFonts(const std::string& smallFontFile, const std::string& largeFontFile);
@@ -33,6 +40,7 @@ public:
 	static std::shared_ptr<CglFont> LoadFont(const std::string& fontFile, int size, int outlineWidth = 2, float outlineWeight = 5.0f);
 
 	static std::shared_ptr<CglFont> FindFont(const std::string& fontFile, int size, int outlineWidth = 2, float outlineWeight = 5.0f);
+	static const std::vector<std::weak_ptr<CglFont>>& GetLoadedFonts();
 
 	static void ReallocSystemFontAtlases(bool pre);
 

@@ -15,7 +15,7 @@
 #include "TextLayouter.h"
 #include "TextRun.h"
 
-namespace spring::font::text {
+namespace fonts::text {
 
 /**
  * Wrapping / truncation policy for a text block.

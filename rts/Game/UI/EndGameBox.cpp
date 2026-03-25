@@ -12,6 +12,7 @@
 #include "Game/Players/PlayerHandler.h"
 #include "Rendering/FontsModern/glFont.h"
 #include "Rendering/GL/glExtra.h"
+#include "Rendering/Textures/Bitmap.h"
 #include "Sim/Misc/GlobalSynced.h"
 #include "Sim/Misc/TeamHandler.h"
 #include "Sim/Misc/TeamStatistics.h"

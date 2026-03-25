@@ -18,7 +18,7 @@
  *  - provide small parsing helpers usable from multiple layers
  *  - keep the interface data-oriented and dependency-light
  */
-namespace spring::font::text {
+namespace fonts::text {
 
 static constexpr char8_t OldColorCodeIndicator   = 0xFF; // legacy \xffRGB
 static constexpr char8_t OldColorCodeIndicatorEx = 0xFE; // legacy \xfeRGBA,RGBA
@@ -64,13 +64,13 @@ struct ColorCodeText {
 
 struct ParsedColorCode {
 	enum class Type : std::uint8_t {
-		None = 0,
+		Invalid = 0,
 		Color3,
 		Color8,
 		Reset,
 	};
 
-	Type type = Type::None;
+	Type type = Type::Invalid;
 	std::size_t offset = 0;
 	std::size_t size = 0;
 	bool usesLegacyIndicator = false;
@@ -80,7 +80,7 @@ struct ParsedColorCode {
 	InlineColorBytes outlineColor{};
 	ColorCodeText raw;
 
-	bool IsValid() const { return type != Type::None; }
+	bool IsValid() const { return type != Type::Invalid; }
 	bool IsReset() const { return type == Type::Reset; }
 };
 

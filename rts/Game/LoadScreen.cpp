@@ -111,7 +111,6 @@ bool CLoadScreen::Init()
 	netHeartbeatThread = spring::thread(Threading::CreateNewThread(std::bind(&CNetProtocol::UpdateLoop, clientNet)));
 	game = new CGame(mapFileName, modFileName, saveFile);
 
-	CglFont::sync.SetThreadSafety(mtLoading);
 	CLoadLock::SetThreadSafety(mtLoading);
 	if (mtLoading) {
 		try {
@@ -123,7 +122,6 @@ bool CLoadScreen::Init()
 			LOG_L(L_WARNING, "[LoadScreen::%s] offscreen GL context creation failed (error: \"%s\")", __func__, gle.what());
 
 			mtLoading = false;
-			CglFont::sync.SetThreadSafety(false);
 			CLoadLock::SetThreadSafety(false);
 		}
 	}

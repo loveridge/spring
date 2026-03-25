@@ -10,9 +10,9 @@
 
 #include "../FontTypes.h"
 
-namespace spring::font { class FontFace; }
+namespace fonts { class FontFace; }
 
-namespace spring::font::text {
+namespace fonts::text {
 
 /**
  * A source span in the original text stream.
@@ -54,7 +54,7 @@ struct ShapedGlyph {
 	float yOffset = 0.0f;
 
 	GlyphMetrics metrics{};
-	std::shared_ptr<spring::font::FontFace> face;
+	std::shared_ptr<fonts::FontFace> face;
 
 	bool IsRenderable() const noexcept {
 		return (glyphKey.IsGlyphIndex() && glyphKey.glyphIndex != 0) ||
@@ -69,7 +69,7 @@ struct ShapedGlyph {
 struct ShapedRun {
 	TextSpan sourceSpan{};
 	std::vector<ShapedGlyph> glyphs;
-	std::shared_ptr<spring::font::FontFace> primaryFace;
+	std::shared_ptr<fonts::FontFace> primaryFace;
 
 	float width = 0.0f;
 	float ascent = 0.0f;

@@ -2,7 +2,7 @@
 
 #include "NullFontRenderer.h"
 
-namespace spring::font::render {
+namespace fonts::render {
 
 NullFontRenderer::NullFontRenderer() = default;
 NullFontRenderer::~NullFontRenderer() = default;
@@ -30,7 +30,7 @@ void NullFontRenderer::AddOutlineQuad(const PreparedGlyphQuad& quad)
 	stats.queuedOutlineQuads += 1;
 }
 
-void NullFontRenderer::AddPrimaryGlyph(const spring::font::text::LaidOutGlyph& glyph)
+void NullFontRenderer::AddPrimaryGlyph(const fonts::text::LaidOutGlyph& glyph)
 {
 	if (!glyph.visible || glyph.atlasUV.Empty()) {
 		stats.droppedQuads += 1;
@@ -40,7 +40,7 @@ void NullFontRenderer::AddPrimaryGlyph(const spring::font::text::LaidOutGlyph& g
 	stats.queuedPrimaryQuads += 1;
 }
 
-void NullFontRenderer::AddOutlineGlyph(const spring::font::text::LaidOutGlyph& glyph)
+void NullFontRenderer::AddOutlineGlyph(const fonts::text::LaidOutGlyph& glyph)
 {
 	if (!glyph.visible || !glyph.usesOutline || glyph.outlineAtlasUV.Empty()) {
 		stats.droppedQuads += 1;
@@ -107,4 +107,4 @@ const FontRenderState& NullFontRenderer::GetLastPushedState() const noexcept
 	return lastPushedState;
 }
 
-} // namespace spring::font::render
+} // namespace fonts::render

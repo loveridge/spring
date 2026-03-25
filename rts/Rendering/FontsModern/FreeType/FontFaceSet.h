@@ -12,7 +12,7 @@
 #include "../FontTypes.h"
 #include "FontFace.h"
 
-namespace spring::font {
+namespace fonts {
 
 /**
  * Ordered collection of faces used to resolve glyph coverage.

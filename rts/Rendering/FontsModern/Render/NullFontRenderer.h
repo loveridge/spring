@@ -7,7 +7,7 @@
 
 #include "IFontRenderer.h"
 
-namespace spring::font::render {
+namespace fonts::render {
 
 class NullFontRenderer final : public IFontRenderer {
 public:
@@ -22,8 +22,8 @@ public:
 public:
 	void AddPrimaryQuad(const PreparedGlyphQuad& quad) override;
 	void AddOutlineQuad(const PreparedGlyphQuad& quad) override;
-	void AddPrimaryGlyph(const spring::font::text::LaidOutGlyph& glyph) override;
-	void AddOutlineGlyph(const spring::font::text::LaidOutGlyph& glyph) override;
+	void AddPrimaryGlyph(const fonts::text::LaidOutGlyph& glyph) override;
+	void AddOutlineGlyph(const fonts::text::LaidOutGlyph& glyph) override;
 	void DrawQueued() override;
 
 	void HandleTextureUpdate(const GlyphAtlasTexture& primaryAtlas,

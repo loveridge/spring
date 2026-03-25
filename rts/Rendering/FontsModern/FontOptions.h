@@ -17,7 +17,7 @@
  * so old and new call-sites can interoperate.
  */
 enum class FontOption : std::uint32_t {
-	None       = 0u,
+	Zero       = 0u,
 
 	// horizontal alignment
 	Left       = 1u << 0,
@@ -165,4 +165,3 @@ static constexpr int FONT_NORM      = static_cast<int>(FontOption::Norm);
 static constexpr int FONT_SCALE     = static_cast<int>(FontOption::Scale);
 static constexpr int FONT_NEAREST   = static_cast<int>(FontOption::Nearest);
 static constexpr int FONT_BUFFERED  = static_cast<int>(FontOption::Buffered);
-

@@ -7,7 +7,7 @@
 
 #include "Rendering/Fonts/FontLogSection.h"
 
-namespace spring::font::render {
+namespace fonts::render {
 namespace {
 
 [[nodiscard]] const char* BackendToString(FontRendererBackend backend) noexcept

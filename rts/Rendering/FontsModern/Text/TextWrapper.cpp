@@ -15,14 +15,14 @@ namespace {
 static constexpr char32_t EllipsisCodepoint = 0x2026;
 static const std::string EllipsisUtf8 = utf8::FromUnicode(EllipsisCodepoint);
 
-using spring::font::text::WrappedWord;
-using spring::font::text::WrapLine;
-using spring::font::text::WrapOptions;
-using spring::font::text::ExtractedColorCode;
-using spring::font::text::LayoutOptions;
-using spring::font::text::ParsedColorCode;
-using spring::font::text::TextSpan;
-using spring::font::text::ITextMeasurer;
+using fonts::text::WrappedWord;
+using fonts::text::WrapLine;
+using fonts::text::WrapOptions;
+using fonts::text::ExtractedColorCode;
+using fonts::text::LayoutOptions;
+using fonts::text::ParsedColorCode;
+using fonts::text::TextSpan;
+using fonts::text::ITextMeasurer;
 
 [[nodiscard]] std::size_t CountUtf8Codepoints(std::string_view text)
 {
@@ -119,7 +119,7 @@ using spring::font::text::ITextMeasurer;
 	std::size_t count = 0;
 
 	for (std::size_t i = 0; i < text.size(); ) {
-		const std::size_t lineBreakLen = spring::font::text::LineBreakLength(text, i);
+		const std::size_t lineBreakLen = fonts::text::LineBreakLength(text, i);
 		if (lineBreakLen == 0) {
 			++i;
 			continue;
@@ -314,7 +314,7 @@ void TrimTrailingWhitespaceFromLine(std::vector<WrappedWord>& words, const WrapL
 
 } // namespace
 
-namespace spring::font::text {
+namespace fonts::text {
 
 std::size_t TextWrapper::WrapInPlace(std::string& text, const WrapOptions& options) const
 {

@@ -49,6 +49,7 @@
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/Fonts/FontHandler.h"
 #include "Rendering/FontsModern/FontRegistry.h"
+#include "Rendering/FontsModern/FreeType/FontLibrary.h"
 #include "Rendering/FontsModern/glFont.h"
 #include "Rendering/GL/FBO.h"
 #include "Rendering/Models/ModelsMemStorage.h"
@@ -346,12 +347,12 @@ bool SpringApp::InitPlatformLibs()
 bool SpringApp::InitFonts()
 {
 	fontHandler.Init();
-	spring::font::FontRegistry::Init(true, false);
+	fonts::FontRegistry::Init(true, false);
 	return CglFont::LoadConfigFonts();
 /*
 	using namespace std::chrono_literals;
 	auto future = std::async(std::launch::async, []() {
-		return spring::font::FontRegistry::GetLibrary().InitializeFontconfig(false);
+		return fonts::FontRegistry::GetLibrary().InitializeFontconfig(false);
 	});
 
 	for (;;) {
@@ -376,7 +377,7 @@ void SpringApp::CleanFonts()
 	font      = {};
 	smallFont = {};
 
-	spring::font::FontRegistry::Shutdown();
+	fonts::FontRegistry::Shutdown();
 }
 
 bool SpringApp::InitFileSystem()
@@ -491,7 +492,7 @@ void SpringApp::ParseCmdLine(int argc, char* argv[])
 			spring_clock::PushTickRate();
 			spring_time::setstarttime(spring_time::gettime(true));
 		}
-		if (spring::font::FontRegistry::GetLibrary().InitializeFontconfig(true)) {
+		if (fonts::FontRegistry::GetLibrary().InitializeFontconfig(true)) {
 			printf("[FtLibraryHandler::GenFontConfig] is succesfull\n");
 			exit(spring::EXIT_CODE_SUCCESS);
 		}

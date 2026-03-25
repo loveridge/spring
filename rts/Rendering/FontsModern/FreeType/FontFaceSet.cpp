@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <utility>
 
-namespace spring::font {
+namespace fonts {
 
 FontFaceSet::FontFaceSet(FacePtr primaryFace)
 	: primary(std::move(primaryFace))

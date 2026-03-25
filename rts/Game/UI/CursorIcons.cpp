@@ -11,6 +11,7 @@
 #include "Game/Camera.h"
 #include "Game/GameHelper.h"
 #include "Rendering/FontsModern/glFont.h"
+#include "Rendering/GL/RenderBuffers.h"
 #include "Rendering/Units/UnitDrawer.h"
 #include "Rendering/GL/myGL.h"
 #include "Sim/Units/UnitDef.h"

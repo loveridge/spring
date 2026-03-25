@@ -61,7 +61,7 @@ void LogFontconfigMessage(bool consoleOutput, bool isError, const std::string& m
 } // namespace
 #endif
 
-namespace spring::font {
+namespace fonts {
 
 std::once_flag FontLibrary::initFlag;
 std::unique_ptr<FontLibrary> FontLibrary::instance;

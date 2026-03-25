@@ -11,7 +11,7 @@
 
 #include "FontTypes.h"
 
-namespace spring::font {
+namespace fonts {
 
 class FontFace;
 class FontLibrary;

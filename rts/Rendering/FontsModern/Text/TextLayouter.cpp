@@ -13,7 +13,7 @@
 
 namespace {
 
-[[nodiscard]] float ResolveLayoutScale(const spring::font::text::LayoutOptions& options)
+[[nodiscard]] float ResolveLayoutScale(const fonts::text::LayoutOptions& options)
 {
 	return (options.fontSize > 0.0f) ? options.fontSize : 1.0f;
 }
@@ -55,7 +55,7 @@ namespace {
 	return count;
 }
 
-[[nodiscard]] std::size_t ResolveLineSourceOffset(std::span<const spring::font::text::TextSpan> spans, std::size_t begin)
+[[nodiscard]] std::size_t ResolveLineSourceOffset(std::span<const fonts::text::TextSpan> spans, std::size_t begin)
 {
 	if (begin < spans.size())
 		return spans[begin].sourceOffset;
@@ -66,7 +66,7 @@ namespace {
 
 } // namespace
 
-namespace spring::font::text {
+namespace fonts::text {
 
 TextLayouter::TextLayouter(TextShaperPtr shaper, GlyphCachePtr glyphCache_)
 	: textShaper(std::move(shaper))

@@ -16,7 +16,7 @@ struct SColor;
 struct float3;
 struct float4;
 
-namespace spring::font::render {
+namespace fonts::render {
 
 /**
  * Small renderer-agnostic vertex payload for a prepared glyph quad.
@@ -91,11 +91,11 @@ public:
 	virtual void AddPrimaryQuad(const PreparedGlyphQuad& quad) = 0;
 	virtual void AddOutlineQuad(const PreparedGlyphQuad& quad) = 0;
 
-	virtual void AddPrimaryGlyph(const spring::font::text::LaidOutGlyph& glyph) = 0;
-	virtual void AddOutlineGlyph(const spring::font::text::LaidOutGlyph& glyph) = 0;
+	virtual void AddPrimaryGlyph(const fonts::text::LaidOutGlyph& glyph) = 0;
+	virtual void AddOutlineGlyph(const fonts::text::LaidOutGlyph& glyph) = 0;
 
-	virtual void AddPrimaryGlyphs(const std::vector<spring::font::text::LaidOutGlyph>& glyphs);
-	virtual void AddOutlineGlyphs(const std::vector<spring::font::text::LaidOutGlyph>& glyphs);
+	virtual void AddPrimaryGlyphs(const std::vector<fonts::text::LaidOutGlyph>& glyphs);
+	virtual void AddOutlineGlyphs(const std::vector<fonts::text::LaidOutGlyph>& glyphs);
 
 	virtual void DrawQueued() = 0;
 
@@ -115,13 +115,13 @@ public:
 
 using FontRendererPtr = std::unique_ptr<IFontRenderer>;
 
-inline void IFontRenderer::AddPrimaryGlyphs(const std::vector<spring::font::text::LaidOutGlyph>& glyphs)
+inline void IFontRenderer::AddPrimaryGlyphs(const std::vector<fonts::text::LaidOutGlyph>& glyphs)
 {
 	for (const auto& glyph: glyphs)
 		AddPrimaryGlyph(glyph);
 }
 
-inline void IFontRenderer::AddOutlineGlyphs(const std::vector<spring::font::text::LaidOutGlyph>& glyphs)
+inline void IFontRenderer::AddOutlineGlyphs(const std::vector<fonts::text::LaidOutGlyph>& glyphs)
 {
 	for (const auto& glyph: glyphs)
 		AddOutlineGlyph(glyph);

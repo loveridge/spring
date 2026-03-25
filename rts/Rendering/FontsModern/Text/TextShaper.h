@@ -8,7 +8,7 @@
 
 #include "TextRun.h"
 
-namespace spring::font::text {
+namespace fonts::text {
 
 /**
  * Lightweight shaping hints passed to a TextShaper implementation.

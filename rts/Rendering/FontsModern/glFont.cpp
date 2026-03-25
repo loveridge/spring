@@ -62,29 +62,6 @@ static constexpr float4 WhiteColor(1.00f, 1.00f, 1.00f, 0.95f);
 static constexpr float4 DarkOutlineColor(0.05f, 0.05f, 0.05f, 0.95f);
 static constexpr float4 LightOutlineColor(0.95f, 0.95f, 0.95f, 0.80f);
 
-using spring::font::FontFace;
-using spring::font::FontFaceSet;
-using spring::font::FontFileBytes;
-using spring::font::GlyphAtlasCache;
-using spring::font::FontRegistry;
-using spring::font::render::FontRenderState;
-using spring::font::render::FontRendererFactory;
-using spring::font::render::FontRendererPtr;
-using spring::font::render::PreparedGlyphQuad;
-using spring::font::text::ColorCodeIndicator;
-using spring::font::text::ColorCodeIndicatorEx;
-using spring::font::text::ColorResetIndicator;
-using spring::font::text::CR;
-using spring::font::text::InlineColorBytes;
-using spring::font::text::LF;
-using spring::font::text::OldColorCodeIndicator;
-using spring::font::text::OldColorCodeIndicatorEx;
-using spring::font::text::ParsedColorCode;
-using spring::font::text::TextLayout;
-using spring::font::text::TextLayouter;
-using spring::font::text::TextWrapper;
-using spring::font::text::TryParseColorCode;
-
 std::vector<std::weak_ptr<CglFont>>& GetLoadedFonts()
 {
 	static std::vector<std::weak_ptr<CglFont>> loadedFonts;
@@ -123,7 +100,7 @@ std::vector<std::weak_ptr<CglFont>>& GetLoadedFonts()
 	return LightOutlineColor;
 }
 
-[[nodiscard]] float4 ToFloat4(const InlineColorBytes& color) noexcept
+[[nodiscard]] float4 ToFloat4(const fonts::text::InlineColorBytes& color) noexcept
 {
 	constexpr float inv = 1.0f / 255.0f;
 	return float4(color.r * inv, color.g * inv, color.b * inv, color.a * inv);
@@ -151,13 +128,13 @@ void ConvertNormalizedToPixels(float& x, float& y)
 	y *= globalRendering->viewSizeY;
 }
 
-[[nodiscard]] bool LoadFontFileBytes(const std::string& fontFile, std::shared_ptr<FontFileBytes>& fileBytes)
+[[nodiscard]] bool LoadFontFileBytes(const std::string& fontFile, std::shared_ptr<fonts::FontFileBytes>& fileBytes)
 {
 	CFileHandler fileHandler(fontFile);
 	if (!fileHandler.FileExists())
 		return false;
 
-	fileBytes = std::make_shared<FontFileBytes>(static_cast<std::size_t>(fileHandler.FileSize()));
+	fileBytes = std::make_shared<fonts::FontFileBytes>(static_cast<std::size_t>(fileHandler.FileSize()));
 	if (fileBytes->Empty())
 		return false;
 
@@ -165,7 +142,7 @@ void ConvertNormalizedToPixels(float& x, float& y)
 	return true;
 }
 
-std::shared_ptr<FontFace> LoadSizedFace(const FontDescriptor& descriptor)
+std::shared_ptr<fonts::FontFace> LoadSizedFace(const FontDescriptor& descriptor)
 {
 #ifdef HEADLESS
 	(void)descriptor;
@@ -174,16 +151,16 @@ std::shared_ptr<FontFace> LoadSizedFace(const FontDescriptor& descriptor)
 	if (descriptor.filePath.empty())
 		return {};
 
-	if (auto cachedFace = FontRegistry::FindLoadedFace(descriptor); cachedFace != nullptr)
+	if (auto cachedFace = fonts::FontRegistry::FindLoadedFace(descriptor); cachedFace != nullptr)
 		return cachedFace;
 
-	std::shared_ptr<FontFileBytes> fileBytes;
+	std::shared_ptr<fonts::FontFileBytes> fileBytes;
 	if (!LoadFontFileBytes(descriptor.filePath, fileBytes))
 		throw content_error("Couldn't find font '" + descriptor.filePath + "'.");
 
 	FT_Face ftFace = nullptr;
 	const FT_Error newFaceError = FT_New_Memory_Face(
-		FontRegistry::GetLibrary().GetFTLibrary(),
+		fonts::FontRegistry::GetLibrary().GetFTLibrary(),
 		fileBytes->Data(),
 		static_cast<FT_Long>(fileBytes->Size()),
 		0,
@@ -193,27 +170,27 @@ std::shared_ptr<FontFace> LoadSizedFace(const FontDescriptor& descriptor)
 	if (newFaceError != 0 || ftFace == nullptr)
 		throw content_error("Failed to create FreeType face for '" + descriptor.filePath + "'.");
 
-	auto face = std::make_shared<FontFace>(ftFace, fileBytes);
+	auto face = std::make_shared<fonts::FontFace>(ftFace, fileBytes);
 	const FT_Error sizeError = FT_Set_Pixel_Sizes(face->GetFTFace(), 0, std::max(descriptor.pixelSize, 1));
 	if (sizeError != 0) {
 		throw content_error("Failed to set pixel size for font '" + descriptor.filePath + "'.");
 	}
 
-	FontRegistry::RegisterLoadedFace(descriptor, face);
+	fonts::FontRegistry::RegisterLoadedFace(descriptor, face);
 	return face;
 #endif
 }
 
-std::shared_ptr<FontFaceSet> BuildFaceSet(const FontDescriptor& descriptor)
+std::shared_ptr<fonts::FontFaceSet> BuildFaceSet(const FontDescriptor& descriptor)
 {
 	auto primaryFace = LoadSizedFace(descriptor);
 	if (primaryFace == nullptr)
 		return {};
 
-	std::vector<std::shared_ptr<FontFace>> fallbackFaces;
-	fallbackFaces.reserve(FontRegistry::GetFallbackFonts().size());
+	std::vector<std::shared_ptr<fonts::FontFace>> fallbackFaces;
+	fallbackFaces.reserve(fonts::FontRegistry::GetFallbackFonts().size());
 
-	for (const std::string& fallbackPath: FontRegistry::GetFallbackFonts()) {
+	for (const std::string& fallbackPath: fonts::FontRegistry::GetFallbackFonts()) {
 		if (fallbackPath.empty() || fallbackPath == descriptor.filePath)
 			continue;
 
@@ -228,7 +205,7 @@ std::shared_ptr<FontFaceSet> BuildFaceSet(const FontDescriptor& descriptor)
 		}
 	}
 
-	return std::make_shared<FontFaceSet>(std::move(primaryFace), std::move(fallbackFaces));
+	return std::make_shared<fonts::FontFaceSet>(std::move(primaryFace), std::move(fallbackFaces));
 }
 
 [[nodiscard]] std::string ResolveConfiguredFontFile(bool isSmallFont)
@@ -246,7 +223,7 @@ std::shared_ptr<FontFaceSet> BuildFaceSet(const FontDescriptor& descriptor)
 	return descriptor;
 }
 
-[[nodiscard]] bool SameSpan(const spring::font::text::TextSpan& lhs, const spring::font::text::TextSpan& rhs) noexcept
+[[nodiscard]] bool SameSpan(const fonts::text::TextSpan& lhs, const fonts::text::TextSpan& rhs) noexcept
 {
 	return
 		(lhs.sourceOffset == rhs.sourceOffset) &&
@@ -261,8 +238,8 @@ class CglFont::Impl
 {
 public:
 	struct RenderCommand {
-		TextLayout layout;
-		FontRenderState state{};
+		fonts::text::TextLayout layout;
+		fonts::render::FontRenderState state{};
 		float4 baseTextColor = WhiteColor;
 		float4 baseOutlineColor = DarkOutlineColor;
 		bool autoOutlineColor = false;
@@ -275,17 +252,17 @@ public:
 	explicit Impl(FontDescriptor descriptor_)
 		: descriptor(std::move(descriptor_))
 	{
-		FontRegistry::Init(true, false);
+		fonts::FontRegistry::Init(true, false);
 
 		faceSet = BuildFaceSet(descriptor);
 		if (faceSet == nullptr || faceSet->Empty())
 			throw content_error("Failed to load font file: " + descriptor.filePath);
 
-		glyphCache = std::make_shared<GlyphAtlasCache>(faceSet, descriptor.pixelSize, descriptor.outlineSize, descriptor.outlineWeight);
-		shaper = std::make_shared<spring::font::text::HarfBuzzTextShaper>(faceSet);
-		layouter = std::make_shared<TextLayouter>(shaper, glyphCache);
-		wrapper = std::make_shared<TextWrapper>(std::make_shared<spring::font::text::TextLayouterMeasurer>(layouter));
-		renderer = FontRendererFactory::Create();
+		glyphCache = std::make_shared<fonts::GlyphAtlasCache>(faceSet, descriptor.pixelSize, descriptor.outlineSize, descriptor.outlineWeight);
+		shaper = std::make_shared<fonts::text::HarfBuzzTextShaper>(faceSet);
+		layouter = std::make_shared<fonts::text::TextLayouter>(shaper, glyphCache);
+		wrapper = std::make_shared<fonts::text::TextWrapper>(std::make_shared<fonts::text::TextLayouterMeasurer>(layouter));
+		renderer = fonts::render::FontRendererFactory::Create();
 		if (renderer == nullptr)
 			throw content_error("Failed to create modern font renderer");
 
@@ -320,7 +297,7 @@ public:
 		renderer->HandleTextureUpdate(glyphCache->GetAtlasTexture(), &glyphCache->GetShadowAtlasTexture(), false);
 
 		for (const RenderCommand& command: commands) {
-			FontRenderState state = command.state;
+			fonts::render::FontRenderState state = command.state;
 			state.userDefinedBlending = userDefinedBlending;
 
 			renderer->PushState(state);
@@ -343,9 +320,9 @@ public:
 		FlushCommands(worldCommands, userDefinedBlending);
 	}
 
-	spring::font::text::LayoutOptions MakeLayoutOptions(float x, float y, float size, FontOption options) const
+	fonts::text::LayoutOptions MakeLayoutOptions(float x, float y, float size, FontOption options) const
 	{
-		spring::font::text::LayoutOptions layoutOptions;
+		fonts::text::LayoutOptions layoutOptions;
 		layoutOptions.options = NormalizeOptions(options);
 		layoutOptions.fontSize = std::max(size, 1.0f);
 		layoutOptions.x = x;
@@ -357,9 +334,9 @@ public:
 		return layoutOptions;
 	}
 
-	FontRenderState MakeScreenState(FontOption options, bool buffered) const
+	fonts::render::FontRenderState MakeScreenState(FontOption options, bool buffered) const
 	{
-		FontRenderState state;
+		fonts::render::FontRenderState state;
 		state.primaryColor = ToFontColor(textColor);
 		state.outlineColor = ToFontColor(outlineColor);
 		state.depth = depth;
@@ -376,9 +353,9 @@ public:
 		return state;
 	}
 
-	FontRenderState MakeWorldState(FontOption options, bool buffered)
+	fonts::render::FontRenderState MakeWorldState(FontOption options, bool buffered)
 	{
-		FontRenderState state;
+		fonts::render::FontRenderState state;
 		state.primaryColor = ToFontColor(textColor);
 		state.outlineColor = ToFontColor(outlineColor);
 		state.depth = depth;
@@ -405,7 +382,7 @@ public:
 
 	void QueueLayout(const RenderCommand& command)
 	{
-		std::vector<const spring::font::text::LaidOutRun*> orderedRuns;
+		std::vector<const fonts::text::LaidOutRun*> orderedRuns;
 		for (const auto& line: command.layout.lines) {
 			for (const auto& run: line.runs)
 				orderedRuns.emplace_back(&run);
@@ -417,8 +394,8 @@ public:
 
 		for (const auto& span: command.layout.spans) {
 			if (span.isControl) {
-				ParsedColorCode parsed;
-				if (!TryParseColorCode(span.text, 0, &parsed, true))
+				fonts::text::ParsedColorCode parsed;
+				if (!fonts::text::TryParseColorCode(span.text, 0, &parsed, true))
 					continue;
 
 				if (parsed.usesLegacyIndicator && fontHandler.disableOldColorIndicators)
@@ -453,7 +430,7 @@ public:
 		}
 	}
 
-	void QueueRun(const spring::font::text::LaidOutRun& run, const RenderCommand& command, const float4& currentTextColor, const float4& currentOutlineColor)
+	void QueueRun(const fonts::text::LaidOutRun& run, const RenderCommand& command, const float4& currentTextColor, const float4& currentOutlineColor)
 	{
 		const float outlineExpand = (descriptor.pixelSize > 0)
 			? (command.renderSize * descriptor.outlineSize / static_cast<float>(descriptor.pixelSize))
@@ -470,7 +447,7 @@ public:
 			const float w = command.renderSize * bounds.w;
 			const float h = command.renderSize * bounds.h;
 
-			PreparedGlyphQuad primaryQuad;
+			fonts::render::PreparedGlyphQuad primaryQuad;
 			primaryQuad.position = GlyphRect(x0, y0, w, h);
 			primaryQuad.atlasUV = glyph.atlasUV;
 			primaryQuad.color = ToFontColor(currentTextColor);
@@ -481,7 +458,7 @@ public:
 			if ((!command.drawOutline && !command.drawShadow) || glyph.outlineAtlasUV.Empty())
 				continue;
 
-			PreparedGlyphQuad decoratedQuad;
+			fonts::render::PreparedGlyphQuad decoratedQuad;
 			decoratedQuad.position = GlyphRect(
 				x0 + shadowShift - outlineExpand,
 				y0 - shadowShift + outlineExpand,
@@ -498,12 +475,12 @@ public:
 
 public:
 	FontDescriptor descriptor;
-	std::shared_ptr<FontFaceSet> faceSet;
-	std::shared_ptr<GlyphAtlasCache> glyphCache;
-	std::shared_ptr<spring::font::text::HarfBuzzTextShaper> shaper;
-	std::shared_ptr<TextLayouter> layouter;
-	std::shared_ptr<TextWrapper> wrapper;
-	FontRendererPtr renderer;
+	std::shared_ptr<fonts::FontFaceSet> faceSet;
+	std::shared_ptr<fonts::GlyphAtlasCache> glyphCache;
+	std::shared_ptr<fonts::text::HarfBuzzTextShaper> shaper;
+	std::shared_ptr<fonts::text::TextLayouter> layouter;
+	std::shared_ptr<fonts::text::TextWrapper> wrapper;
+	fonts::render::FontRendererPtr renderer;
 
 	mutable std::recursive_mutex mutex;
 	std::vector<RenderCommand> screenCommands;
@@ -622,6 +599,11 @@ std::shared_ptr<CglFont> CglFont::FindFont(const std::string& fontFile, int size
 	return nullptr;
 }
 
+const std::vector<std::weak_ptr<CglFont>>& CglFont::GetLoadedFonts()
+{
+	return ::GetLoadedFonts();
+}
+
 void CglFont::ReallocSystemFontAtlases(bool pre)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
@@ -698,8 +680,8 @@ void CglFont::Print(float x, float y, float size, FontOption options, const std:
 	if (HasOption(options, FontOption::Norm))
 		ConvertNormalizedToPixels(x, y);
 
-	spring::font::text::LayoutOptions layoutOptions = impl->MakeLayoutOptions(x, y, renderSize, options);
-	TextLayout layout = impl->layouter->LayoutText(text, layoutOptions);
+	fonts::text::LayoutOptions layoutOptions = impl->MakeLayoutOptions(x, y, renderSize, options);
+	fonts::text::TextLayout layout = impl->layouter->LayoutText(text, layoutOptions);
 
 	CglFont::Impl::RenderCommand command;
 	command.layout = std::move(layout);
@@ -753,13 +735,13 @@ void CglFont::PrintTable(float x, float y, float size, FontOption options, const
 		const unsigned char c = static_cast<unsigned char>(text[pos]);
 
 		switch (c) {
-			case OldColorCodeIndicator:
+			case fonts::text::OldColorCodeIndicator:
 				if (fontHandler.disableOldColorIndicators) {
 					colLines[col] += static_cast<char>(c);
 					break;
 				}
 				[[fallthrough]];
-			case ColorCodeIndicator: {
+			case fonts::text::ColorCodeIndicator: {
 				for (int i = 0; i < 4 && pos < static_cast<int>(text.size()); ++i, ++pos) {
 					colLines[col] += text[pos];
 					currentColor[i] = static_cast<std::uint8_t>(text[pos]);
@@ -769,13 +751,13 @@ void CglFont::PrintTable(float x, float y, float size, FontOption options, const
 				pos -= 1;
 			} break;
 
-			case OldColorCodeIndicatorEx:
+			case fonts::text::OldColorCodeIndicatorEx:
 				if (fontHandler.disableOldColorIndicators) {
 					colLines[col] += static_cast<char>(c);
 					break;
 				}
 				[[fallthrough]];
-			case ColorCodeIndicatorEx:
+			case fonts::text::ColorCodeIndicatorEx:
 				assert(false);
 				break;
 
@@ -783,7 +765,7 @@ void CglFont::PrintTable(float x, float y, float size, FontOption options, const
 				if ((col += 1) >= static_cast<int>(colLines.size())) {
 					colLines.emplace_back("");
 					for (int i = 0; i < row; ++i)
-						colLines[col] += LF;
+						colLines[col] += fonts::text::LF;
 					colColors.emplace_back(defaultColor);
 				}
 
@@ -794,12 +776,12 @@ void CglFont::PrintTable(float x, float y, float size, FontOption options, const
 				}
 			} break;
 
-			case CR:
-				pos += ((pos + 1) < static_cast<int>(text.size()) && text[pos + 1] == LF);
+			case fonts::text::CR:
+				pos += ((pos + 1) < static_cast<int>(text.size()) && text[pos + 1] == fonts::text::LF);
 				[[fallthrough]];
-			case LF: {
+			case fonts::text::LF: {
 				for (auto& line: colLines)
-					line += LF;
+					line += fonts::text::LF;
 
 				if (colColors[0] != currentColor) {
 					for (int i = 0; i < 4; ++i)
@@ -889,9 +871,9 @@ void CglFont::PrintWorld(const float3& position, float size, const std::string& 
 		? (camera->GetBillBoardMatrix().Transpose() * position)
 		: position;
 
-	spring::font::text::LayoutOptions layoutOptions = impl->MakeLayoutOptions(billboardPosition.x, billboardPosition.y, renderSize, options);
+	fonts::text::LayoutOptions layoutOptions = impl->MakeLayoutOptions(billboardPosition.x, billboardPosition.y, renderSize, options);
 	layoutOptions.z = position.z;
-	TextLayout layout = impl->layouter->LayoutText(text, layoutOptions);
+	fonts::text::TextLayout layout = impl->layouter->LayoutText(text, layoutOptions);
 
 	CglFont::Impl::RenderCommand command;
 	command.layout = std::move(layout);
@@ -1012,7 +994,7 @@ int CglFont::WrapInPlace(std::string& text, float fontSize, float maxWidth, floa
 	RECOIL_DETAILED_TRACY_ZONE;
 	std::scoped_lock lock(impl->mutex);
 
-	spring::font::text::WrapOptions wrapOptions;
+	fonts::text::WrapOptions wrapOptions;
 	wrapOptions.fontSize = fontSize;
 	wrapOptions.maxWidth = maxWidth;
 	wrapOptions.maxHeight = maxHeight;
@@ -1029,7 +1011,7 @@ std::string CglFont::Wrap(const std::string& text, float fontSize, float maxWidt
 	RECOIL_DETAILED_TRACY_ZONE;
 	std::scoped_lock lock(impl->mutex);
 
-	spring::font::text::WrapOptions wrapOptions;
+	fonts::text::WrapOptions wrapOptions;
 	wrapOptions.fontSize = fontSize;
 	wrapOptions.maxWidth = maxWidth;
 	wrapOptions.maxHeight = maxHeight;
@@ -1057,13 +1039,13 @@ std::deque<std::string> CglFont::SplitIntoLines(const spring::u8string& text)
 		const char8_t c = text[idx];
 
 		switch (c) {
-			case OldColorCodeIndicator:
+			case fonts::text::OldColorCodeIndicator:
 				if (fontHandler.disableOldColorIndicators) {
 					lines.back() += static_cast<char>(c);
 					break;
 				}
 				[[fallthrough]];
-			case ColorCodeIndicator:
+			case fonts::text::ColorCodeIndicator:
 				if ((idx + 4) <= end) {
 					colorCodeStack.emplace_back(text.substr(idx, 4));
 					lines.back() += colorCodeStack.back();
@@ -1071,13 +1053,13 @@ std::deque<std::string> CglFont::SplitIntoLines(const spring::u8string& text)
 				}
 				break;
 
-			case OldColorCodeIndicatorEx:
+			case fonts::text::OldColorCodeIndicatorEx:
 				if (fontHandler.disableOldColorIndicators) {
 					lines.back() += static_cast<char>(c);
 					break;
 				}
 				[[fallthrough]];
-			case ColorCodeIndicatorEx:
+			case fonts::text::ColorCodeIndicatorEx:
 				if ((idx + 9) <= end) {
 					colorCodeStack.emplace_back(text.substr(idx, 9));
 					lines.back() += colorCodeStack.back();
@@ -1085,16 +1067,16 @@ std::deque<std::string> CglFont::SplitIntoLines(const spring::u8string& text)
 				}
 				break;
 
-			case ColorResetIndicator:
+			case fonts::text::ColorResetIndicator:
 				if (!colorCodeStack.empty())
 					colorCodeStack.pop_back();
 				lines.back() += static_cast<char>(c);
 				break;
 
-			case CR:
-				idx += ((idx + 1) < end && text[idx + 1] == LF);
+			case fonts::text::CR:
+				idx += ((idx + 1) < end && text[idx + 1] == fonts::text::LF);
 				[[fallthrough]];
-			case LF:
+			case fonts::text::LF:
 				lines.emplace_back("");
 				if (!colorCodeStack.empty())
 					lines.back() = colorCodeStack.back();
@@ -1248,20 +1230,20 @@ void CglFont::ScanForWantedGlyphs(const spring::u8string& text)
 	for (int idx = 0, end = static_cast<int>(text.size()); idx < end; ) {
 		const char32_t cp = utf8::GetNextChar(text, idx);
 
-		if (cp == ColorResetIndicator)
+		if (cp == fonts::text::ColorResetIndicator)
 			continue;
 
-		if ((cp == ColorCodeIndicator) || (cp == ColorCodeIndicatorEx) || (cp == OldColorCodeIndicator) || (cp == OldColorCodeIndicatorEx)) {
-			if ((cp == OldColorCodeIndicator || cp == OldColorCodeIndicatorEx) && fontHandler.disableOldColorIndicators) {
+		if ((cp == fonts::text::ColorCodeIndicator) || (cp == fonts::text::ColorCodeIndicatorEx) || (cp == fonts::text::OldColorCodeIndicator) || (cp == fonts::text::OldColorCodeIndicatorEx)) {
+			if ((cp == fonts::text::OldColorCodeIndicator || cp == fonts::text::OldColorCodeIndicatorEx) && fontHandler.disableOldColorIndicators) {
 				codepoints.emplace_back(cp);
 				continue;
 			}
 
-			idx = static_cast<int>(spring::font::text::SkipColorCodes(text, idx - 1, nullptr, true));
+			idx = static_cast<int>(fonts::text::SkipColorCodes(text, idx - 1, nullptr, true));
 			continue;
 		}
 
-		if (cp == CR || cp == LF)
+		if (cp == fonts::text::CR || cp == fonts::text::LF)
 			continue;
 
 		codepoints.emplace_back(cp);
