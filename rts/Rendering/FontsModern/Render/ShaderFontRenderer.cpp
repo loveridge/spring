@@ -732,6 +732,7 @@ void ShaderFontRenderer::SubmitBatch(const RenderBatch& batch, const BufferResou
 		return;
 
 	BindTexture(binding);
+	static_cast<Shader::IProgramObject*>(programResources.program.get())->SetUniform("uTex", std::max(binding.textureUnit, 0));
 	ApplyUniforms(outlinePass);
 
 	if (bufferResources.vao != nullptr) {
