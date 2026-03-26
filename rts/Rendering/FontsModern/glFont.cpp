@@ -358,8 +358,10 @@ public:
 		state.primaryColor = ToFontColor(textColor);
 		state.outlineColor = ToFontColor(outlineColor);
 		state.depth = depth;
-		state.modelViewMatrix = &viewMatrix;
-		state.projectionMatrix = &projMatrix;
+		state.modelViewMatrix = viewMatrix;
+		state.projectionMatrix = projMatrix;
+		state.hasModelViewMatrix = true;
+		state.hasProjectionMatrix = true;
 		state.useWorldSpace = false;
 		state.normalizedCoordinates = false;
 		state.useColorAtlas = glyphCache->HasColorGlyphs();
@@ -388,11 +390,15 @@ public:
 		if (activeCam != nullptr) {
 			worldViewMatrix = activeCam->GetViewMatrix() * activeCam->GetBillBoardMatrix();
 			worldProjMatrix = activeCam->GetProjectionMatrix();
-			state.modelViewMatrix = &worldViewMatrix;
-			state.projectionMatrix = &worldProjMatrix;
+			state.modelViewMatrix = worldViewMatrix;
+			state.projectionMatrix = worldProjMatrix;
+			state.hasModelViewMatrix = true;
+			state.hasProjectionMatrix = true;
 		} else {
-			state.modelViewMatrix = &viewMatrix;
-			state.projectionMatrix = &projMatrix;
+			state.modelViewMatrix = viewMatrix;
+			state.projectionMatrix = projMatrix;
+			state.hasModelViewMatrix = true;
+			state.hasProjectionMatrix = true;
 		}
 
 		return state;
@@ -894,7 +900,7 @@ void CglFont::PrintWorld(const float3& position, float size, const std::string& 
 	}
 
 	fonts::text::LayoutOptions layoutOptions = impl->MakeLayoutOptions(billboardPosition.x, billboardPosition.y, renderSize, options);
-	layoutOptions.z = position.z;
+	layoutOptions.z = billboardPosition.z;
 	fonts::text::TextLayout layout = impl->layouter->LayoutText(text, layoutOptions);
 
 	CglFont::Impl::RenderCommand command;

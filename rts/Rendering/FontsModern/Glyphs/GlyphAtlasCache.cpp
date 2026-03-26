@@ -23,6 +23,8 @@
 #include "System/Log/ILog.h"
 #include "System/Rectangle.h"
 
+CONFIG(bool, AllowColorFonts).defaultValue(true).description("Allows fonts to use embedded color glyphs when available.");
+
 #ifndef HEADLESS
 static constexpr int FT_INTERNAL_DPI = 64;
 #endif

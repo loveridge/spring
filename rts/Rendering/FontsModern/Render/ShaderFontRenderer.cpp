@@ -91,8 +91,7 @@ float ComputeCoverage(vec4 texel)
 
 void main()
 {
-	vec2 texSize = vec2(textureSize(uTex, 0));
-	vec4 texel = texture(uTex, vUV / texSize);
+	vec4 texel = texture(uTex, vUV);
 
 	if (uUseColorAtlas != 0) {
 		outColor = texel * vColor;
@@ -166,8 +165,7 @@ float ComputeCoverage(vec4 texel)
 
 void main()
 {
-	vec2 texSize = vec2(textureSize(uTex, 0));
-	vec4 texel = texture(uTex, vUV / texSize);
+	vec4 texel = texture(uTex, vUV);
 
 	if (uUseColorAtlas != 0) {
 		gl_FragColor = texel * vColor;
@@ -188,21 +186,6 @@ void main()
 		color.b * inv,
 		color.a * inv,
 	};
-}
-
-[[nodiscard]] GlyphRect NormalizeRect(GlyphRect rect) noexcept
-{
-	if (rect.w < 0.0f) {
-		rect.x += rect.w;
-		rect.w = -rect.w;
-	}
-
-	if (rect.h < 0.0f) {
-		rect.y += rect.h;
-		rect.h = -rect.h;
-	}
-
-	return rect;
 }
 
 [[nodiscard]] const FontRenderState* GetActiveState(const std::vector<FontRenderState>& stateStack) noexcept
@@ -245,7 +228,7 @@ void main()
 [[nodiscard]] PreparedGlyphQuad MakePreparedGlyphQuad(const fonts::text::LaidOutGlyph& glyph, const FontRenderState* state, bool outlinePass)
 {
 	PreparedGlyphQuad quad;
-	quad.position = NormalizeRect(glyph.shaped.metrics.bounds);
+	quad.position = glyph.shaped.metrics.bounds;
 	quad.position.x += glyph.x;
 	quad.position.y += glyph.y;
 	quad.atlasUV = outlinePass ? glyph.outlineAtlasUV : glyph.atlasUV;
@@ -381,6 +364,7 @@ void ShaderFontRenderer::DrawQueued()
 	glPushAttrib(GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_TEXTURE_BIT);
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_ALPHA_TEST);
+	glDisable(GL_CULL_FACE);
 	glEnable(GL_BLEND);
 
 	const FontRenderState* state = GetActiveState(stateStack);
@@ -680,24 +664,33 @@ void ShaderFontRenderer::EnsureBufferCapacity(RenderBatch& batch, BufferResource
 
 void ShaderFontRenderer::QueueQuad(RenderBatch& batch, const PreparedGlyphQuad& srcQuad)
 {
-	PreparedGlyphQuad quad = srcQuad;
-	quad.position = NormalizeRect(quad.position);
+	const PreparedGlyphQuad& quad = srcQuad;
 
-	if (quad.Empty()) {
+	float x0 = quad.position.x;
+	float y0 = quad.position.y;
+	float x1 = quad.position.x + quad.position.w;
+	float y1 = quad.position.y + quad.position.h;
+
+	float u0 = quad.atlasUV.x;
+	float v0 = quad.atlasUV.y;
+	float u1 = quad.atlasUV.x + quad.atlasUV.w;
+	float v1 = quad.atlasUV.y + quad.atlasUV.h;
+
+	if (x1 < x0) {
+		std::swap(x0, x1);
+		std::swap(u0, u1);
+	}
+
+	if (y1 < y0) {
+		std::swap(y0, y1);
+		std::swap(v0, v1);
+	}
+
+	if (!quad.visible || x0 == x1 || y0 == y1 || u0 == u1 || v0 == v1) {
 		if (createOptions.enableStatistics)
 			stats.droppedQuads += 1;
 		return;
 	}
-
-	const float x0 = quad.position.x0();
-	const float y0 = quad.position.y0();
-	const float x1 = quad.position.x1();
-	const float y1 = quad.position.y1();
-
-	const float u0 = quad.atlasUV.x0();
-	const float v0 = quad.atlasUV.y0();
-	const float u1 = quad.atlasUV.x1();
-	const float v1 = quad.atlasUV.y1();
 
 	const Vertex tl {x0, y0, quad.z, u0, v0, quad.color.r, quad.color.g, quad.color.b, quad.color.a};
 	const Vertex tr {x1, y0, quad.z, u1, v0, quad.color.r, quad.color.g, quad.color.b, quad.color.a};
@@ -779,13 +772,13 @@ void ShaderFontRenderer::ApplyUniforms(bool outlinePass)
 	const CMatrix44f* matrix = uniformState.matrix;
 
 	if (matrix == nullptr && state != nullptr) {
-		if (state->projectionMatrix != nullptr && state->modelViewMatrix != nullptr) {
-			mvp = (*state->projectionMatrix) * (*state->modelViewMatrix);
+		if (state->hasProjectionMatrix && state->hasModelViewMatrix) {
+			mvp = state->projectionMatrix * state->modelViewMatrix;
 			matrix = &mvp;
-		} else if (state->projectionMatrix != nullptr) {
-			matrix = state->projectionMatrix;
-		} else if (state->modelViewMatrix != nullptr) {
-			matrix = state->modelViewMatrix;
+		} else if (state->hasProjectionMatrix) {
+			matrix = &state->projectionMatrix;
+		} else if (state->hasModelViewMatrix) {
+			matrix = &state->modelViewMatrix;
 		}
 	}
 

@@ -84,6 +84,22 @@
 CONFIG(bool, LuaShaders).defaultValue(true).headlessValue(false).safemodeValue(false);
 CONFIG(int, DeprecatedGLWarnLevel).defaultValue(0).headlessValue(0).safemodeValue(0);
 
+namespace {
+
+void SyncFontMatricesFromOpenGL(CglFont& font)
+{
+	CMatrix44f modelViewMatrix;
+	CMatrix44f projectionMatrix;
+
+	glGetFloatv(GL_MODELVIEW_MATRIX, modelViewMatrix.m);
+	glGetFloatv(GL_PROJECTION_MATRIX, projectionMatrix.m);
+
+	font.SetViewMatrix(modelViewMatrix);
+	font.SetProjMatrix(projectionMatrix);
+}
+
+}
+
 /*** Callouts for OpenGL API
  *
  * Only setters and getters for OpenGL usage in Recoil, see `GL` for constants.
@@ -1439,6 +1455,7 @@ int LuaOpenGL::Text(lua_State* L)
 	}
 
 	font->SetTextColor(SColor(color.data()));
+	SyncFontMatricesFromOpenGL(*font);
 	font->Print(x, y, size, options, text);
 
 	return 0;

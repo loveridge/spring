@@ -9,9 +9,9 @@
 
 #include "../FontTypes.h"
 #include "../Text/TextRun.h"
+#include "System/Matrix44f.h"
 
 class GlyphAtlasTexture;
-class CMatrix44f;
 struct SColor;
 struct float3;
 struct float4;
@@ -61,8 +61,10 @@ struct FontRenderState {
 	FontColor outlineColor{};
 	FontDepth depth{};
 
-	const CMatrix44f* modelViewMatrix = nullptr;
-	const CMatrix44f* projectionMatrix = nullptr;
+	CMatrix44f modelViewMatrix = CMatrix44f::Identity();
+	CMatrix44f projectionMatrix = CMatrix44f::Identity();
+	bool hasModelViewMatrix = false;
+	bool hasProjectionMatrix = false;
 
 	const float3* worldPos = nullptr;
 	const float4* clipPlane = nullptr;

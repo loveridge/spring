@@ -15,6 +15,7 @@
 #include "Rendering/FontsModern/FontRegistry.h"
 #include "Rendering/FontsModern/glFont.h"
 #include "System/Exceptions.h"
+#include "System/Matrix44f.h"
 
 #include "System/Misc/TracyDefs.h"
 
@@ -26,6 +27,22 @@
  * @table LuaFont
  * @see gl.LoadFont
  */
+
+namespace {
+
+void SyncFontMatricesFromOpenGL(CglFont& font)
+{
+	CMatrix44f modelViewMatrix;
+	CMatrix44f projectionMatrix;
+
+	glGetFloatv(GL_MODELVIEW_MATRIX, modelViewMatrix.m);
+	glGetFloatv(GL_PROJECTION_MATRIX, projectionMatrix.m);
+
+	font.SetViewMatrix(modelViewMatrix);
+	font.SetProjMatrix(projectionMatrix);
+}
+
+}
 
 
 bool LuaFonts::PushEntries(lua_State* L)
@@ -308,6 +325,7 @@ int LuaFonts::Print(lua_State* L)
 		}
 	}
 
+	SyncFontMatricesFromOpenGL(*f);
 	f->Print(x, y, size, options, text);
 	return 0;
 }
