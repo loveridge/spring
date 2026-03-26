@@ -54,7 +54,7 @@ void NullFontRenderer::DrawQueued()
 {
 }
 
-void NullFontRenderer::HandleTextureUpdate(const GlyphAtlasTexture& primaryAtlas, const GlyphAtlasTexture* outlineAtlas, bool onlyUpload)
+void NullFontRenderer::HandleTextureUpdate(GlyphAtlasTexture& primaryAtlas, GlyphAtlasTexture* outlineAtlas, bool onlyUpload)
 {
 	stats.primaryTextureUploads += 1;
 
@@ -72,14 +72,12 @@ void NullFontRenderer::PushState(const FontRenderState& state)
 	lastPushedState = state;
 }
 
-void NullFontRenderer::PopState(const FontRenderState& state)
+void NullFontRenderer::PopState()
 {
 	if (stateStackDepth > 0) {
 		stateStackDepth -= 1;
 		stats.statePops += 1;
 	}
-
-	(void)state;
 }
 
 bool NullFontRenderer::IsValid() const

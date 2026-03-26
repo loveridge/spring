@@ -16,6 +16,8 @@
 #include <utility>
 #include <vector>
 
+#include "fmt/printf.h"
+
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
@@ -37,7 +39,9 @@
 #include "System/Color.h"
 #include "System/Config/ConfigHandler.h"
 #include "System/Exceptions.h"
+#include "System/FileSystem/DataDirsAccess.h"
 #include "System/FileSystem/FileHandler.h"
+#include "System/FileSystem/FileSystem.h"
 #include "System/Log/ILog.h"
 #include "System/StringUtil.h"
 
@@ -133,24 +137,85 @@ void ConvertNormalizedToPixels(float& x, float& y)
 	if (fontFile.empty())
 		return fontFile;
 
-	if (fontFile.find_first_of("/\\") != std::string::npos)
+	return FileSystem::ForwardSlashes(fontFile);
+}
+
+[[nodiscard]] std::string ResolveFontPathForRead(std::string fontFile)
+{
+	fontFile = NormalizeFontPath(std::move(fontFile));
+	if (fontFile.empty())
 		return fontFile;
 
 	if (CFileHandler(fontFile).FileExists())
 		return fontFile;
 
-	std::string prefixedPath = "fonts/" + fontFile;
-	if (CFileHandler(prefixedPath).FileExists())
+	if (FileSystem::IsAbsolutePath(fontFile))
+		return fontFile;
+
+	const std::string resolvedPath = dataDirsAccess.LocateFile(fontFile);
+	if (!resolvedPath.empty() && FileSystem::FileExists(resolvedPath))
+		return FileSystem::ForwardSlashes(resolvedPath);
+
+	if (!fontFile.starts_with("fonts/")) {
+		const std::string prefixedPath = "fonts/" + fontFile;
+		if (CFileHandler(prefixedPath).FileExists())
+			return prefixedPath;
+
+		const std::string resolvedPrefixedPath = dataDirsAccess.LocateFile(prefixedPath);
+		if (!resolvedPrefixedPath.empty() && FileSystem::FileExists(resolvedPrefixedPath))
+			return FileSystem::ForwardSlashes(resolvedPrefixedPath);
+
 		return prefixedPath;
+	}
 
 	return fontFile;
 }
 
+[[nodiscard]] std::string DescribeFontPathResolution(const std::string& fontFile)
+{
+	const std::string normalizedFontFile = NormalizeFontPath(fontFile);
+	const bool directExists = CFileHandler(normalizedFontFile).FileExists();
+	const bool isAbsolutePath = FileSystem::IsAbsolutePath(normalizedFontFile);
+	const bool hasFontsPrefix = normalizedFontFile.starts_with("fonts/");
+
+	const std::string locatedPath = dataDirsAccess.LocateFile(normalizedFontFile);
+	const bool locatedExists = !locatedPath.empty() && FileSystem::FileExists(locatedPath);
+
+	const std::string prefixedPath = hasFontsPrefix ? std::string {} : ("fonts/" + normalizedFontFile);
+	const bool prefixedExists = !prefixedPath.empty() && CFileHandler(prefixedPath).FileExists();
+
+	const std::string locatedPrefixedPath = prefixedPath.empty() ? std::string {} : dataDirsAccess.LocateFile(prefixedPath);
+	const bool locatedPrefixedExists = !locatedPrefixedPath.empty() && FileSystem::FileExists(locatedPrefixedPath);
+
+	return fmt::sprintf(
+		"original=\"%s\", normalized=\"%s\", absolute=%d, directExists=%d, "
+		"located=\"%s\", locatedExists=%d, prefixed=\"%s\", prefixedExists=%d, "
+		"locatedPrefixed=\"%s\", locatedPrefixedExists=%d",
+		fontFile.c_str(),
+		normalizedFontFile.c_str(),
+		isAbsolutePath,
+		directExists,
+		locatedPath.c_str(),
+		locatedExists,
+		prefixedPath.c_str(),
+		prefixedExists,
+		locatedPrefixedPath.c_str(),
+		locatedPrefixedExists
+	);
+}
+
 [[nodiscard]] bool LoadFontFileBytes(const std::string& fontFile, std::shared_ptr<fonts::FontFileBytes>& fileBytes)
 {
-	CFileHandler fileHandler(fontFile);
-	if (!fileHandler.FileExists())
+	const std::string resolvedFontFile = ResolveFontPathForRead(fontFile);
+	CFileHandler fileHandler(resolvedFontFile);
+	if (!fileHandler.FileExists()) {
+		LOG_L(L_ERROR, "[CglFont::%s] Font resolution failed: resolved=\"%s\"; %s",
+			__func__,
+			resolvedFontFile.c_str(),
+			DescribeFontPathResolution(fontFile).c_str()
+		);
 		return false;
+	}
 
 	fileBytes = std::make_shared<fonts::FontFileBytes>(static_cast<std::size_t>(fileHandler.FileSize()));
 	if (fileBytes->Empty())
@@ -321,7 +386,7 @@ public:
 			renderer->PushState(state);
 			QueueLayout(command);
 			renderer->DrawQueued();
-			renderer->PopState(state);
+			renderer->PopState();
 		}
 
 		commands.clear();
@@ -585,6 +650,7 @@ std::shared_ptr<CglFont> CglFont::LoadFont(const std::string& fontFile, bool sma
 std::shared_ptr<CglFont> CglFont::LoadFont(const std::string& fontFile, int size, int outlineWidth, float outlineWeight)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
+		LOG("[%s] loading font \"%s\"", __func__, fontFile.c_str());
 	const std::string normalizedFontFile = NormalizeFontPath(fontFile);
 
 	if (auto existing = FindFont(normalizedFontFile, size, outlineWidth, outlineWeight); existing != nullptr)

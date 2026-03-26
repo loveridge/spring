@@ -31,7 +31,8 @@ struct PreparedGlyphQuad {
 	float z = 0.0f;
 	bool visible = true;
 
-	bool Empty() const noexcept {
+	bool Empty() const noexcept
+	{
 		return position.Empty() || atlasUV.Empty() || !visible;
 	}
 };
@@ -101,12 +102,12 @@ public:
 
 	virtual void DrawQueued() = 0;
 
-	virtual void HandleTextureUpdate(const GlyphAtlasTexture& primaryAtlas,
-	                                 const GlyphAtlasTexture* outlineAtlas = nullptr,
+	virtual void HandleTextureUpdate(GlyphAtlasTexture& primaryAtlas,
+	                                 GlyphAtlasTexture* outlineAtlas = nullptr,
 	                                 bool onlyUpload = false) = 0;
 
 	virtual void PushState(const FontRenderState& state) = 0;
-	virtual void PopState(const FontRenderState& state) = 0;
+	virtual void PopState() = 0;
 
 	virtual bool IsValid() const = 0;
 	virtual bool IsLegacy() const { return false; }
@@ -129,4 +130,4 @@ inline void IFontRenderer::AddOutlineGlyphs(const std::vector<fonts::text::LaidO
 		AddOutlineGlyph(glyph);
 }
 
-} // namespace font::render
+} // namespace fonts::render

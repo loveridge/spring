@@ -68,11 +68,11 @@ public:
 	void AddOutlineGlyph(const fonts::text::LaidOutGlyph& glyph) override;
 	void DrawQueued() override;
 
-	void HandleTextureUpdate(const GlyphAtlasTexture& primaryAtlas,
-	                        const GlyphAtlasTexture* outlineAtlas = nullptr,
+	void HandleTextureUpdate(GlyphAtlasTexture& primaryAtlas,
+	                        GlyphAtlasTexture* outlineAtlas = nullptr,
 	                        bool onlyUpload = false) override;
 	void PushState(const FontRenderState& state) override;
-	void PopState(const FontRenderState& state) override;
+	void PopState() override;
 
 	[[nodiscard]] FontRendererStats GetStats() const override;
 	void ClearStats() override;
@@ -134,6 +134,7 @@ private:
 	void ApplyUniforms(bool outlinePass);
 	void BindTexture(const TextureBinding& binding);
 	void UpdateTextureBindingFromAtlas(const GlyphAtlasTexture& atlas);
+	void ClearQueuedBatches();
 
 private:
 	CreateOptions createOptions;
@@ -150,4 +151,4 @@ private:
 	bool initialized = false;
 };
 
-} // namespace font::render
+} // namespace fonts::render

@@ -7,6 +7,7 @@
 #include <cassert>
 #include <cstddef>
 #include <utility>
+#include <limits>
 
 #include "Rendering/Fonts/FontLogSection.h"
 #include "Rendering/FontsModern/Glyphs/GlyphAtlasTexture.h"
@@ -20,7 +21,7 @@
 namespace fonts::render {
 namespace {
 
-static constexpr const char* vsFont330 = R"(
+static constexpr const char* vsFont150 = R"(
 #version 150 compatibility
 #extension GL_ARB_explicit_attrib_location : enable
 
@@ -52,7 +53,7 @@ void main()
 }
 )";
 
-static constexpr const char* fsFont330 = R"(
+static constexpr const char* fsFont150 = R"(
 #version 150
 
 uniform sampler2D uTex;
@@ -290,6 +291,7 @@ ShaderFontRenderer& ShaderFontRenderer::operator=(ShaderFontRenderer&& other) no
 	other.primaryTextureBinding = {};
 	other.outlineTextureBinding = {};
 	other.stats = {};
+	other.stateStack.clear();
 	other.initialized = false;
 
 	return *this;
@@ -334,17 +336,11 @@ void ShaderFontRenderer::DrawQueued()
 
 	EnsureInitialized();
 
-	if (!IsValid()) {
+	if (!IsReady()) {
 		if (createOptions.enableStatistics)
 			stats.droppedQuads += (primaryBatch.quadCount + outlineBatch.quadCount);
 
-		primaryBatch.vertices.clear();
-		primaryBatch.quadCount = 0;
-		primaryBatch.dirty = false;
-
-		outlineBatch.vertices.clear();
-		outlineBatch.quadCount = 0;
-		outlineBatch.dirty = false;
+		ClearQueuedBatches();
 		return;
 	}
 
@@ -359,7 +355,9 @@ void ShaderFontRenderer::DrawQueued()
 
 #ifndef HEADLESS
 	GLint prevProgram = 0;
+	GLint prevActiveTexture = GL_TEXTURE0;
 	glGetIntegerv(GL_CURRENT_PROGRAM, &prevProgram);
+	glGetIntegerv(GL_ACTIVE_TEXTURE, &prevActiveTexture);
 
 	glPushAttrib(GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_TEXTURE_BIT);
 	glDisable(GL_DEPTH_TEST);
@@ -381,34 +379,25 @@ void ShaderFontRenderer::DrawQueued()
 	if (prevProgram > 0)
 		glUseProgram(prevProgram);
 
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, 0);
+	glActiveTexture(prevActiveTexture);
 	glPopAttrib();
 #endif
 
-	primaryBatch.vertices.clear();
-	primaryBatch.quadCount = 0;
-	primaryBatch.dirty = false;
-
-	outlineBatch.vertices.clear();
-	outlineBatch.quadCount = 0;
-	outlineBatch.dirty = false;
+	ClearQueuedBatches();
 
 	if (autoPushedState)
-		PopState(FontRenderState {});
+		PopState();
 }
 
-void ShaderFontRenderer::HandleTextureUpdate(const GlyphAtlasTexture& primaryAtlas, const GlyphAtlasTexture* outlineAtlas, bool onlyUpload)
+void ShaderFontRenderer::HandleTextureUpdate(GlyphAtlasTexture& primaryAtlas, GlyphAtlasTexture* outlineAtlas, bool onlyUpload)
 {
 	if (createOptions.autoUploadTextures) {
-		GlyphAtlasTexture& mutablePrimaryAtlas = const_cast<GlyphAtlasTexture&>(primaryAtlas);
-		if (onlyUpload || mutablePrimaryAtlas.NeedsUpload() || !mutablePrimaryAtlas.HasTexture())
-			mutablePrimaryAtlas.Upload();
+		if (onlyUpload || primaryAtlas.NeedsUpload() || !primaryAtlas.HasTexture())
+			primaryAtlas.Upload();
 
 		if (outlineAtlas != nullptr) {
-			GlyphAtlasTexture& mutableOutlineAtlas = const_cast<GlyphAtlasTexture&>(*outlineAtlas);
-			if (onlyUpload || mutableOutlineAtlas.NeedsUpload() || !mutableOutlineAtlas.HasTexture())
-				mutableOutlineAtlas.Upload();
+			if (onlyUpload || outlineAtlas->NeedsUpload() || !outlineAtlas->HasTexture())
+				outlineAtlas->Upload();
 		}
 	}
 
@@ -438,15 +427,14 @@ void ShaderFontRenderer::PushState(const FontRenderState& state)
 		stats.statePushes += 1;
 }
 
-void ShaderFontRenderer::PopState(const FontRenderState& state)
+void ShaderFontRenderer::PopState()
 {
-	(void)state;
-
-	if (!stateStack.empty())
+	if (!stateStack.empty()) {
 		stateStack.pop_back();
 
-	if (createOptions.enableStatistics)
-		stats.statePops += 1;
+		if (createOptions.enableStatistics)
+			stats.statePops += 1;
+	}
 }
 
 FontRendererStats ShaderFontRenderer::GetStats() const
@@ -464,7 +452,7 @@ bool ShaderFontRenderer::IsValid() const
 #ifdef HEADLESS
 	return false;
 #else
-	return initialized && (programResources.program != nullptr) && programResources.program->IsValid();
+	return (programResources.program != nullptr) && programResources.program->IsValid();
 #endif
 }
 
@@ -502,7 +490,7 @@ void ShaderFontRenderer::EnsureInitialized()
 	InitializeProgram();
 	InitializeBuffers();
 
-	initialized = (programResources.program != nullptr) && programResources.program->IsValid();
+	initialized = IsReady();
 #endif
 }
 
@@ -518,6 +506,7 @@ void ShaderFontRenderer::ReleaseDeviceResources()
 	outlineBuffers.vbo = nullptr;
 	outlineBuffers.uploadedVertexCapacity = 0;
 
+	ClearQueuedBatches();
 	initialized = false;
 }
 
@@ -572,8 +561,8 @@ void ShaderFontRenderer::InitializeProgram()
 		program->BindAttribLocation("aColor", 2);
 	}
 
-	program->AttachShaderObject(new Shader::GLSLShaderObject(GL_VERTEX_SHADER, globalRendering->supportExplicitAttribLoc ? vsFont330 : vsFont130));
-	program->AttachShaderObject(new Shader::GLSLShaderObject(GL_FRAGMENT_SHADER, globalRendering->supportExplicitAttribLoc ? fsFont330 : fsFont130));
+	program->AttachShaderObject(new Shader::GLSLShaderObject(GL_VERTEX_SHADER, globalRendering->supportExplicitAttribLoc ? vsFont150 : vsFont130));
+	program->AttachShaderObject(new Shader::GLSLShaderObject(GL_FRAGMENT_SHADER, globalRendering->supportExplicitAttribLoc ? fsFont150 : fsFont130));
 	program->Link();
 
 	if (!program->IsValid()) {
@@ -606,10 +595,12 @@ void ShaderFontRenderer::InitializeBuffers()
 		if (VAO::IsSupported() && bufferResources.vao == nullptr)
 			bufferResources.vao = std::make_unique<VAO>();
 
+		constexpr std::size_t bootstrapVertexCapacity = 64;
+
 		bufferResources.vbo->Bind();
-		bufferResources.vbo->New(sizeof(Vertex), GetBufferUsage(createOptions), nullptr);
+		bufferResources.vbo->New(bootstrapVertexCapacity * sizeof(Vertex), GetBufferUsage(createOptions), nullptr);
 		bufferResources.vbo->Unbind();
-		bufferResources.uploadedVertexCapacity = 1;
+		bufferResources.uploadedVertexCapacity = bootstrapVertexCapacity;
 
 		ConfigureVertexAttributes(bufferResources);
 	};
@@ -728,12 +719,20 @@ void ShaderFontRenderer::UploadBatch(RenderBatch& batch, BufferResources& buffer
 
 void ShaderFontRenderer::SubmitBatch(const RenderBatch& batch, const BufferResources& bufferResources, const TextureBinding& binding, bool outlinePass)
 {
-	if (batch.vertices.empty() || binding.textureId == 0 || programResources.program == nullptr)
+	if (batch.vertices.empty() || programResources.program == nullptr)
 		return;
+
+	if (binding.textureId == 0) {
+		if (createOptions.enableStatistics)
+			stats.droppedQuads += batch.quadCount;
+		return;
+	}
 
 	BindTexture(binding);
 	static_cast<Shader::IProgramObject*>(programResources.program.get())->SetUniform("uTex", std::max(binding.textureUnit, 0));
 	ApplyUniforms(outlinePass);
+
+	assert(batch.vertices.size() <= static_cast<std::size_t>(std::numeric_limits<GLsizei>::max()));
 
 	if (bufferResources.vao != nullptr) {
 		bufferResources.vao->Bind();
@@ -789,12 +788,9 @@ void ShaderFontRenderer::ApplyUniforms(bool outlinePass)
 	const bool usePixelAlignedCoordinates = uniformState.usePixelAlignedCoordinates ||
 		(state != nullptr && !state->useWorldSpace && !state->normalizedCoordinates);
 	const bool useColorAtlas = (state != nullptr) && state->useColorAtlas;
-	const float depthBias = (state != nullptr)
-		? (outlinePass ? state->depth.outline : state->depth.text)
-		: uniformState.depth;
 
 	programResources.program->SetUniformMatrix4x4("uMVP", false, matrix->m);
-	programResources.program->SetUniform("uDepthBias", depthBias);
+	programResources.program->SetUniform("uDepthBias", uniformState.depth);
 	programResources.program->SetUniform("uGamma", uniformState.gamma);
 	programResources.program->SetUniform("uOutlineWeight", uniformState.outlineWeight);
 	programResources.program->SetUniform("uOutlineRadius", uniformState.outlineRadius);
@@ -819,4 +815,15 @@ void ShaderFontRenderer::UpdateTextureBindingFromAtlas(const GlyphAtlasTexture& 
 	primaryTextureBinding.height = std::max(atlas.GetHeight(), 0);
 }
 
-} // namespace font::render
+void ShaderFontRenderer::ClearQueuedBatches()
+{
+	primaryBatch.vertices.clear();
+	primaryBatch.quadCount = 0;
+	primaryBatch.dirty = false;
+
+	outlineBatch.vertices.clear();
+	outlineBatch.quadCount = 0;
+	outlineBatch.dirty = false;
+}
+
+} // namespace fonts::render
