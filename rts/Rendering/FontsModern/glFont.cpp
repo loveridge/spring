@@ -345,7 +345,7 @@ public:
 		layoutOptions.fontSize = std::max(size, 1.0f);
 		layoutOptions.x = x;
 		layoutOptions.y = y;
-		layoutOptions.z = depth.text;
+		layoutOptions.z = 0.0f;
 		layoutOptions.parseColorCodes = true;
 		layoutOptions.preserveLineBreaks = true;
 		layoutOptions.preloadGlyphs = true;
@@ -475,7 +475,7 @@ public:
 			primaryQuad.position = GlyphRect(x0, y0, w, h);
 			primaryQuad.atlasUV = glyph.atlasUV;
 			primaryQuad.color = ToFontColor(currentTextColor);
-			primaryQuad.z = command.state.depth.text;
+			primaryQuad.z = glyph.z;
 			primaryQuad.visible = true;
 			renderer->AddPrimaryQuad(primaryQuad);
 
@@ -491,7 +491,7 @@ public:
 			);
 			decoratedQuad.atlasUV = glyph.outlineAtlasUV;
 			decoratedQuad.color = ToFontColor(currentOutlineColor);
-			decoratedQuad.z = command.state.depth.outline;
+			decoratedQuad.z = glyph.z;
 			decoratedQuad.visible = true;
 			renderer->AddOutlineQuad(decoratedQuad);
 		}
