@@ -663,12 +663,17 @@ LaidOutLine TextLayouter::PositionRuns(std::span<const ShapedRun> runs, const La
 
 				glyph.atlasUV = glyphInfo.atlasUV;
 				glyph.outlineAtlasUV = glyphInfo.shadowAtlasUV;
+
+				if (glyph.shaped.metrics.Empty())
+					glyph.shaped.metrics = glyphInfo.GetMetrics();
+
+				glyph.visible = glyph.visible || glyphInfo.HasAtlasUV();
 			}
 
 			runPenX += shapedGlyph.xAdvance * scale;
 			run.width = std::max(run.width, runPenX - penX);
-			maxAscent = std::max(maxAscent, shapedGlyph.metrics.bounds.y * scale);
-			minDescender = std::min(minDescender, shapedGlyph.metrics.descender * scale);
+			maxAscent = std::max(maxAscent, glyph.shaped.metrics.bounds.y * scale);
+			minDescender = std::min(minDescender, glyph.shaped.metrics.descender * scale);
 			maxLineHeight = std::max(maxLineHeight, shapedRun.lineHeight * scale);
 			run.glyphs.emplace_back(std::move(glyph));
 		}

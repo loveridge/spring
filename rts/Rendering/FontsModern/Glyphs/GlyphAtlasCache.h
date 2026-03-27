@@ -123,6 +123,9 @@ public:
 private:
 	static GlyphIndexKey MakeGlyphIndexKey(std::uint32_t glyphIndex, const FacePtr& face, char32_t sourceCodepoint = 0) noexcept;
 
+	const GlyphInfo* FindResolvedGlyphByCodepoint(char32_t codepoint) const;
+	const GlyphInfo& GetResolvedGlyphByCodepoint(char32_t codepoint);
+	std::pair<FacePtr, std::uint32_t> ResolveGlyphForCodepoint(char32_t codepoint, char32_t* resolvedCodepoint = nullptr) const;
 	void ClearAtlasState();
 	void ResetKerningCaches();
 	void ConfigureFaceMetrics();

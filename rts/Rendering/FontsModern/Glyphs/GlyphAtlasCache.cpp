@@ -31,6 +31,9 @@ static constexpr int FT_INTERNAL_DPI = 64;
 
 namespace {
 
+static constexpr char32_t PrimaryReplacementCodepoint = 0xfffd;
+static constexpr char32_t SecondaryReplacementCodepoint = U'?';
+
 [[nodiscard]] std::uint64_t MakeAsciiKerningHash(char32_t left, char32_t right) noexcept
 {
 	return (static_cast<std::uint64_t>(left) << 7u) | static_cast<std::uint64_t>(right);
@@ -80,6 +83,24 @@ namespace {
 	);
 }
 
+void RescaleGlyphRectUV(GlyphRect& rect, int oldWidth, int oldHeight, int newWidth, int newHeight) noexcept
+{
+	if (rect.Empty())
+		return;
+	if (oldWidth <= 0 || oldHeight <= 0 || newWidth <= 0 || newHeight <= 0)
+		return;
+	if (oldWidth == newWidth && oldHeight == newHeight)
+		return;
+
+	const float scaleX = static_cast<float>(oldWidth) / static_cast<float>(newWidth);
+	const float scaleY = static_cast<float>(oldHeight) / static_cast<float>(newHeight);
+
+	rect.x *= scaleX;
+	rect.y *= scaleY;
+	rect.w *= scaleX;
+	rect.h *= scaleY;
+}
+
 [[nodiscard]] bool AllowColorFonts() noexcept
 {
 	return (configHandler != nullptr) ? configHandler->GetBool("AllowColorFonts") : false;
@@ -126,11 +147,18 @@ const GlyphInfo& GlyphAtlasCache::GetGlyphByCodepoint(char32_t codepoint)
 	if (const GlyphInfo* glyph = FindGlyphByCodepoint(codepoint); glyph != nullptr)
 		return *glyph;
 
-	return dummyGlyph;
+	return GetResolvedGlyphByCodepoint(codepoint);
 }
 
 const GlyphInfo& GlyphAtlasCache::GetGlyphByGlyphIndex(std::uint32_t glyphIndex, const FacePtr& face, char32_t sourceCodepoint)
 {
+	if (glyphIndex == 0u) {
+		if (sourceCodepoint != 0)
+			return GetGlyphByCodepoint(sourceCodepoint);
+
+		return dummyGlyph;
+	}
+
 	if (const GlyphInfo* glyph = FindGlyphByGlyphIndex(glyphIndex, face, sourceCodepoint); glyph != nullptr)
 		return *glyph;
 
@@ -196,6 +224,12 @@ void GlyphAtlasCache::EnsureGlyphKeys(std::span<const GlyphKey> glyphKeys, const
 {
 	for (const GlyphKey& glyphKey: glyphKeys) {
 		if (glyphKey.IsGlyphIndex()) {
+			if (glyphKey.glyphIndex == 0u) {
+				if (glyphKey.codepoint != 0)
+					GetResolvedGlyphByCodepoint(glyphKey.codepoint);
+				continue;
+			}
+
 			FacePtr face = defaultFace;
 			if (face == nullptr && faces != nullptr)
 				face = faces->GetPrimaryFace();
@@ -339,6 +373,69 @@ GlyphAtlasCache::GlyphIndexKey GlyphAtlasCache::MakeGlyphIndexKey(std::uint32_t 
 	};
 }
 
+std::pair<GlyphAtlasCache::FacePtr, std::uint32_t> GlyphAtlasCache::ResolveGlyphForCodepoint(char32_t codepoint, char32_t* resolvedCodepoint) const
+{
+	auto setResolvedCodepoint = [resolvedCodepoint](char32_t value) {
+		if (resolvedCodepoint != nullptr)
+			*resolvedCodepoint = value;
+	};
+
+	if (faces == nullptr) {
+		setResolvedCodepoint(0);
+		return {nullptr, 0u};
+	}
+
+	if (auto [face, glyphIndex] = faces->FindGlyphForCodepoint(codepoint); face != nullptr && glyphIndex != 0u) {
+		setResolvedCodepoint(codepoint);
+		return {face, glyphIndex};
+	}
+
+	for (char32_t replacementCodepoint: {PrimaryReplacementCodepoint, SecondaryReplacementCodepoint}) {
+		if (replacementCodepoint == codepoint)
+			continue;
+
+		if (auto [face, glyphIndex] = faces->FindGlyphForCodepoint(replacementCodepoint); face != nullptr && glyphIndex != 0u) {
+			setResolvedCodepoint(replacementCodepoint);
+			return {face, glyphIndex};
+		}
+	}
+
+	setResolvedCodepoint(0);
+	return {nullptr, 0u};
+}
+
+const GlyphInfo* GlyphAtlasCache::FindResolvedGlyphByCodepoint(char32_t codepoint) const
+{
+	if (const GlyphInfo* glyph = FindGlyphByCodepoint(codepoint); glyph != nullptr)
+		return glyph;
+
+	char32_t resolvedCodepoint = 0;
+	auto [face, glyphIndex] = ResolveGlyphForCodepoint(codepoint, &resolvedCodepoint);
+	if (face == nullptr || glyphIndex == 0u)
+		return nullptr;
+
+	return FindGlyphByGlyphIndex(glyphIndex, face, resolvedCodepoint);
+}
+
+const GlyphInfo& GlyphAtlasCache::GetResolvedGlyphByCodepoint(char32_t codepoint)
+{
+	if (const GlyphInfo* glyph = FindResolvedGlyphByCodepoint(codepoint); glyph != nullptr)
+		return *glyph;
+
+	char32_t resolvedCodepoint = 0;
+	auto [face, glyphIndex] = ResolveGlyphForCodepoint(codepoint, &resolvedCodepoint);
+	if (face == nullptr || glyphIndex == 0u)
+		return dummyGlyph;
+
+	LoadGlyphByIndex(face, resolvedCodepoint, glyphIndex);
+	UpdateAtlases();
+
+	if (const GlyphInfo* glyph = FindGlyphByGlyphIndex(glyphIndex, face, resolvedCodepoint); glyph != nullptr)
+		return *glyph;
+
+	return dummyGlyph;
+}
+
 void GlyphAtlasCache::ClearAtlasState()
 {
 	atlasAllocator = std::make_unique<CRowAtlasAlloc>();
@@ -417,30 +514,26 @@ void GlyphAtlasCache::LoadGlyphByCodepoint(char32_t codepoint)
 	glyph.sourceCodepoint = codepoint;
 
 #ifndef HEADLESS
-	FacePtr face;
-	std::uint32_t glyphIndex = 0;
-
 	if (faces != nullptr) {
-		auto [matchedFace, matchedGlyphIndex] = faces->FindGlyphForCodepoint(codepoint);
-		face = std::move(matchedFace);
-		glyphIndex = matchedGlyphIndex;
+		auto [face, glyphIndex] = faces->FindGlyphForCodepoint(codepoint);
 
-		if (face == nullptr)
-			face = faces->GetPrimaryFace();
-	}
+		if (face != nullptr && glyphIndex != 0u) {
+			LoadGlyphByIndex(face, codepoint, glyphIndex);
 
-	if (face != nullptr) {
-		LoadGlyphByIndex(face, codepoint, glyphIndex);
+			if (const GlyphInfo* glyphByIndex = FindGlyphByGlyphIndex(glyphIndex, face, codepoint); glyphByIndex != nullptr)
+				glyph = *glyphByIndex;
 
-		if (const GlyphInfo* glyphByIndex = FindGlyphByGlyphIndex(glyphIndex, face, codepoint); glyphByIndex != nullptr)
-			glyph = *glyphByIndex;
-
-		if (glyph.face == nullptr) {
-			glyph.face = std::move(face);
-			glyph.glyphIndex = glyphIndex;
+			if (glyph.face == nullptr) {
+				glyph.face = std::move(face);
+				glyph.glyphIndex = glyphIndex;
+				glyph.sourceCodepoint = codepoint;
+			}
+		} else {
+			failedAttemptsToReplace[codepoint] += 1;
+			return;
 		}
 	} else {
-		failedAttemptsToReplace[codepoint] += 1;
+		return;
 	}
 #endif
 
@@ -606,9 +699,26 @@ void GlyphAtlasCache::PackPendingGlyphs()
 	const auto& atlasSize = atlasAllocator->GetAtlasSize();
 	const int allocWidth = std::max(32, static_cast<int>(atlasSize.x));
 	const int allocHeight = std::max(32, static_cast<int>(atlasSize.y));
+	const auto oldPrimaryDims = atlasTexture.GetDimensions();
+	const auto oldShadowDims = shadowAtlasTexture.GetDimensions();
 
 	atlasTexture.Reallocate(allocWidth, allocHeight, true);
 	shadowAtlasTexture.Reallocate(allocWidth, allocHeight, true);
+
+	if (oldPrimaryDims.width != allocWidth || oldPrimaryDims.height != allocHeight ||
+	    oldShadowDims.width != allocWidth || oldShadowDims.height != allocHeight) {
+		for (auto& [codepoint, glyph] : glyphsByCodepoint) {
+			RescaleGlyphRectUV(glyph.atlasUV, oldPrimaryDims.width, oldPrimaryDims.height, allocWidth, allocHeight);
+			RescaleGlyphRectUV(glyph.shadowAtlasUV, oldShadowDims.width, oldShadowDims.height, allocWidth, allocHeight);
+			(void)codepoint;
+		}
+
+		for (auto& [glyphKey, glyph] : glyphsByGlyphIndex) {
+			RescaleGlyphRectUV(glyph.atlasUV, oldPrimaryDims.width, oldPrimaryDims.height, allocWidth, allocHeight);
+			RescaleGlyphRectUV(glyph.shadowAtlasUV, oldShadowDims.width, oldShadowDims.height, allocWidth, allocHeight);
+			(void)glyphKey;
+		}
+	}
 }
 
 void GlyphAtlasCache::UpdateAtlasRegions()

@@ -482,14 +482,16 @@ HarfBuzzTextShaper::BufferShapeData HarfBuzzTextShaper::ShapeBuffer(
 		glyph.logicalIndex = i;
 		glyph.sourceCodepoint = DecodeCodepointAt(span.text, std::min<std::size_t>(info.cluster, span.text.size()));
 		glyph.face = face;
-		glyph.glyphKey = GlyphKey::FromGlyphIndex(info.codepoint, glyph.sourceCodepoint);
+		glyph.glyphKey = (info.codepoint != 0)
+			? GlyphKey::FromGlyphIndex(info.codepoint, glyph.sourceCodepoint)
+			: GlyphKey::FromCodepoint(glyph.sourceCodepoint);
 
 		const float normScale = (glyph.face != nullptr) ? GetNormScale(glyph.face->GetFTFace()) : GetNormScale(GetPrimaryFTFace());
 		glyph.xAdvance = position.x_advance * normScale;
 		glyph.yAdvance = position.y_advance * normScale;
 		glyph.xOffset = position.x_offset * normScale;
 		glyph.yOffset = position.y_offset * normScale;
-		glyph.metrics = LoadGlyphMetrics(glyph.face, info.codepoint);
+		glyph.metrics = (info.codepoint != 0) ? LoadGlyphMetrics(glyph.face, info.codepoint) : GlyphMetrics{};
 
 		if (info.codepoint == 0) {
 			shapeData.hadMissingGlyphs = true;
