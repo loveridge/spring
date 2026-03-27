@@ -344,11 +344,12 @@ void GlyphAtlasCache::ClearAtlasState()
 	atlasAllocator = std::make_unique<CRowAtlasAlloc>();
 	atlasAllocator->SetMaxSize(GetMaxAtlasTextureSize(), GetMaxAtlasTextureSize());
 
-	atlasTexture.SetPixelFormat(isColor ? GlyphAtlasTexture::PixelFormat::BGRA : GlyphAtlasTexture::PixelFormat::Alpha);
-	shadowAtlasTexture.SetPixelFormat(isColor ? GlyphAtlasTexture::PixelFormat::BGRA : GlyphAtlasTexture::PixelFormat::Alpha);
-
 	atlasTexture.Reset();
 	shadowAtlasTexture.Reset();
+	atlasTexture.SetPixelFormat(isColor ? GlyphAtlasTexture::PixelFormat::BGRA : GlyphAtlasTexture::PixelFormat::Alpha);
+	atlasTexture.SetContentType(GlyphAtlasTexture::ContentType::Bitmap);
+	shadowAtlasTexture.SetPixelFormat(isColor ? GlyphAtlasTexture::PixelFormat::BGRA : GlyphAtlasTexture::PixelFormat::Alpha);
+	shadowAtlasTexture.SetContentType(GlyphAtlasTexture::ContentType::Bitmap);
 	atlasTexture.Reallocate(32, 32, false);
 	shadowAtlasTexture.Reallocate(32, 32, false);
 

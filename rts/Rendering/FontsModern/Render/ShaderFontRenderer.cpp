@@ -403,14 +403,11 @@ void ShaderFontRenderer::HandleTextureUpdate(GlyphAtlasTexture& primaryAtlas, Gl
 		}
 	}
 
-	UpdateTextureBindingFromAtlas(primaryAtlas);
+	UpdateTextureBindingFromAtlas(primaryTextureBinding, primaryAtlas);
 
 	if (outlineAtlas != nullptr) {
-		outlineTextureBinding.textureId = outlineAtlas->GetTextureId();
+		UpdateTextureBindingFromAtlas(outlineTextureBinding, *outlineAtlas);
 		outlineTextureBinding.textureUnit = 1;
-		outlineTextureBinding.width = std::max(outlineAtlas->GetWidth(), 0);
-		outlineTextureBinding.height = std::max(outlineAtlas->GetHeight(), 0);
-		outlineTextureBinding.alphaOnly = (outlineAtlas->GetPixelFormat() == GlyphAtlasTexture::PixelFormat::Alpha);
 	} else {
 		outlineTextureBinding = {};
 	}
@@ -733,7 +730,7 @@ void ShaderFontRenderer::SubmitBatch(const RenderBatch& batch, const BufferResou
 
 	BindTexture(binding);
 	static_cast<Shader::IProgramObject*>(programResources.program.get())->SetUniform("uTex", std::max(binding.textureUnit, 0));
-	ApplyUniforms(outlinePass);
+	ApplyUniforms(binding, outlinePass);
 
 	assert(batch.vertices.size() <= static_cast<std::size_t>(std::numeric_limits<GLsizei>::max()));
 
@@ -742,6 +739,9 @@ void ShaderFontRenderer::SubmitBatch(const RenderBatch& batch, const BufferResou
 		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(batch.vertices.size()));
 		bufferResources.vao->Unbind();
 	} else if (bufferResources.vbo != nullptr) {
+		GLint prevArrayBuffer = 0;
+		glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &prevArrayBuffer);
+
 		bufferResources.vbo->Bind();
 
 		glEnableVertexAttribArray(0);
@@ -758,13 +758,14 @@ void ShaderFontRenderer::SubmitBatch(const RenderBatch& batch, const BufferResou
 		glDisableVertexAttribArray(1);
 		glDisableVertexAttribArray(2);
 		bufferResources.vbo->Unbind();
+		glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(prevArrayBuffer));
 	}
 
 	if (createOptions.enableStatistics)
 		stats.drawCalls += 1;
 }
 
-void ShaderFontRenderer::ApplyUniforms(bool outlinePass)
+void ShaderFontRenderer::ApplyUniforms(const TextureBinding& binding, bool outlinePass)
 {
 	if (programResources.program == nullptr)
 		return;
@@ -790,7 +791,9 @@ void ShaderFontRenderer::ApplyUniforms(bool outlinePass)
 
 	const bool usePixelAlignedCoordinates = uniformState.usePixelAlignedCoordinates ||
 		(state != nullptr && !state->useWorldSpace && !state->normalizedCoordinates);
-	const bool useColorAtlas = (state != nullptr) && state->useColorAtlas;
+	const bool useColorAtlas = !binding.alphaOnly;
+	// SDF shading is only valid for atlases explicitly tagged as distance fields.
+	const bool enableSDF = uniformState.enableSDF && binding.sdf;
 
 	programResources.program->SetUniformMatrix4x4("uMVP", false, matrix->m);
 	programResources.program->SetUniform("uDepthBias", uniformState.depth);
@@ -800,7 +803,7 @@ void ShaderFontRenderer::ApplyUniforms(bool outlinePass)
 	programResources.program->SetUniform("uUsePixelAlignedCoordinates", static_cast<int>(usePixelAlignedCoordinates));
 	programResources.program->SetUniform("uUseColorAtlas", static_cast<int>(useColorAtlas));
 	programResources.program->SetUniform("uOutlinePass", static_cast<int>(outlinePass));
-	programResources.program->SetUniform("uEnableSDF", static_cast<int>(uniformState.enableSDF));
+	programResources.program->SetUniform("uEnableSDF", static_cast<int>(enableSDF));
 }
 
 void ShaderFontRenderer::BindTexture(const TextureBinding& binding)
@@ -832,13 +835,14 @@ void ShaderFontRenderer::BindTexture(const TextureBinding& binding)
 	}
 }
 
-void ShaderFontRenderer::UpdateTextureBindingFromAtlas(const GlyphAtlasTexture& atlas)
+void ShaderFontRenderer::UpdateTextureBindingFromAtlas(TextureBinding& binding, const GlyphAtlasTexture& atlas)
 {
-	primaryTextureBinding.textureId = atlas.GetTextureId();
-	primaryTextureBinding.textureUnit = 0;
-	primaryTextureBinding.width = std::max(atlas.GetWidth(), 0);
-	primaryTextureBinding.height = std::max(atlas.GetHeight(), 0);
-	primaryTextureBinding.alphaOnly = (atlas.GetPixelFormat() == GlyphAtlasTexture::PixelFormat::Alpha);
+	binding.textureId = atlas.GetTextureId();
+	binding.textureUnit = 0;
+	binding.width = std::max(atlas.GetWidth(), 0);
+	binding.height = std::max(atlas.GetHeight(), 0);
+	binding.alphaOnly = (atlas.GetPixelFormat() == GlyphAtlasTexture::PixelFormat::Alpha);
+	binding.sdf = (atlas.GetContentType() == GlyphAtlasTexture::ContentType::SDF);
 }
 
 void ShaderFontRenderer::ClearQueuedBatches()

@@ -34,6 +34,7 @@ public:
 		std::uint32_t width = 0;
 		std::uint32_t height = 0;
 		bool alphaOnly = true;
+		bool sdf = false;
 	};
 
 	struct UniformState {
@@ -132,9 +133,9 @@ private:
 	void QueueQuad(RenderBatch& batch, const PreparedGlyphQuad& quad);
 	void UploadBatch(RenderBatch& batch, BufferResources& bufferResources);
 	void SubmitBatch(const RenderBatch& batch, const BufferResources& bufferResources, const TextureBinding& binding, bool outlinePass);
-	void ApplyUniforms(bool outlinePass);
+	void ApplyUniforms(const TextureBinding& binding, bool outlinePass);
 	void BindTexture(const TextureBinding& binding);
-	void UpdateTextureBindingFromAtlas(const GlyphAtlasTexture& atlas);
+	void UpdateTextureBindingFromAtlas(TextureBinding& binding, const GlyphAtlasTexture& atlas);
 	void ClearQueuedBatches();
 
 private:

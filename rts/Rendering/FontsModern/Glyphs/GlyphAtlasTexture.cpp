@@ -189,6 +189,11 @@ void GlyphAtlasTexture::SetPixelFormat(PixelFormat pixelFormat) noexcept
 	}
 }
 
+void GlyphAtlasTexture::SetContentType(ContentType type) noexcept
+{
+	contentType = type;
+}
+
 void GlyphAtlasTexture::MarkDirty() noexcept
 {
 	dirtyBitmap = true;
@@ -214,6 +219,7 @@ void GlyphAtlasTexture::Reset()
 	DeleteTexture();
 
 	atlasSize = {};
+	contentType = ContentType::Bitmap;
 	dirtyBitmap = false;
 	dirtyUpload = false;
 	textureStorageDirty = true;
@@ -443,6 +449,7 @@ void GlyphAtlasTexture::MoveFrom(GlyphAtlasTexture&& other) noexcept
 {
 	atlasSize = other.atlasSize;
 	format = other.format;
+	contentType = other.contentType;
 	textureId = std::exchange(other.textureId, 0);
 	dirtyBitmap = other.dirtyBitmap;
 	dirtyUpload = other.dirtyUpload;
@@ -451,6 +458,7 @@ void GlyphAtlasTexture::MoveFrom(GlyphAtlasTexture&& other) noexcept
 	dirtyRegions = std::move(other.dirtyRegions);
 
 	other.atlasSize = {};
+	other.contentType = ContentType::Bitmap;
 	other.dirtyBitmap = false;
 	other.dirtyUpload = false;
 	other.textureStorageDirty = true;

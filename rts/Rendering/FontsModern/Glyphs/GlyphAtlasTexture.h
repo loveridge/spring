@@ -31,6 +31,11 @@ public:
 		BGRA  = 4,
 	};
 
+	enum class ContentType : std::uint8_t {
+		Bitmap,
+		SDF,
+	};
+
 	struct Region {
 		int x = 0;
 		int y = 0;
@@ -72,6 +77,8 @@ public:
 
 	PixelFormat GetPixelFormat() const noexcept { return format; }
 	void SetPixelFormat(PixelFormat pixelFormat) noexcept;
+	ContentType GetContentType() const noexcept { return contentType; }
+	void SetContentType(ContentType type) noexcept;
 
 	int GetChannelCount() const noexcept { return static_cast<int>(format); }
 	int GetTextureId() const noexcept { return static_cast<int>(textureId); }
@@ -109,6 +116,7 @@ private:
 private:
 	Dimensions atlasSize;
 	PixelFormat format = PixelFormat::Alpha;
+	ContentType contentType = ContentType::Bitmap;
 
 	unsigned int textureId = 0;
 	bool dirtyBitmap = false;
@@ -118,4 +126,3 @@ private:
 	CBitmap atlasBitmap;
 	std::vector<Region> dirtyRegions;
 };
-
