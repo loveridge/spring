@@ -83,10 +83,28 @@ struct TextLayout {
 	LayoutOptions options{};
 
 	std::size_t sourceLength = 0;
-	std::size_t printableLength = 0;
+	std::size_t printableLength = 0; // logical UTF-8 codepoint count, kept for compatibility with existing callers
 	bool valid = false;
 
 	bool Empty() const noexcept { return lines.empty(); }
+};
+
+
+/**
+ * Measured wrapping fragment derived from shaped text.
+ *
+ * Offsets remain in the caller's logical UTF-8 source stream. Break
+ * opportunities carry source/codepoint offsets and widths measured from the
+ * start of this fragment.
+ */
+struct MeasuredBreakFragment {
+	TextSpan sourceSpan{};
+	std::string text;
+	float width = 0.0f;
+	bool isWhitespace = false;
+	bool isLineBreak = false;
+	bool isControlCode = false;
+	std::vector<BreakOpportunity> breakOpportunities;
 };
 
 
@@ -129,6 +147,8 @@ public:
 
 	TextMeasurement MeasureText(std::string_view utf8, const LayoutOptions& options = {}) const;
 	TextLayout LayoutText(std::string_view utf8, const LayoutOptions& options = {}) const;
+	std::vector<MeasuredBreakFragment> AnalyzeWrapText(std::string_view utf8, const LayoutOptions& options = {}) const;
+	std::vector<MeasuredBreakFragment> AnalyzeWrapSpans(std::span<const TextSpan> spans, const LayoutOptions& options = {}) const;
 
 	std::vector<TextSpan> ParseTextSpans(std::string_view utf8, bool parseColorCodes = true) const;
 	std::vector<TextSpan> SplitIntoLines(std::string_view utf8, bool parseColorCodes = true) const;

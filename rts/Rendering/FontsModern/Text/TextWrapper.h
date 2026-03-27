@@ -70,7 +70,7 @@ struct WrapOptions {
  */
 struct ExtractedColorCode {
 	ColorCodeText colorText{};
-	std::size_t printablePosition = 0;
+	std::size_t printablePosition = 0; // logical UTF-8 codepoint position, not a grapheme/cluster boundary
 };
 
 
@@ -86,8 +86,8 @@ struct WrappedWord {
 	std::string text;
 	std::size_t sourceByteOffset = 0;
 	std::size_t sourceByteLength = 0;
-	std::size_t printableOffset = 0;
-	std::size_t printableLength = 0;
+	std::size_t printableOffset = 0; // logical UTF-8 codepoint offset, kept for compatibility with legacy wrapping APIs
+	std::size_t printableLength = 0; // logical UTF-8 codepoint length, not a cluster-safe span length
 
 	WrappedWord() = default;
 
@@ -154,6 +154,88 @@ private:
 
 
 /**
+ * Internal wrapper fragment aligned to shape-derived break boundaries.
+ */
+struct WrapFragment {
+	TextSpan sourceSpan{};
+	std::string text;
+	float width = 0.0f;
+
+	bool isWhitespace = false;
+	bool isLineBreak = false;
+	bool isControlCode = false;
+
+	std::vector<BreakOpportunity> breakOpportunities;
+
+	WrapFragment() = default;
+
+	WrapFragment(const WrapFragment& other)
+		: sourceSpan(other.sourceSpan)
+		, text(other.text)
+		, width(other.width)
+		, isWhitespace(other.isWhitespace)
+		, isLineBreak(other.isLineBreak)
+		, isControlCode(other.isControlCode)
+		, breakOpportunities(other.breakOpportunities)
+	{
+		RebindViews();
+	}
+
+	WrapFragment& operator=(const WrapFragment& other)
+	{
+		if (this == &other)
+			return *this;
+
+		sourceSpan = other.sourceSpan;
+		text = other.text;
+		width = other.width;
+		isWhitespace = other.isWhitespace;
+		isLineBreak = other.isLineBreak;
+		isControlCode = other.isControlCode;
+		breakOpportunities = other.breakOpportunities;
+		RebindViews();
+		return *this;
+	}
+
+	WrapFragment(WrapFragment&& other) noexcept
+		: sourceSpan(std::move(other.sourceSpan))
+		, text(std::move(other.text))
+		, width(other.width)
+		, isWhitespace(other.isWhitespace)
+		, isLineBreak(other.isLineBreak)
+		, isControlCode(other.isControlCode)
+		, breakOpportunities(std::move(other.breakOpportunities))
+	{
+		RebindViews();
+	}
+
+	WrapFragment& operator=(WrapFragment&& other) noexcept
+	{
+		if (this == &other)
+			return *this;
+
+		sourceSpan = std::move(other.sourceSpan);
+		text = std::move(other.text);
+		width = other.width;
+		isWhitespace = other.isWhitespace;
+		isLineBreak = other.isLineBreak;
+		isControlCode = other.isControlCode;
+		breakOpportunities = std::move(other.breakOpportunities);
+		RebindViews();
+		return *this;
+	}
+
+	bool Empty() const noexcept { return text.empty() && !isLineBreak && !isControlCode; }
+
+private:
+	void RebindViews()
+	{
+		sourceSpan.text = text;
+	}
+};
+
+
+/**
  * Final wrapper output.
  */
 struct WrappedText {
@@ -161,7 +243,7 @@ struct WrappedText {
 	std::vector<WrappedWord> words;
 	std::vector<ExtractedColorCode> colorCodes;
 	std::size_t lineCount = 0;
-	std::size_t printableLength = 0;
+	std::size_t printableLength = 0; // logical UTF-8 codepoint count in the wrapped output
 	bool wasWrapped = false;
 	bool wasEllipsized = false;
 	bool exceededHeight = false;
@@ -182,6 +264,7 @@ public:
 
 	virtual TextMeasurement MeasureText(std::string_view utf8, const LayoutOptions& options) const = 0;
 	virtual std::vector<TextSpan> ParseTextSpans(std::string_view utf8, bool parseColorCodes) const = 0;
+	virtual std::vector<MeasuredBreakFragment> AnalyzeWrapText(std::string_view utf8, const LayoutOptions& options) const = 0;
 };
 
 
@@ -202,6 +285,11 @@ public:
 	std::vector<TextSpan> ParseTextSpans(std::string_view utf8, bool parseColorCodes) const override
 	{
 		return GetLayouter().ParseTextSpans(utf8, parseColorCodes);
+	}
+
+	std::vector<MeasuredBreakFragment> AnalyzeWrapText(std::string_view utf8, const LayoutOptions& options) const override
+	{
+		return GetLayouter().AnalyzeWrapText(utf8, options);
 	}
 
 	const TextLayouter& GetLayouter() const
@@ -258,7 +346,7 @@ public:
 
 protected:
 	struct WrapState {
-		std::vector<WrappedWord> words;
+		std::vector<WrapFragment> fragments;
 		std::vector<WrapLine> lines;
 		std::vector<ExtractedColorCode> colorCodes;
 		std::size_t printableLength = 0;
@@ -267,15 +355,17 @@ protected:
 	};
 
 protected:
-	WrapState SplitTextInWords(std::string_view text, const WrapOptions& options) const;
-	WrappedWord SplitWord(const WrappedWord& word, float wantedWidth, const WrapOptions& options) const;
-	void WrapConsole(std::vector<WrappedWord>& words, std::vector<WrapLine>& lines, const WrapOptions& options) const;
-	void AddEllipsis(std::vector<WrapLine>& lines, std::vector<WrappedWord>& words, const WrapOptions& options) const;
-	void RemergeColorCodes(std::vector<WrappedWord>& words, const std::vector<ExtractedColorCode>& colorCodes, const WrapOptions& options) const;
+	WrapState AnalyzeTextForWrapping(std::string_view text, const WrapOptions& options) const;
+	WrapFragment ReanalyzeFragment(std::string_view utf8, const TextSpan& sourceSpan, bool isWhitespace, const WrapOptions& options) const;
+	std::pair<WrapFragment, WrapFragment> SplitFragmentAtPosition(const WrapFragment& fragment, std::size_t leftByteLength, std::size_t leftCodepointLength, float leftWidth, const WrapOptions& options) const;
+	std::pair<WrapFragment, WrapFragment> SplitFragmentAtBoundary(const WrapFragment& fragment, float availableWidth, const WrapOptions& options) const;
+	void WrapConsole(std::vector<WrapFragment>& fragments, std::vector<WrapLine>& lines, const WrapOptions& options) const;
+	void AddEllipsis(std::vector<WrapLine>& lines, std::vector<WrapFragment>& fragments, const WrapOptions& options) const;
+	void RemergeColorCodes(std::vector<WrapFragment>& fragments, const std::vector<ExtractedColorCode>& colorCodes, const WrapOptions& options) const;
 
 	float MeasureWidth(std::string_view utf8, const WrapOptions& options) const;
 	std::size_t CountOutputLines(std::span<const WrapLine> lines) const;
-	WrappedText BuildWrappedText(std::vector<WrappedWord> words, std::vector<WrapLine> lines, std::vector<ExtractedColorCode> colorCodes, const WrapOptions& options) const;
+	WrappedText BuildWrappedText(std::vector<WrapFragment> fragments, std::vector<WrapLine> lines, std::vector<ExtractedColorCode> colorCodes, const WrapOptions& options) const;
 
 	LayoutOptions MakeMeasurementOptions(const WrapOptions& options) const { return options.ToLayoutOptions(); }
 	const ITextMeasurer& GetMeasurerRef() const { return *measurer; }

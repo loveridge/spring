@@ -25,8 +25,8 @@ struct TextSpan {
 	std::string_view text;
 	std::size_t sourceOffset = 0;
 	std::size_t sourceLength = 0;
-	std::size_t printableOffset = 0;
-	std::size_t printableLength = 0;
+	std::size_t printableOffset = 0;  // logical UTF-8 codepoint offset, not a grapheme/cluster index
+	std::size_t printableLength = 0;  // logical UTF-8 codepoint length, not a grapheme/cluster length
 	bool isControl = false;
 	bool isWhitespace = false;
 	bool isLineBreak = false;
@@ -64,11 +64,44 @@ struct ShapedGlyph {
 
 
 /**
+ * Logical shaping cluster metadata for a shaped run.
+ *
+ * Source offsets remain in UTF-8 bytes so callers can map back into the
+ * original string without re-decoding. Printable offsets remain logical
+ * codepoint counts for compatibility with existing layout and wrapping code.
+ */
+struct ShapedCluster {
+	std::size_t sourceByteStart = 0;
+	std::size_t sourceByteLength = 0;
+	std::size_t glyphStart = 0;
+	std::size_t glyphCount = 0;
+	std::size_t codepointOffset = 0;
+	std::size_t codepointLength = 0;
+	bool hasMissingGlyph = false;
+	bool unsafeToBreakInside = true;
+};
+
+
+/**
+ * One logical break boundary within a shaped run.
+ */
+struct BreakOpportunity {
+	std::size_t sourceByteOffset = 0;
+	std::size_t codepointOffset = 0;
+	float xAdvance = 0.0f;
+	bool required = false;
+	bool allowed = false;
+};
+
+
+/**
  * A shaped run with uniform shaping/font properties.
  */
 struct ShapedRun {
 	TextSpan sourceSpan{};
 	std::vector<ShapedGlyph> glyphs;
+	std::vector<ShapedCluster> clusters;
+	std::vector<BreakOpportunity> breakOpportunities;
 	std::shared_ptr<fonts::FontFace> primaryFace;
 
 	float width = 0.0f;
@@ -77,6 +110,7 @@ struct ShapedRun {
 	float lineHeight = 0.0f;
 
 	bool isRtl = false;
+	bool hadMissingGlyphs = false;
 	bool endsWithLineBreak = false;
 	bool containsControlCodes = false;
 

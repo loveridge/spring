@@ -15,14 +15,18 @@ namespace {
 static constexpr char32_t EllipsisCodepoint = 0x2026;
 static const std::string EllipsisUtf8 = utf8::FromUnicode(EllipsisCodepoint);
 
-using fonts::text::WrappedWord;
-using fonts::text::WrapLine;
-using fonts::text::WrapOptions;
+using fonts::text::BreakOpportunity;
 using fonts::text::ExtractedColorCode;
+using fonts::text::ITextMeasurer;
 using fonts::text::LayoutOptions;
+using fonts::text::MeasuredBreakFragment;
 using fonts::text::ParsedColorCode;
 using fonts::text::TextSpan;
-using fonts::text::ITextMeasurer;
+using fonts::text::WrapFragment;
+using fonts::text::WrapLine;
+using fonts::text::WrapOptions;
+using fonts::text::WrappedText;
+using fonts::text::WrappedWord;
 
 [[nodiscard]] std::size_t CountUtf8Codepoints(std::string_view text)
 {
@@ -37,37 +41,66 @@ using fonts::text::ITextMeasurer;
 	return count;
 }
 
-[[nodiscard]] bool IsUpperCase(char32_t c)
+[[nodiscard]] WrapFragment MakeFragment(
+	std::string text,
+	std::size_t sourceByteOffset,
+	std::size_t sourceByteLength,
+	std::size_t printableOffset,
+	std::size_t printableLength,
+	float width,
+	bool isWhitespace,
+	bool isLineBreak,
+	bool isControlCode,
+	std::vector<BreakOpportunity> breakOpportunities = {}
+)
 {
-	return
-		(c >= 0x41 && c <= 0x5A) ||
-		(c >= 0xC0 && c <= 0xD6) ||
-		(c >= 0xD8 && c <= 0xDE) ||
-		(c == 0x8A) ||
-		(c == 0x8C) ||
-		(c == 0x8E) ||
-		(c == 0x9F);
+	WrapFragment fragment;
+	fragment.text = std::move(text);
+	fragment.sourceSpan.text = fragment.text;
+	fragment.sourceSpan.sourceOffset = sourceByteOffset;
+	fragment.sourceSpan.sourceLength = sourceByteLength;
+	fragment.sourceSpan.printableOffset = printableOffset;
+	fragment.sourceSpan.printableLength = printableLength;
+	fragment.sourceSpan.isWhitespace = isWhitespace;
+	fragment.sourceSpan.isLineBreak = isLineBreak;
+	fragment.sourceSpan.isControl = isControlCode;
+	fragment.width = width;
+	fragment.isWhitespace = isWhitespace;
+	fragment.isLineBreak = isLineBreak;
+	fragment.isControlCode = isControlCode;
+	fragment.breakOpportunities = std::move(breakOpportunities);
+	return fragment;
 }
 
-[[nodiscard]] bool IsLowerCase(char32_t c)
+[[nodiscard]] WrapFragment MakeFragment(const MeasuredBreakFragment& fragment)
 {
-	return (c >= 0x61 && c <= 0x7A);
+	return MakeFragment(
+		fragment.text,
+		fragment.sourceSpan.sourceOffset,
+		fragment.sourceSpan.sourceLength,
+		fragment.sourceSpan.printableOffset,
+		fragment.sourceSpan.printableLength,
+		fragment.width,
+		fragment.isWhitespace,
+		fragment.isLineBreak,
+		fragment.isControlCode,
+		fragment.breakOpportunities
+	);
 }
 
-[[nodiscard]] float GetSplitPenalty(char32_t c, unsigned int strpos, unsigned int strlen)
+[[nodiscard]] WrapFragment MakeInsertedLineBreak(const WrapFragment& anchor)
 {
-	const float dist = strlen - strpos;
+	return MakeFragment("\n", anchor.sourceSpan.sourceOffset, 0, anchor.sourceSpan.printableOffset, 0, 0.0f, false, true, false);
+}
 
-	if (dist > (strlen / 2) && dist < 4)
-		return 1e9f;
-	if (IsLowerCase(c))
-		return 1.0f + (strlen - strpos);
-	if (c >= 0x30 && c <= 0x39)
-		return 1.0f + (strlen - strpos) * 0.9f;
-	if (IsUpperCase(c))
-		return 1.0f + (strlen - strpos) * 0.75f;
+[[nodiscard]] WrapFragment MakeEllipsisFragment(std::string_view ellipsis, float width, std::size_t sourceByteOffset, std::size_t printableOffset)
+{
+	return MakeFragment(std::string(ellipsis), sourceByteOffset, 0, printableOffset, 1, width, false, false, false);
+}
 
-	return (dist / 4.0f) * (dist / 4.0f);
+[[nodiscard]] WrapFragment MakeColorCodeFragment(const ExtractedColorCode& colorCode)
+{
+	return MakeFragment(colorCode.colorText.ToString(), 0, 0, colorCode.printablePosition, 0, 0.0f, false, false, true);
 }
 
 [[nodiscard]] WrappedWord MakeWord(
@@ -104,14 +137,19 @@ using fonts::text::ITextMeasurer;
 	return word;
 }
 
-[[nodiscard]] WrappedWord MakeInsertedLineBreak(const WrappedWord& anchor)
+[[nodiscard]] WrappedWord MakeWord(const WrapFragment& fragment)
 {
-	return MakeWord("\n", anchor.sourceByteOffset, 0, anchor.printableOffset, 0, 0.0f, false, true, false);
-}
-
-[[nodiscard]] WrappedWord MakeEllipsisWord(std::string_view ellipsis, float width, std::size_t sourceByteOffset, std::size_t printableOffset)
-{
-	return MakeWord(std::string(ellipsis), sourceByteOffset, 0, printableOffset, 1, width, false, false, false);
+	return MakeWord(
+		fragment.text,
+		fragment.sourceSpan.sourceOffset,
+		fragment.sourceSpan.sourceLength,
+		fragment.sourceSpan.printableOffset,
+		fragment.sourceSpan.printableLength,
+		fragment.width,
+		fragment.isWhitespace,
+		fragment.isLineBreak,
+		fragment.isControlCode
+	);
 }
 
 [[nodiscard]] std::size_t CountLineBreaks(std::string_view text)
@@ -132,92 +170,6 @@ using fonts::text::ITextMeasurer;
 	return count;
 }
 
-[[nodiscard]] float MeasureTextWidth(const ITextMeasurer& measurer, std::string_view utf8, const WrapOptions& options)
-{
-	if (utf8.empty())
-		return 0.0f;
-
-	LayoutOptions measureOptions = options.ToLayoutOptions();
-	measureOptions.maxWidth = 0.0f;
-	measureOptions.maxHeight = 0.0f;
-	return measurer.MeasureText(utf8, measureOptions).width;
-}
-
-[[nodiscard]] std::pair<WrappedWord, WrappedWord> SplitWordPair(const ITextMeasurer& measurer, const WrappedWord& word, float wantedWidth, const WrapOptions& options, bool smart)
-{
-	if (word.word.isLineBreak || word.word.isControlCode || word.printableLength == 0 || wantedWidth <= 0.0f)
-		return {WrappedWord{}, word};
-
-	if (word.word.width <= wantedWidth)
-		return {word, WrappedWord{}};
-
-	const std::string& text = word.text;
-	int pos = 0;
-	int previousBytePos = 0;
-	std::size_t codepointIndex = 0;
-	std::size_t bestByte = 0;
-	std::size_t bestCodepoints = 0;
-	float bestPenalty = std::numeric_limits<float>::max();
-
-	while (pos < static_cast<int>(text.size())) {
-		previousBytePos = pos;
-		const char32_t cp = utf8::GetNextChar(text, pos);
-		const std::string_view prefix(text.data(), static_cast<std::size_t>(pos));
-		const float prefixWidth = MeasureTextWidth(measurer, prefix, options);
-
-		if (prefixWidth > wantedWidth)
-			break;
-
-		++codepointIndex;
-		if (word.word.isWhitespace || !smart) {
-			bestByte = static_cast<std::size_t>(pos);
-			bestCodepoints = codepointIndex;
-			continue;
-		}
-
-		const float penalty = GetSplitPenalty(cp, static_cast<unsigned int>(previousBytePos), static_cast<unsigned int>(text.size()));
-		if (penalty <= bestPenalty) {
-			bestPenalty = penalty;
-			bestByte = static_cast<std::size_t>(pos);
-			bestCodepoints = codepointIndex;
-		}
-	}
-
-	if (bestByte == 0)
-		return {WrappedWord{}, word};
-
-	const std::string leftText = text.substr(0, bestByte);
-	const std::string rightText = text.substr(bestByte);
-	const float leftWidth = MeasureTextWidth(measurer, leftText, options);
-	const float rightWidth = MeasureTextWidth(measurer, rightText, options);
-
-	WrappedWord left = MakeWord(
-		leftText,
-		word.sourceByteOffset,
-		bestByte,
-		word.printableOffset,
-		bestCodepoints,
-		leftWidth,
-		word.word.isWhitespace,
-		false,
-		false
-	);
-
-	WrappedWord right = MakeWord(
-		rightText,
-		word.sourceByteOffset + bestByte,
-		word.sourceByteLength - bestByte,
-		word.printableOffset + bestCodepoints,
-		word.printableLength - bestCodepoints,
-		rightWidth,
-		word.word.isWhitespace,
-		false,
-		false
-	);
-
-	return {std::move(left), std::move(right)};
-}
-
 [[nodiscard]] float MeasureLineHeight(const ITextMeasurer& measurer, const WrapOptions& options)
 {
 	LayoutOptions measureOptions = options.ToLayoutOptions();
@@ -229,11 +181,11 @@ using fonts::text::ITextMeasurer;
 	return 1.0f;
 }
 
-void RebuildLines(std::vector<WrappedWord>& words, std::vector<WrapLine>& lines)
+void RebuildLines(std::vector<WrapFragment>& fragments, std::vector<WrapLine>& lines)
 {
 	lines.clear();
 
-	if (words.empty())
+	if (fragments.empty())
 		return;
 
 	WrapLine current;
@@ -241,70 +193,71 @@ void RebuildLines(std::vector<WrappedWord>& words, std::vector<WrapLine>& lines)
 	current.lastWord = 0;
 	current.width = 0.0f;
 
-	bool lineHasWords = false;
+	bool lineHasFragments = false;
 
-	for (std::size_t i = 0; i < words.size(); ++i) {
-		const WrappedWord& word = words[i];
+	for (std::size_t i = 0; i < fragments.size(); ++i) {
+		const WrapFragment& fragment = fragments[i];
 
-		if (word.word.isLineBreak) {
+		if (fragment.isLineBreak) {
 			current.lastWord = i;
 			current.forceLineBreak = true;
-			current.wasWrapped = (word.sourceByteLength == 0);
+			current.wasWrapped = (fragment.sourceSpan.sourceLength == 0);
 			lines.emplace_back(current);
 
 			current = {};
 			current.firstWord = i + 1;
 			current.lastWord = i + 1;
-			lineHasWords = false;
+			lineHasFragments = false;
 			continue;
 		}
 
 		current.lastWord = i;
-		current.width += word.word.width;
-		lineHasWords = true;
+		current.width += fragment.width;
+		lineHasFragments = true;
 	}
 
-	if (lineHasWords || current.firstWord < words.size() || (!words.empty() && words.back().word.isLineBreak))
+	if (lineHasFragments || current.firstWord < fragments.size() || (!fragments.empty() && fragments.back().isLineBreak))
 		lines.emplace_back(current);
 }
 
-[[nodiscard]] float MeasureRangeWidth(const std::vector<WrappedWord>& words, std::size_t begin, std::size_t endExclusive)
+[[nodiscard]] float MeasureRangeWidth(const std::vector<WrapFragment>& fragments, std::size_t begin, std::size_t endExclusive)
 {
 	float width = 0.0f;
 
-	for (std::size_t i = begin; i < endExclusive && i < words.size(); ++i) {
-		if (words[i].word.isLineBreak)
+	for (std::size_t i = begin; i < endExclusive && i < fragments.size(); ++i) {
+		if (fragments[i].isLineBreak)
 			continue;
-		width += words[i].word.width;
+		width += fragments[i].width;
 	}
 
 	return width;
 }
 
-void TrimTrailingWhitespaceFromLine(std::vector<WrappedWord>& words, const WrapLine& line)
+void TrimTrailingWhitespaceFromLine(std::vector<WrapFragment>& fragments, const WrapLine& line)
 {
-	if (words.empty() || line.firstWord >= words.size())
+	if (fragments.empty() || line.firstWord >= fragments.size())
 		return;
 
-	std::size_t end = std::min(line.lastWord, words.size() - 1);
+	std::size_t end = std::min(line.lastWord, fragments.size() - 1);
 
 	while (end >= line.firstWord) {
-		WrappedWord& word = words[end];
-		if (word.word.isLineBreak || word.word.isControlCode) {
+		WrapFragment& fragment = fragments[end];
+		if (fragment.isLineBreak || fragment.isControlCode) {
 			if (end == 0)
 				break;
 			--end;
 			continue;
 		}
 
-		if (!word.word.isWhitespace)
+		if (!fragment.isWhitespace)
 			break;
 
-		word.text.clear();
-		word.word.width = 0.0f;
-		word.printableLength = 0;
-		word.word.numSpaces = 0;
-		word.word.sourceSpan.text = word.text;
+		fragment.text.clear();
+		fragment.sourceSpan.text = fragment.text;
+		fragment.sourceSpan.sourceLength = 0;
+		fragment.sourceSpan.printableLength = 0;
+		fragment.width = 0.0f;
+		fragment.breakOpportunities.clear();
 
 		if (end == 0)
 			break;
@@ -342,119 +295,204 @@ WrappedText TextWrapper::WrapDetailed(std::string_view text, const WrapOptions& 
 		return wrapped;
 	}
 
-	WrapState state = SplitTextInWords(text, options);
+	WrapState state = AnalyzeTextForWrapping(text, options);
 	std::size_t unconstrainedLineCount = 0;
 
 	if (options.HasHeightConstraint()) {
-		std::vector<WrappedWord> unconstrainedWords = state.words;
+		std::vector<WrapFragment> unconstrainedFragments = state.fragments;
 		std::vector<WrapLine> unconstrainedLines;
 		WrapOptions unconstrainedOptions = options;
 		unconstrainedOptions.maxHeight = 0.0f;
-		WrapConsole(unconstrainedWords, unconstrainedLines, unconstrainedOptions);
+		WrapConsole(unconstrainedFragments, unconstrainedLines, unconstrainedOptions);
 		unconstrainedLineCount = unconstrainedLines.size();
 	}
 
-	WrapConsole(state.words, state.lines, options);
-	wrapped = BuildWrappedText(std::move(state.words), std::move(state.lines), std::move(state.colorCodes), options);
+	WrapConsole(state.fragments, state.lines, options);
+	wrapped = BuildWrappedText(std::move(state.fragments), std::move(state.lines), std::move(state.colorCodes), options);
 	wrapped.printableLength = state.printableLength;
 	wrapped.exceededHeight = options.HasHeightConstraint() && (wrapped.lineCount < unconstrainedLineCount);
 	return wrapped;
 }
 
-TextWrapper::WrapState TextWrapper::SplitTextInWords(std::string_view text, const WrapOptions& options) const
+TextWrapper::WrapState TextWrapper::AnalyzeTextForWrapping(std::string_view text, const WrapOptions& options) const
 {
 	WrapState state;
+	const LayoutOptions measureOptions = MakeMeasurementOptions(options);
 
-	for (const TextSpan& span : GetMeasurerRef().ParseTextSpans(text, options.parseColorCodes)) {
-		if (span.isControl) {
+	std::vector<MeasuredBreakFragment> measured = GetMeasurerRef().AnalyzeWrapText(text, measureOptions);
+	for (const MeasuredBreakFragment& measuredFragment : measured) {
+		if (measuredFragment.isControlCode) {
 			ParsedColorCode parsed;
-			if (TryParseColorCode(span.text, 0, &parsed, true)) {
+			if (TryParseColorCode(measuredFragment.text, 0, &parsed, true)) {
 				ExtractedColorCode colorCode;
 				colorCode.colorText = parsed.raw;
-				colorCode.printablePosition = span.printableOffset;
+				colorCode.printablePosition = measuredFragment.sourceSpan.printableOffset;
 				state.colorCodes.emplace_back(std::move(colorCode));
 				state.hadColorCodes = true;
 			}
 			continue;
 		}
 
-		if (span.isLineBreak) {
+		if (measuredFragment.isLineBreak) {
 			state.hadExplicitLineBreaks = true;
 			if (!options.preserveLineBreaks)
 				continue;
-
-			state.words.emplace_back(MakeWord(
-				std::string(span.text),
-				span.sourceOffset,
-				span.sourceLength,
-				span.printableOffset,
-				0,
-				0.0f,
-				false,
-				true,
-				false
-			));
-			continue;
 		}
 
-		if (span.text.empty())
+		if (measuredFragment.text.empty() && !measuredFragment.isLineBreak)
 			continue;
 
-		const std::string spanText(span.text);
-		int bytePos = 0;
-		std::size_t codepointOffset = 0;
-
-		while (bytePos < static_cast<int>(spanText.size())) {
-			const int tokenStart = bytePos;
-			const bool isWhitespace = IsSpaceByte(spanText[bytePos]);
-			std::size_t tokenCodepoints = 0;
-
-			while (bytePos < static_cast<int>(spanText.size())) {
-				const bool sameKind = IsSpaceByte(spanText[bytePos]) == isWhitespace;
-				if (!sameKind)
-					break;
-
-				utf8::GetNextChar(spanText, bytePos);
-				++tokenCodepoints;
-			}
-
-			const std::string tokenText = spanText.substr(tokenStart, bytePos - tokenStart);
-			const float tokenWidth = MeasureWidth(tokenText, options);
-
-			state.words.emplace_back(MakeWord(
-				tokenText,
-				span.sourceOffset + static_cast<std::size_t>(tokenStart),
-				static_cast<std::size_t>(bytePos - tokenStart),
-				span.printableOffset + codepointOffset,
-				tokenCodepoints,
-				tokenWidth,
-				isWhitespace,
-				false,
-				false
-			));
-
-			codepointOffset += tokenCodepoints;
-		}
+		state.fragments.emplace_back(MakeFragment(measuredFragment));
 	}
 
-	if (!state.words.empty()) {
-		const WrappedWord& lastWord = state.words.back();
-		state.printableLength = lastWord.printableOffset + lastWord.printableLength;
+	if (!state.fragments.empty()) {
+		for (auto it = state.fragments.rbegin(); it != state.fragments.rend(); ++it) {
+			if (it->isLineBreak || it->isControlCode)
+				continue;
+
+			state.printableLength = it->sourceSpan.printableOffset + it->sourceSpan.printableLength;
+			break;
+		}
 	}
 
 	return state;
 }
 
-WrappedWord TextWrapper::SplitWord(const WrappedWord& word, float wantedWidth, const WrapOptions& options) const
+WrapFragment TextWrapper::ReanalyzeFragment(std::string_view utf8, const TextSpan& sourceSpan, bool isWhitespace, const WrapOptions& options) const
 {
-	return SplitWordPair(GetMeasurerRef(), word, wantedWidth, options, options.smartWordSplit).first;
+	if (utf8.empty()) {
+		return MakeFragment(
+			"",
+			sourceSpan.sourceOffset,
+			0,
+			sourceSpan.printableOffset,
+			0,
+			0.0f,
+			isWhitespace,
+			false,
+			false
+		);
+	}
+
+	LayoutOptions measureOptions = MakeMeasurementOptions(options);
+	measureOptions.parseColorCodes = false;
+	measureOptions.preserveLineBreaks = false;
+
+	std::vector<MeasuredBreakFragment> analyzed = GetMeasurerRef().AnalyzeWrapText(utf8, measureOptions);
+	for (MeasuredBreakFragment& measuredFragment : analyzed) {
+		if (measuredFragment.isControlCode || measuredFragment.isLineBreak)
+			continue;
+
+		measuredFragment.sourceSpan.sourceOffset += sourceSpan.sourceOffset;
+		measuredFragment.sourceSpan.printableOffset += sourceSpan.printableOffset;
+		measuredFragment.sourceSpan.text = measuredFragment.text;
+
+		for (BreakOpportunity& breakOpportunity : measuredFragment.breakOpportunities) {
+			breakOpportunity.sourceByteOffset += sourceSpan.sourceOffset;
+			breakOpportunity.codepointOffset += sourceSpan.printableOffset;
+		}
+
+		return MakeFragment(measuredFragment);
+	}
+
+	BreakOpportunity breakOpportunity;
+	breakOpportunity.sourceByteOffset = sourceSpan.sourceOffset + sourceSpan.sourceLength;
+	breakOpportunity.codepointOffset = sourceSpan.printableOffset + sourceSpan.printableLength;
+	breakOpportunity.xAdvance = MeasureWidth(utf8, options);
+	breakOpportunity.allowed = isWhitespace;
+
+	return MakeFragment(
+		std::string(utf8),
+		sourceSpan.sourceOffset,
+		sourceSpan.sourceLength,
+		sourceSpan.printableOffset,
+		sourceSpan.printableLength,
+		breakOpportunity.xAdvance,
+		isWhitespace,
+		false,
+		false,
+		{breakOpportunity}
+	);
 }
 
-void TextWrapper::WrapConsole(std::vector<WrappedWord>& words, std::vector<WrapLine>& lines, const WrapOptions& options) const
+std::pair<WrapFragment, WrapFragment> TextWrapper::SplitFragmentAtPosition(
+	const WrapFragment& fragment,
+	std::size_t leftByteLength,
+	std::size_t leftCodepointLength,
+	float leftWidth,
+	const WrapOptions& options
+) const
+{
+	if (fragment.isLineBreak || fragment.isControlCode)
+		return {WrapFragment{}, fragment};
+	if (leftByteLength == 0 || leftByteLength >= fragment.sourceSpan.sourceLength)
+		return {WrapFragment{}, fragment};
+	if (leftCodepointLength == 0 || leftCodepointLength >= fragment.sourceSpan.printableLength)
+		return {WrapFragment{}, fragment};
+
+	(void)leftWidth;
+
+	TextSpan leftSpan;
+	leftSpan.sourceOffset = fragment.sourceSpan.sourceOffset;
+	leftSpan.sourceLength = leftByteLength;
+	leftSpan.printableOffset = fragment.sourceSpan.printableOffset;
+	leftSpan.printableLength = leftCodepointLength;
+	leftSpan.isWhitespace = fragment.isWhitespace;
+
+	TextSpan rightSpan;
+	rightSpan.sourceOffset = fragment.sourceSpan.sourceOffset + leftByteLength;
+	rightSpan.sourceLength = fragment.sourceSpan.sourceLength - leftByteLength;
+	rightSpan.printableOffset = fragment.sourceSpan.printableOffset + leftCodepointLength;
+	rightSpan.printableLength = fragment.sourceSpan.printableLength - leftCodepointLength;
+	rightSpan.isWhitespace = fragment.isWhitespace;
+
+	WrapFragment left = ReanalyzeFragment(fragment.text.substr(0, leftByteLength), leftSpan, fragment.isWhitespace, options);
+	WrapFragment right = ReanalyzeFragment(fragment.text.substr(leftByteLength), rightSpan, fragment.isWhitespace, options);
+	return {std::move(left), std::move(right)};
+}
+
+std::pair<WrapFragment, WrapFragment> TextWrapper::SplitFragmentAtBoundary(const WrapFragment& fragment, float availableWidth, const WrapOptions& options) const
+{
+	if (fragment.isLineBreak || fragment.isControlCode || fragment.sourceSpan.printableLength == 0 || availableWidth <= 0.0f)
+		return {WrapFragment{}, fragment};
+	if (fragment.width <= availableWidth)
+		return {fragment, WrapFragment{}};
+
+	for (auto it = fragment.breakOpportunities.rbegin(); it != fragment.breakOpportunities.rend(); ++it) {
+		const BreakOpportunity& breakOpportunity = *it;
+		if (breakOpportunity.xAdvance <= 0.0f)
+			continue;
+		if (breakOpportunity.sourceByteOffset <= fragment.sourceSpan.sourceOffset)
+			continue;
+		if (breakOpportunity.sourceByteOffset >= fragment.sourceSpan.sourceOffset + fragment.sourceSpan.sourceLength)
+			continue;
+		if (!breakOpportunity.allowed && !options.splitWords)
+			continue;
+
+		const auto split = SplitFragmentAtPosition(
+			fragment,
+			breakOpportunity.sourceByteOffset - fragment.sourceSpan.sourceOffset,
+			breakOpportunity.codepointOffset - fragment.sourceSpan.printableOffset,
+			breakOpportunity.xAdvance,
+			options
+		);
+
+		if (split.first.Empty())
+			continue;
+		if (split.first.width > availableWidth)
+			continue;
+
+		return split;
+	}
+
+	return {WrapFragment{}, fragment};
+}
+
+void TextWrapper::WrapConsole(std::vector<WrapFragment>& fragments, std::vector<WrapLine>& lines, const WrapOptions& options) const
 {
 	lines.clear();
 
-	if (words.empty())
+	if (fragments.empty())
 		return;
 
 	const float effectiveMaxWidth = options.HasWidthConstraint() ? std::max(options.maxWidth, 10.0f) : std::numeric_limits<float>::max();
@@ -467,11 +505,11 @@ void TextWrapper::WrapConsole(std::vector<WrappedWord>& words, std::vector<WrapL
 	std::size_t currentLineCount = 1;
 	bool exceededHeight = false;
 
-	for (std::size_t wi = 0; wi < words.size(); ) {
-		if (words[wi].word.isLineBreak) {
+	for (std::size_t fragmentIndex = 0; fragmentIndex < fragments.size(); ) {
+		if (fragments[fragmentIndex].isLineBreak) {
 			currentWidth = 0.0f;
 			++currentLineCount;
-			++wi;
+			++fragmentIndex;
 
 			if (currentLineCount > maxLines) {
 				exceededHeight = true;
@@ -481,45 +519,43 @@ void TextWrapper::WrapConsole(std::vector<WrappedWord>& words, std::vector<WrapL
 			continue;
 		}
 
-		currentWidth += words[wi].word.width;
-		if (currentWidth <= effectiveMaxWidth || !options.HasWidthConstraint()) {
-			++wi;
+		if (fragments[fragmentIndex].Empty()) {
+			++fragmentIndex;
 			continue;
 		}
 
-		currentWidth -= words[wi].word.width;
+		if (!options.HasWidthConstraint()) {
+			currentWidth += fragments[fragmentIndex].width;
+			++fragmentIndex;
+			continue;
+		}
 
-		const bool splitCandidate =
-			!words[wi].word.isControlCode &&
-			(
-				words[wi].word.isWhitespace ||
-				(options.splitWords && (words[wi].word.width > (0.5f * effectiveMaxWidth)))
-			);
+		if ((currentWidth + fragments[fragmentIndex].width) <= effectiveMaxWidth) {
+			currentWidth += fragments[fragmentIndex].width;
+			++fragmentIndex;
+			continue;
+		}
 
-		if (splitCandidate) {
-			auto split = SplitWordPair(GetMeasurerRef(), words[wi], effectiveMaxWidth - currentWidth, options, options.smartWordSplit);
-			if (split.first.Empty() && options.smartWordSplit)
-				split = SplitWordPair(GetMeasurerRef(), words[wi], effectiveMaxWidth - currentWidth, options, false);
-
-			if (!split.first.Empty()) {
-				words[wi] = std::move(split.second);
-				words.insert(words.begin() + wi, std::move(split.first));
-				currentWidth += words[wi].word.width;
-				++wi;
-			}
+		const auto split = SplitFragmentAtBoundary(fragments[fragmentIndex], effectiveMaxWidth - currentWidth, options);
+		if (!split.first.Empty()) {
+			fragments[fragmentIndex] = split.second;
+			fragments.insert(fragments.begin() + fragmentIndex, split.first);
+			currentWidth += fragments[fragmentIndex].width;
+			++fragmentIndex;
+			continue;
 		}
 
 		if (currentWidth == 0.0f) {
-			currentWidth = words[wi].word.width;
-			++wi;
+			currentWidth = fragments[fragmentIndex].width;
+			++fragmentIndex;
 			continue;
 		}
 
-		words.insert(words.begin() + wi, MakeInsertedLineBreak(words[wi]));
-		++wi;
+		fragments.insert(fragments.begin() + fragmentIndex, MakeInsertedLineBreak(fragments[fragmentIndex]));
+		++fragmentIndex;
 
-		while (wi < words.size() && words[wi].word.isWhitespace)
-			words.erase(words.begin() + wi);
+		while (fragmentIndex < fragments.size() && fragments[fragmentIndex].isWhitespace)
+			fragments.erase(fragments.begin() + fragmentIndex);
 
 		currentWidth = 0.0f;
 		++currentLineCount;
@@ -530,13 +566,13 @@ void TextWrapper::WrapConsole(std::vector<WrappedWord>& words, std::vector<WrapL
 		}
 	}
 
-	RebuildLines(words, lines);
+	RebuildLines(fragments, lines);
 
 	if (options.trimTrailingWhitespace) {
 		for (const WrapLine& line : lines)
-			TrimTrailingWhitespaceFromLine(words, line);
+			TrimTrailingWhitespaceFromLine(fragments, line);
 
-		RebuildLines(words, lines);
+		RebuildLines(fragments, lines);
 	}
 
 	if (!exceededHeight || lines.empty())
@@ -547,26 +583,26 @@ void TextWrapper::WrapConsole(std::vector<WrappedWord>& words, std::vector<WrapL
 		return;
 
 	if (options.ellipsize) {
-		AddEllipsis(lines, words, options);
-		RebuildLines(words, lines);
+		AddEllipsis(lines, fragments, options);
+		RebuildLines(fragments, lines);
 
 		if (lines.size() > visibleLineCount) {
-			const std::size_t lastVisibleWord = std::min(lines[visibleLineCount - 1].lastWord, words.size() - 1);
-			words.erase(words.begin() + lastVisibleWord + 1, words.end());
-			RebuildLines(words, lines);
+			const std::size_t lastVisibleFragment = std::min(lines[visibleLineCount - 1].lastWord, fragments.size() - 1);
+			fragments.erase(fragments.begin() + lastVisibleFragment + 1, fragments.end());
+			RebuildLines(fragments, lines);
 		}
 
 		return;
 	}
 
-	const std::size_t lastVisibleWord = std::min(lines[visibleLineCount - 1].lastWord, words.size() - 1);
-	words.erase(words.begin() + lastVisibleWord + 1, words.end());
-	RebuildLines(words, lines);
+	const std::size_t lastVisibleFragment = std::min(lines[visibleLineCount - 1].lastWord, fragments.size() - 1);
+	fragments.erase(fragments.begin() + lastVisibleFragment + 1, fragments.end());
+	RebuildLines(fragments, lines);
 }
 
-void TextWrapper::AddEllipsis(std::vector<WrapLine>& lines, std::vector<WrappedWord>& words, const WrapOptions& options) const
+void TextWrapper::AddEllipsis(std::vector<WrapLine>& lines, std::vector<WrapFragment>& fragments, const WrapOptions& options) const
 {
-	if (lines.empty() || words.empty())
+	if (lines.empty() || fragments.empty())
 		return;
 
 	const float lineHeight = MeasureLineHeight(GetMeasurerRef(), options);
@@ -585,87 +621,88 @@ void TextWrapper::AddEllipsis(std::vector<WrapLine>& lines, std::vector<WrappedW
 	WrapLine targetLine = lines[visibleLineCount - 1];
 	std::size_t truncateFrom = targetLine.lastWord + 1;
 
-	if (targetLine.forceLineBreak && targetLine.lastWord < words.size() && words[targetLine.lastWord].word.isLineBreak) {
-		words.erase(words.begin() + targetLine.lastWord);
-		RebuildLines(words, lines);
+	if (targetLine.forceLineBreak && targetLine.lastWord < fragments.size() && fragments[targetLine.lastWord].isLineBreak) {
+		fragments.erase(fragments.begin() + targetLine.lastWord);
+		RebuildLines(fragments, lines);
 		targetLine = lines[visibleLineCount - 1];
 		truncateFrom = targetLine.lastWord + 1;
 	}
 
-	if (truncateFrom < words.size())
-		words.erase(words.begin() + truncateFrom, words.end());
+	if (truncateFrom < fragments.size())
+		fragments.erase(fragments.begin() + truncateFrom, fragments.end());
 
-	RebuildLines(words, lines);
+	RebuildLines(fragments, lines);
 	if (lines.empty())
 		return;
 
 	targetLine = lines[std::min(visibleLineCount - 1, lines.size() - 1)];
 
-	while (targetLine.lastWord >= targetLine.firstWord && targetLine.lastWord < words.size()) {
-		const float lineWidth = MeasureRangeWidth(words, targetLine.firstWord, targetLine.lastWord + 1);
+	while (targetLine.lastWord >= targetLine.firstWord && targetLine.lastWord < fragments.size()) {
+		const float lineWidth = MeasureRangeWidth(fragments, targetLine.firstWord, targetLine.lastWord + 1);
 		if (!options.HasWidthConstraint() || (lineWidth + ellipsisWidth) <= std::max(options.maxWidth, 10.0f))
 			break;
 
-		WrappedWord& tail = words[targetLine.lastWord];
-		if (tail.word.isControlCode) {
+		WrapFragment& tail = fragments[targetLine.lastWord];
+		if (tail.isControlCode || tail.isWhitespace || tail.Empty()) {
 			if (targetLine.lastWord == 0)
 				break;
-			words.erase(words.begin() + targetLine.lastWord);
-		} else if (tail.word.isWhitespace) {
-			words.erase(words.begin() + targetLine.lastWord);
+
+			fragments.erase(fragments.begin() + targetLine.lastWord);
 		} else {
-			const float freeSpace = std::max(0.0f, std::max(options.maxWidth, 10.0f) - (lineWidth - tail.word.width) - ellipsisWidth);
-			auto split = SplitWordPair(GetMeasurerRef(), tail, freeSpace, options, false);
+			const float freeSpace = std::max(0.0f, std::max(options.maxWidth, 10.0f) - (lineWidth - tail.width) - ellipsisWidth);
+			const auto split = SplitFragmentAtBoundary(tail, freeSpace, options);
 			if (!split.first.Empty()) {
-				tail = std::move(split.first);
+				tail = split.first;
 			} else {
-				words.erase(words.begin() + targetLine.lastWord);
+				fragments.erase(fragments.begin() + targetLine.lastWord);
 			}
 		}
 
-		RebuildLines(words, lines);
+		RebuildLines(fragments, lines);
 		if (lines.empty())
 			break;
 
 		targetLine = lines[std::min(visibleLineCount - 1, lines.size() - 1)];
-		if (targetLine.firstWord >= words.size())
+		if (targetLine.firstWord >= fragments.size())
 			break;
 	}
 
 	std::size_t ellipsisSourceOffset = 0;
 	std::size_t ellipsisPrintableOffset = 0;
-	if (!words.empty() && targetLine.firstWord < words.size()) {
-		const WrappedWord& anchor = words[std::min(targetLine.lastWord, words.size() - 1)];
-		ellipsisSourceOffset = anchor.sourceByteOffset;
-		ellipsisPrintableOffset = anchor.printableOffset + anchor.printableLength;
+	if (!fragments.empty() && targetLine.firstWord < fragments.size()) {
+		const WrapFragment& anchor = fragments[std::min(targetLine.lastWord, fragments.size() - 1)];
+		ellipsisSourceOffset = anchor.sourceSpan.sourceOffset;
+		ellipsisPrintableOffset = anchor.sourceSpan.printableOffset + anchor.sourceSpan.printableLength;
 	}
 
-	const std::size_t insertPos = std::min(targetLine.lastWord + 1, words.size());
-	words.insert(words.begin() + insertPos, MakeEllipsisWord(EllipsisUtf8, ellipsisWidth, ellipsisSourceOffset, ellipsisPrintableOffset));
-	RebuildLines(words, lines);
+	const std::size_t insertPos = std::min(targetLine.lastWord + 1, fragments.size());
+	fragments.insert(fragments.begin() + insertPos, MakeEllipsisFragment(EllipsisUtf8, ellipsisWidth, ellipsisSourceOffset, ellipsisPrintableOffset));
+	RebuildLines(fragments, lines);
 
 	if (lines.size() > visibleLineCount) {
-		const std::size_t lastVisibleWord = std::min(lines[visibleLineCount - 1].lastWord, words.size() - 1);
-		words.erase(words.begin() + lastVisibleWord + 1, words.end());
-		RebuildLines(words, lines);
+		const std::size_t lastVisibleFragment = std::min(lines[visibleLineCount - 1].lastWord, fragments.size() - 1);
+		fragments.erase(fragments.begin() + lastVisibleFragment + 1, fragments.end());
+		RebuildLines(fragments, lines);
 	}
 
 	if (!lines.empty())
 		lines[std::min(visibleLineCount - 1, lines.size() - 1)].wasEllipsized = true;
 }
 
-void TextWrapper::RemergeColorCodes(std::vector<WrappedWord>& words, const std::vector<ExtractedColorCode>& colorCodes, const WrapOptions& options) const
+void TextWrapper::RemergeColorCodes(std::vector<WrapFragment>& fragments, const std::vector<ExtractedColorCode>& colorCodes, const WrapOptions& options) const
 {
-	for (const ExtractedColorCode& colorCode : colorCodes) {
-		std::size_t insertIndex = words.size();
+	(void)options;
 
-		for (std::size_t i = 0; i < words.size(); ++i) {
-			const WrappedWord& word = words[i];
-			if (word.word.isLineBreak || word.word.isControlCode)
+	for (const ExtractedColorCode& colorCode : colorCodes) {
+		std::size_t insertIndex = fragments.size();
+
+		for (std::size_t i = 0; i < fragments.size(); ++i) {
+			const WrapFragment& fragment = fragments[i];
+			if (fragment.isLineBreak || fragment.isControlCode)
 				continue;
 
-			const std::size_t begin = word.printableOffset;
-			const std::size_t end = begin + word.printableLength;
+			const std::size_t begin = fragment.sourceSpan.printableOffset;
+			const std::size_t end = begin + fragment.sourceSpan.printableLength;
 
 			if (colorCode.printablePosition <= begin) {
 				insertIndex = i;
@@ -675,63 +712,32 @@ void TextWrapper::RemergeColorCodes(std::vector<WrappedWord>& words, const std::
 			if (colorCode.printablePosition >= end)
 				continue;
 
-			const std::size_t splitAt = colorCode.printablePosition - begin;
-			if (splitAt == 0) {
-				insertIndex = i;
-				break;
+			const auto breakIt = std::find_if(fragment.breakOpportunities.begin(), fragment.breakOpportunities.end(), [&colorCode](const BreakOpportunity& breakOpportunity) {
+				return breakOpportunity.codepointOffset == colorCode.printablePosition;
+			});
+
+			if (breakIt != fragment.breakOpportunities.end()) {
+				const auto split = SplitFragmentAtPosition(
+					fragment,
+					breakIt->sourceByteOffset - fragment.sourceSpan.sourceOffset,
+					breakIt->codepointOffset - fragment.sourceSpan.printableOffset,
+					breakIt->xAdvance,
+					options
+				);
+
+				if (!split.first.Empty()) {
+					fragments[i] = split.second;
+					fragments.insert(fragments.begin() + i, split.first);
+					insertIndex = i + 1;
+					break;
+				}
 			}
 
-			int pos = 0;
-			std::size_t codepoints = 0;
-			while (pos < static_cast<int>(word.text.size()) && codepoints < splitAt) {
-				utf8::GetNextChar(word.text, pos);
-				++codepoints;
-			}
-
-			WrappedWord left = MakeWord(
-				word.text.substr(0, pos),
-				word.sourceByteOffset,
-				static_cast<std::size_t>(pos),
-				word.printableOffset,
-				splitAt,
-				0.0f,
-				word.word.isWhitespace,
-				false,
-				false
-			);
-			left.word.width = MeasureWidth(left.text, options);
-
-			WrappedWord right = MakeWord(
-				word.text.substr(pos),
-				word.sourceByteOffset + static_cast<std::size_t>(pos),
-				word.sourceByteLength - static_cast<std::size_t>(pos),
-				word.printableOffset + splitAt,
-				word.printableLength - splitAt,
-				0.0f,
-				word.word.isWhitespace,
-				false,
-				false
-			);
-			right.word.width = MeasureWidth(right.text, options);
-
-			words[i] = std::move(right);
-			words.insert(words.begin() + i, std::move(left));
-			insertIndex = i + 1;
+			insertIndex = i;
 			break;
 		}
 
-		WrappedWord colorWord = MakeWord(
-			colorCode.colorText.ToString(),
-			0,
-			0,
-			colorCode.printablePosition,
-			0,
-			0.0f,
-			false,
-			false,
-			true
-		);
-		words.insert(words.begin() + insertIndex, std::move(colorWord));
+		fragments.insert(fragments.begin() + insertIndex, MakeColorCodeFragment(colorCode));
 	}
 }
 
@@ -751,14 +757,17 @@ std::size_t TextWrapper::CountOutputLines(std::span<const WrapLine> lines) const
 	return lines.size();
 }
 
-WrappedText TextWrapper::BuildWrappedText(std::vector<WrappedWord> words, std::vector<WrapLine> lines, std::vector<ExtractedColorCode> colorCodes, const WrapOptions& options) const
+WrappedText TextWrapper::BuildWrappedText(std::vector<WrapFragment> fragments, std::vector<WrapLine> lines, std::vector<ExtractedColorCode> colorCodes, const WrapOptions& options) const
 {
 	WrappedText wrapped;
-	wrapped.words = std::move(words);
 	wrapped.colorCodes = std::move(colorCodes);
 
 	if (options.remergeColorCodes)
-		RemergeColorCodes(wrapped.words, wrapped.colorCodes, options);
+		RemergeColorCodes(fragments, wrapped.colorCodes, options);
+
+	wrapped.words.reserve(fragments.size());
+	for (const WrapFragment& fragment : fragments)
+		wrapped.words.emplace_back(MakeWord(fragment));
 
 	for (const WrappedWord& word : wrapped.words) {
 		if (word.word.isLineBreak) {
@@ -769,7 +778,7 @@ WrappedText TextWrapper::BuildWrappedText(std::vector<WrappedWord> words, std::v
 		wrapped.text += word.text;
 	}
 
-	wrapped.lineCount = wrapped.text.empty() ? 0 : (CountLineBreaks(wrapped.text) + 1);
+	wrapped.lineCount = wrapped.text.empty() ? 0 : (lines.empty() ? (CountLineBreaks(wrapped.text) + 1) : CountOutputLines(lines));
 	wrapped.wasWrapped = std::any_of(lines.begin(), lines.end(), [](const WrapLine& line) { return line.wasWrapped; });
 	wrapped.wasEllipsized = std::any_of(lines.begin(), lines.end(), [](const WrapLine& line) { return line.wasEllipsized; });
 	return wrapped;

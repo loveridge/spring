@@ -39,6 +39,21 @@ static constexpr float FTMetricScale = 64.0f;
 	return count;
 }
 
+[[nodiscard]] std::vector<std::size_t> CollectUtf8CodepointByteOffsets(std::string_view utf8)
+{
+	std::vector<std::size_t> offsets;
+	offsets.reserve(CountUtf8Codepoints(utf8) + 1);
+
+	const std::string utf8Copy(utf8);
+	for (int pos = 0; pos < static_cast<int>(utf8Copy.size()); ) {
+		offsets.emplace_back(static_cast<std::size_t>(pos));
+		utf8::GetNextChar(utf8Copy, pos);
+	}
+
+	offsets.emplace_back(utf8.size());
+	return offsets;
+}
+
 [[nodiscard]] hb_feature_t MakeFeature(const char* tag, std::uint32_t value)
 {
 	hb_feature_t feature{};
@@ -88,6 +103,37 @@ static constexpr float FTMetricScale = 64.0f;
 		metrics.advance = metrics.bounds.w;
 
 	return metrics;
+}
+
+[[nodiscard]] std::vector<hb_feature_t> BuildShapeFeatures(const fonts::text::ShapeOptions& options)
+{
+	std::vector<hb_feature_t> features;
+
+	if (!options.allowLigatures) {
+		features.emplace_back(MakeFeature("liga", 0));
+		features.emplace_back(MakeFeature("clig", 0));
+	}
+	if (!options.allowKerning)
+		features.emplace_back(MakeFeature("kern", 0));
+
+	return features;
+}
+
+[[nodiscard]] fonts::text::TextSpan MakeSubSpan(
+	const fonts::text::TextSpan& span,
+	std::size_t relativeByteStart,
+	std::size_t byteLength,
+	std::size_t relativeCodepointOffset,
+	std::size_t codepointLength
+)
+{
+	fonts::text::TextSpan subSpan = span;
+	subSpan.text = span.text.substr(relativeByteStart, byteLength);
+	subSpan.sourceOffset = span.sourceOffset + relativeByteStart;
+	subSpan.sourceLength = byteLength;
+	subSpan.printableOffset = span.printableOffset + relativeCodepointOffset;
+	subSpan.printableLength = codepointLength;
+	return subSpan;
 }
 
 } // namespace
@@ -164,140 +210,7 @@ ShapeResult HarfBuzzTextShaper::ShapeSpan(const TextSpan& span) const
 
 ShapeResult HarfBuzzTextShaper::ShapeSpan(const TextSpan& span, const ShapeOptions& options) const
 {
-	ShapeResult result;
-
-	if (span.text.empty())
-		return result;
-
-	const FT_Face initialFTFace = GetPrimaryFTFace();
-	if (initialFTFace == nullptr && (faces == nullptr || faces->Empty()))
-		return result;
-
-	struct FaceSegment {
-		std::size_t start = 0;
-		std::size_t end = 0;
-		std::size_t printableStart = 0;
-		std::size_t printableLength = 0;
-		std::shared_ptr<fonts::FontFace> face;
-		FT_Face ftFace = nullptr;
-	};
-
-	std::vector<FaceSegment> segments;
-	const std::string utf8Copy(span.text);
-
-	std::size_t segmentStart = 0;
-	std::size_t segmentPrintableStart = 0;
-	std::shared_ptr<fonts::FontFace> currentFace = nullptr;
-	FT_Face currentFTFace = initialFTFace;
-	bool haveSegment = false;
-	std::size_t printableIndex = 0;
-
-	for (int pos = 0; pos < static_cast<int>(utf8Copy.size()); ) {
-		const int charStart = pos;
-		const char32_t codepoint = utf8::GetNextChar(utf8Copy, pos);
-
-		std::shared_ptr<fonts::FontFace> resolvedFace = ResolveFaceForCodepoint(codepoint);
-		FT_Face resolvedFTFace = (resolvedFace != nullptr) ? resolvedFace->GetFTFace() : GetPrimaryFTFace();
-
-		if (!haveSegment) {
-			segmentStart = static_cast<std::size_t>(charStart);
-			segmentPrintableStart = printableIndex;
-			currentFace = resolvedFace;
-			currentFTFace = resolvedFTFace;
-			haveSegment = true;
-		} else if ((resolvedFace != currentFace) || (resolvedFTFace != currentFTFace)) {
-			segments.push_back(FaceSegment{
-				.start = segmentStart,
-				.end = static_cast<std::size_t>(charStart),
-				.printableStart = segmentPrintableStart,
-				.printableLength = printableIndex - segmentPrintableStart,
-				.face = currentFace,
-				.ftFace = currentFTFace,
-			});
-
-			segmentStart = static_cast<std::size_t>(charStart);
-			segmentPrintableStart = printableIndex;
-			currentFace = resolvedFace;
-			currentFTFace = resolvedFTFace;
-		}
-
-		++printableIndex;
-	}
-
-	if (haveSegment) {
-		segments.push_back(FaceSegment{
-			.start = segmentStart,
-			.end = span.text.size(),
-			.printableStart = segmentPrintableStart,
-			.printableLength = printableIndex - segmentPrintableStart,
-			.face = currentFace,
-			.ftFace = currentFTFace,
-		});
-	}
-
-	if (segments.empty()) {
-		segments.push_back(FaceSegment{
-			.start = 0,
-			.end = span.text.size(),
-			.printableStart = 0,
-			.printableLength = span.printableLength,
-			.face = primaryFace,
-			.ftFace = GetPrimaryFTFace(),
-		});
-	}
-
-	for (const FaceSegment& segment : segments) {
-		if (segment.end <= segment.start || segment.ftFace == nullptr)
-			continue;
-
-		HbBufferPtr buffer = CreateBuffer();
-		if (buffer == nullptr)
-			continue;
-
-		const std::string_view segmentText = span.text.substr(segment.start, segment.end - segment.start);
-		TextSpan segmentSpan = span;
-		segmentSpan.text = segmentText;
-		segmentSpan.sourceOffset += segment.start;
-		segmentSpan.sourceLength = segmentText.size();
-		segmentSpan.printableOffset += segment.printableStart;
-		segmentSpan.printableLength = segment.printableLength;
-
-		ConfigureBuffer(buffer.get(), segmentText, options);
-
-		std::vector<hb_feature_t> features;
-		if (!options.allowLigatures) {
-			features.emplace_back(MakeFeature("liga", 0));
-			features.emplace_back(MakeFeature("clig", 0));
-			features.emplace_back(MakeFeature("rlig", 0));
-		}
-		if (!options.allowKerning)
-			features.emplace_back(MakeFeature("kern", 0));
-
-		hb_font_t* hbFont = GetOrCreateHbFont(segment.ftFace);
-		if (hbFont == nullptr)
-			continue;
-
-		hb_shape(hbFont, buffer.get(), features.empty() ? nullptr : features.data(), features.size());
-
-		ShapedRun run = ConvertBufferToRun(segmentText, segmentSpan, options, segment.face, buffer.get(), result);
-		if (run.Empty())
-			continue;
-
-		run.primaryFace = segment.face;
-		run.endsWithLineBreak = (!segmentText.empty()) && (segmentText.back() == '\n' || segmentText.back() == '\r');
-		run.containsControlCodes = false;
-
-		if (primaryFace != nullptr && segment.face != nullptr && segment.face != primaryFace)
-			result.usedFallbackFaces = true;
-
-		result.width += run.width;
-		result.ascent = std::max(result.ascent, run.ascent);
-		result.descent = std::min(result.descent, run.descent);
-		result.lineHeight = std::max(result.lineHeight, run.lineHeight);
-		result.runs.emplace_back(std::move(run));
-	}
-
-	return result;
+	return ShapeSpanWithFallbackPlan(span, options);
 }
 
 hb_direction_t HarfBuzzTextShaper::ToHbDirection(ShapeOptions::Direction direction) noexcept
@@ -476,65 +389,88 @@ hb_font_t* HarfBuzzTextShaper::GetOrCreateHbFont(const std::shared_ptr<fonts::Fo
 	return insertedIt->second.hbFont.get();
 }
 
-std::shared_ptr<fonts::FontFace> HarfBuzzTextShaper::ResolveFaceForCodepoint(char32_t codepoint) const
+std::shared_ptr<fonts::FontFace> HarfBuzzTextShaper::GetPreferredFace() const
 {
-	if (faces != nullptr) {
-		if (auto face = faces->FindFaceForCodepoint(codepoint); face != nullptr)
-			return face;
-
+	if (faces != nullptr && faces->GetPrimaryFace() != nullptr)
 		return faces->GetPrimaryFace();
-	}
 
 	return primaryFace;
 }
 
-std::shared_ptr<fonts::FontFace> HarfBuzzTextShaper::ResolveFaceForGlyphInfo(char32_t codepoint, hb_codepoint_t glyphIndex) const
+std::shared_ptr<fonts::FontFace> HarfBuzzTextShaper::ResolveFallbackFaceForText(std::string_view utf8, const ShapeOptions& options) const
 {
+	const std::shared_ptr<fonts::FontFace> preferredFace = GetPreferredFace();
+	if (utf8.empty())
+		return preferredFace;
+
+	std::vector<std::shared_ptr<fonts::FontFace>> candidateFaces;
 	if (faces != nullptr) {
-		if (glyphIndex != 0u) {
-			if (auto face = faces->FindFaceForGlyph(glyphIndex); face != nullptr)
-				return face;
-		}
-
-		if (auto face = faces->FindFaceForCodepoint(codepoint); face != nullptr)
-			return face;
-
-		return faces->GetPrimaryFace();
+		candidateFaces = faces->GetFaces();
+	} else if (preferredFace != nullptr) {
+		candidateFaces.emplace_back(preferredFace);
 	}
 
-	return primaryFace;
+	if (candidateFaces.empty())
+		return preferredFace;
+
+	TextSpan span;
+	span.text = utf8;
+	span.sourceLength = utf8.size();
+	span.printableLength = CountUtf8Codepoints(utf8);
+
+	for (const std::shared_ptr<fonts::FontFace>& face : candidateFaces) {
+		if (face == nullptr)
+			continue;
+
+		ShapeResult probeResult;
+		const BufferShapeData probe = ShapeBuffer(span, options, face, probeResult);
+		if (!probe.hadMissingGlyphs)
+			return face;
+	}
+
+	return preferredFace;
 }
 
-ShapedRun HarfBuzzTextShaper::ConvertBufferToRun(
-	std::string_view utf8,
-	const TextSpan& sourceSpan,
+HarfBuzzTextShaper::BufferShapeData HarfBuzzTextShaper::ShapeBuffer(
+	const TextSpan& span,
 	const ShapeOptions& options,
-	const std::shared_ptr<fonts::FontFace>& runFace,
-	hb_buffer_t* buffer,
+	const std::shared_ptr<fonts::FontFace>& face,
 	ShapeResult& result
-) const {
-	ShapedRun run;
-	run.sourceSpan = sourceSpan;
-	run.primaryFace = runFace;
+) const
+{
+	BufferShapeData shapeData;
 
+	if (span.text.empty())
+		return shapeData;
+
+	HbBufferPtr buffer = CreateBuffer();
 	if (buffer == nullptr)
-		return run;
+		return shapeData;
+
+	ConfigureBuffer(buffer.get(), span.text, options);
+
+	const std::vector<hb_feature_t> features = BuildShapeFeatures(options);
+	hb_font_t* hbFont = GetOrCreateHbFont(face);
+	if (hbFont == nullptr)
+		return shapeData;
+
+	hb_shape(hbFont, buffer.get(), features.empty() ? nullptr : features.data(), features.size());
 
 	unsigned int glyphCount = 0;
-	hb_glyph_info_t* infos = hb_buffer_get_glyph_infos(buffer, &glyphCount);
-	hb_glyph_position_t* positions = hb_buffer_get_glyph_positions(buffer, &glyphCount);
+	hb_glyph_info_t* infos = hb_buffer_get_glyph_infos(buffer.get(), &glyphCount);
+	hb_glyph_position_t* positions = hb_buffer_get_glyph_positions(buffer.get(), &glyphCount);
 	if (glyphCount == 0 || infos == nullptr || positions == nullptr)
-		return run;
+		return shapeData;
 
-	run.glyphs.reserve(glyphCount);
-	run.isRtl = (FromHbDirection(hb_buffer_get_direction(buffer)) == ShapeOptions::Direction::RightToLeft);
+	shapeData.glyphs.reserve(glyphCount);
+	shapeData.isRtl = (FromHbDirection(hb_buffer_get_direction(buffer.get())) == ShapeOptions::Direction::RightToLeft);
 
-	FT_Face metricsFace = (runFace != nullptr) ? runFace->GetFTFace() : GetPrimaryFTFace();
+	FT_Face metricsFace = (face != nullptr) ? face->GetFTFace() : GetPrimaryFTFace();
 	if (metricsFace != nullptr && metricsFace->size != nullptr) {
 		const float normScale = GetNormScale(metricsFace);
-		run.ascent = metricsFace->size->metrics.ascender * normScale;
-		run.descent = metricsFace->size->metrics.descender * normScale;
-		run.lineHeight = metricsFace->size->metrics.height * normScale;
+		shapeData.ascent = metricsFace->size->metrics.ascender * normScale;
+		shapeData.descent = metricsFace->size->metrics.descender * normScale;
+		shapeData.lineHeight = metricsFace->size->metrics.height * normScale;
 	}
 
 	for (unsigned int i = 0; i < glyphCount; ++i) {
@@ -542,10 +478,10 @@ ShapedRun HarfBuzzTextShaper::ConvertBufferToRun(
 		const hb_glyph_position_t& position = positions[i];
 
 		ShapedGlyph glyph;
-		glyph.cluster = static_cast<std::uint32_t>(sourceSpan.sourceOffset + info.cluster);
+		glyph.cluster = static_cast<std::uint32_t>(span.sourceOffset + info.cluster);
 		glyph.logicalIndex = i;
-		glyph.sourceCodepoint = DecodeCodepointAt(utf8, std::min<std::size_t>(info.cluster, utf8.size()));
-		glyph.face = (runFace != nullptr) ? runFace : ResolveFaceForGlyphInfo(glyph.sourceCodepoint, info.codepoint);
+		glyph.sourceCodepoint = DecodeCodepointAt(span.text, std::min<std::size_t>(info.cluster, span.text.size()));
+		glyph.face = face;
 		glyph.glyphKey = GlyphKey::FromGlyphIndex(info.codepoint, glyph.sourceCodepoint);
 
 		const float normScale = (glyph.face != nullptr) ? GetNormScale(glyph.face->GetFTFace()) : GetNormScale(GetPrimaryFTFace());
@@ -555,15 +491,226 @@ ShapedRun HarfBuzzTextShaper::ConvertBufferToRun(
 		glyph.yOffset = position.y_offset * normScale;
 		glyph.metrics = LoadGlyphMetrics(glyph.face, info.codepoint);
 
-		if (info.codepoint == 0)
+		if (info.codepoint == 0) {
+			shapeData.hadMissingGlyphs = true;
 			result.hadMissingGlyphs = true;
+		}
 
-		run.width += glyph.xAdvance;
-		run.glyphs.emplace_back(std::move(glyph));
+		shapeData.width += glyph.xAdvance;
+		shapeData.glyphs.emplace_back(std::move(glyph));
 	}
 
-	ApplyFeatures(buffer, options, result, run);
+	shapeData.clusters = ExtractClusters(span.text, span, buffer.get());
+	return shapeData;
+}
+
+std::vector<ShapedCluster> HarfBuzzTextShaper::ExtractClusters(std::string_view utf8, const TextSpan& sourceSpan, hb_buffer_t* buffer) const
+{
+	std::vector<ShapedCluster> clusters;
+	if (buffer == nullptr)
+		return clusters;
+
+	unsigned int glyphCount = 0;
+	hb_glyph_info_t* infos = hb_buffer_get_glyph_infos(buffer, &glyphCount);
+	if (glyphCount == 0 || infos == nullptr)
+		return clusters;
+
+	struct ClusterAccumulator {
+		std::size_t byteStart = 0;
+		std::size_t glyphStart = 0;
+		std::size_t glyphCount = 0;
+		bool hasMissingGlyph = false;
+	};
+
+	std::vector<ClusterAccumulator> groupedClusters;
+	groupedClusters.reserve(glyphCount);
+
+	for (unsigned int i = 0; i < glyphCount; ) {
+		const std::size_t byteStart = std::min<std::size_t>(infos[i].cluster, utf8.size());
+
+		ClusterAccumulator cluster;
+		cluster.byteStart = byteStart;
+		cluster.glyphStart = i;
+
+		while (i < glyphCount && std::min<std::size_t>(infos[i].cluster, utf8.size()) == byteStart) {
+			cluster.hasMissingGlyph = cluster.hasMissingGlyph || (infos[i].codepoint == 0);
+			++cluster.glyphCount;
+			++i;
+		}
+
+		groupedClusters.emplace_back(std::move(cluster));
+	}
+
+	std::vector<std::size_t> orderedIndices(groupedClusters.size());
+	for (std::size_t i = 0; i < orderedIndices.size(); ++i)
+		orderedIndices[i] = i;
+
+	std::sort(orderedIndices.begin(), orderedIndices.end(), [&groupedClusters](std::size_t lhs, std::size_t rhs) {
+		if (groupedClusters[lhs].byteStart != groupedClusters[rhs].byteStart)
+			return groupedClusters[lhs].byteStart < groupedClusters[rhs].byteStart;
+
+		return groupedClusters[lhs].glyphStart < groupedClusters[rhs].glyphStart;
+	});
+
+	const std::vector<std::size_t> codepointByteOffsets = CollectUtf8CodepointByteOffsets(utf8);
+	clusters.reserve(groupedClusters.size());
+
+	for (std::size_t orderedIndex = 0; orderedIndex < orderedIndices.size(); ++orderedIndex) {
+		const ClusterAccumulator& groupedCluster = groupedClusters[orderedIndices[orderedIndex]];
+		const std::size_t nextByteStart = (orderedIndex + 1 < orderedIndices.size())
+			? groupedClusters[orderedIndices[orderedIndex + 1]].byteStart
+			: utf8.size();
+		const std::size_t byteEnd = std::max(groupedCluster.byteStart, nextByteStart);
+
+		const auto codepointBeginIt = std::lower_bound(codepointByteOffsets.begin(), codepointByteOffsets.end(), groupedCluster.byteStart);
+		const auto codepointEndIt = std::lower_bound(codepointByteOffsets.begin(), codepointByteOffsets.end(), byteEnd);
+
+		ShapedCluster cluster;
+		cluster.sourceByteStart = sourceSpan.sourceOffset + groupedCluster.byteStart;
+		cluster.sourceByteLength = byteEnd - groupedCluster.byteStart;
+		cluster.glyphStart = groupedCluster.glyphStart;
+		cluster.glyphCount = groupedCluster.glyphCount;
+		cluster.codepointOffset = sourceSpan.printableOffset + static_cast<std::size_t>(std::distance(codepointByteOffsets.begin(), codepointBeginIt));
+		cluster.codepointLength = static_cast<std::size_t>(std::distance(codepointBeginIt, codepointEndIt));
+		cluster.hasMissingGlyph = groupedCluster.hasMissingGlyph;
+		cluster.unsafeToBreakInside = true;
+		clusters.emplace_back(std::move(cluster));
+	}
+
+	return clusters;
+}
+
+std::vector<HarfBuzzTextShaper::FacePlanSegment> HarfBuzzTextShaper::BuildFallbackPlan(
+	const TextSpan& span,
+	const ShapeOptions& options,
+	const std::shared_ptr<fonts::FontFace>& preferredFace,
+	const BufferShapeData& primaryShape
+) const
+{
+	std::vector<FacePlanSegment> plan;
+
+	if (primaryShape.clusters.empty()) {
+		plan.push_back(FacePlanSegment{
+			.sourceByteStart = span.sourceOffset,
+			.sourceByteLength = span.sourceLength,
+			.codepointOffset = span.printableOffset,
+			.codepointLength = span.printableLength,
+			.face = preferredFace,
+		});
+		return plan;
+	}
+
+	for (const ShapedCluster& cluster : primaryShape.clusters) {
+		std::shared_ptr<fonts::FontFace> segmentFace = preferredFace;
+
+		if (cluster.hasMissingGlyph) {
+			const std::size_t relativeByteStart = cluster.sourceByteStart - span.sourceOffset;
+			const std::size_t relativeCodepointOffset = cluster.codepointOffset - span.printableOffset;
+			const TextSpan clusterSpan = MakeSubSpan(span, relativeByteStart, cluster.sourceByteLength, relativeCodepointOffset, cluster.codepointLength);
+			segmentFace = ResolveFallbackFaceForText(clusterSpan.text, options);
+		}
+
+		if (!plan.empty()) {
+			FacePlanSegment& tail = plan.back();
+			const bool adjacent = (tail.sourceByteStart + tail.sourceByteLength) == cluster.sourceByteStart;
+			if (adjacent && tail.face == segmentFace) {
+				tail.sourceByteLength += cluster.sourceByteLength;
+				tail.codepointLength += cluster.codepointLength;
+				continue;
+			}
+		}
+
+		plan.push_back(FacePlanSegment{
+			.sourceByteStart = cluster.sourceByteStart,
+			.sourceByteLength = cluster.sourceByteLength,
+			.codepointOffset = cluster.codepointOffset,
+			.codepointLength = cluster.codepointLength,
+			.face = segmentFace,
+		});
+	}
+
+	return plan;
+}
+
+ShapedRun HarfBuzzTextShaper::BuildRunFromShapeData(
+	const TextSpan& sourceSpan,
+	const std::shared_ptr<fonts::FontFace>& runFace,
+	const BufferShapeData& shapeData
+) const {
+	ShapedRun run;
+	run.sourceSpan = sourceSpan;
+	run.glyphs = shapeData.glyphs;
+	run.clusters = shapeData.clusters;
+	run.breakOpportunities = shapeData.breakOpportunities;
+	run.primaryFace = runFace;
+	run.width = shapeData.width;
+	run.ascent = shapeData.ascent;
+	run.descent = shapeData.descent;
+	run.lineHeight = shapeData.lineHeight;
+	run.isRtl = shapeData.isRtl;
+	run.hadMissingGlyphs = shapeData.hadMissingGlyphs;
+	run.endsWithLineBreak = (!sourceSpan.text.empty()) && (sourceSpan.text.back() == '\n' || sourceSpan.text.back() == '\r');
+	run.containsControlCodes = false;
 	return run;
+}
+
+ShapeResult HarfBuzzTextShaper::ShapeSpanWithFallbackPlan(const TextSpan& span, const ShapeOptions& options) const
+{
+	ShapeResult result;
+
+	if (span.text.empty())
+		return result;
+
+	const FT_Face initialFTFace = GetPrimaryFTFace();
+	if (initialFTFace == nullptr && (faces == nullptr || faces->Empty()))
+		return result;
+
+	const std::shared_ptr<fonts::FontFace> preferredFace = GetPreferredFace();
+
+	ShapeResult primaryProbeResult;
+	const BufferShapeData primaryShape = ShapeBuffer(span, options, preferredFace, primaryProbeResult);
+	if (primaryShape.glyphs.empty())
+		return result;
+
+	auto appendRun = [&result](ShapedRun run) {
+		if (run.Empty())
+			return;
+
+		result.width += run.width;
+		result.ascent = std::max(result.ascent, run.ascent);
+		result.descent = std::min(result.descent, run.descent);
+		result.lineHeight = std::max(result.lineHeight, run.lineHeight);
+		result.hadMissingGlyphs = result.hadMissingGlyphs || run.hadMissingGlyphs;
+		result.runs.emplace_back(std::move(run));
+	};
+
+	if (!primaryShape.hadMissingGlyphs) {
+		appendRun(BuildRunFromShapeData(span, preferredFace, primaryShape));
+		return result;
+	}
+
+	const std::vector<FacePlanSegment> plan = BuildFallbackPlan(span, options, preferredFace, primaryShape);
+	for (const FacePlanSegment& segment : plan) {
+		if (segment.sourceByteLength == 0)
+			continue;
+
+		const std::size_t relativeByteStart = segment.sourceByteStart - span.sourceOffset;
+		const std::size_t relativeCodepointOffset = segment.codepointOffset - span.printableOffset;
+		const TextSpan segmentSpan = MakeSubSpan(span, relativeByteStart, segment.sourceByteLength, relativeCodepointOffset, segment.codepointLength);
+
+		ShapeResult segmentShapeResult;
+		const BufferShapeData segmentShape =
+			(segment.face == preferredFace && segment.sourceByteStart == span.sourceOffset && segment.sourceByteLength == span.sourceLength)
+				? primaryShape
+				: ShapeBuffer(segmentSpan, options, segment.face, segmentShapeResult);
+
+		appendRun(BuildRunFromShapeData(segmentSpan, segment.face, segmentShape));
+
+		if (segment.face != nullptr && segment.face != preferredFace)
+			result.usedFallbackFaces = true;
+	}
+
+	return result;
 }
 
 void HarfBuzzTextShaper::ClearCachedHbFonts() const

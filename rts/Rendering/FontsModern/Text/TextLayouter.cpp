@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <numeric>
 #include <string>
 #include <utility>
 #include <vector>
@@ -23,6 +24,11 @@ namespace {
 	return std::all_of(text.begin(), text.end(), [](unsigned char c) {
 		return std::isspace(c) != 0;
 	});
+}
+
+[[nodiscard]] bool IsWrapWhitespaceByte(char c) noexcept
+{
+	return c == ' ' || c == '\t';
 }
 
 [[nodiscard]] std::string ExpandTabs(std::string_view text, float tabWidth)
@@ -53,6 +59,75 @@ namespace {
 	}
 
 	return count;
+}
+
+[[nodiscard]] std::vector<std::size_t> CollectUtf8CodepointByteOffsets(std::string_view text)
+{
+	std::vector<std::size_t> offsets;
+	offsets.reserve(CountPrintableCodepoints(text) + 1);
+
+	const std::string utf8(text);
+	for (int pos = 0; pos < static_cast<int>(utf8.size()); ) {
+		offsets.emplace_back(static_cast<std::size_t>(pos));
+		utf8::GetNextChar(utf8, pos);
+	}
+
+	offsets.emplace_back(text.size());
+	return offsets;
+}
+
+[[nodiscard]] fonts::text::TextSpan MakeSubSpan(
+	const fonts::text::TextSpan& span,
+	std::size_t relativeByteOffset,
+	std::size_t byteLength,
+	std::size_t relativeCodepointOffset,
+	std::size_t codepointLength
+)
+{
+	fonts::text::TextSpan subSpan = span;
+	subSpan.text = span.text.substr(relativeByteOffset, byteLength);
+	subSpan.sourceOffset = span.sourceOffset + relativeByteOffset;
+	subSpan.sourceLength = byteLength;
+	subSpan.printableOffset = span.printableOffset + relativeCodepointOffset;
+	subSpan.printableLength = codepointLength;
+	subSpan.isWhitespace = IsWhitespaceOnly(subSpan.text);
+	subSpan.isControl = false;
+	subSpan.isLineBreak = false;
+	subSpan.isParagraphBreak = false;
+	return subSpan;
+}
+
+struct ClusterFragmentData {
+	fonts::text::ShapedCluster cluster{};
+	float width = 0.0f;
+};
+
+[[nodiscard]] std::vector<ClusterFragmentData> CollectClusterFragments(std::span<const fonts::text::ShapedRun> runs)
+{
+	std::vector<ClusterFragmentData> clusters;
+
+	for (const fonts::text::ShapedRun& run : runs) {
+		for (const fonts::text::ShapedCluster& cluster : run.clusters) {
+			ClusterFragmentData data;
+			data.cluster = cluster;
+
+			const std::size_t glyphBegin = std::min(cluster.glyphStart, run.glyphs.size());
+			const std::size_t glyphEnd = std::min(cluster.glyphStart + cluster.glyphCount, run.glyphs.size());
+			for (std::size_t glyphIndex = glyphBegin; glyphIndex < glyphEnd; ++glyphIndex)
+				data.width += run.glyphs[glyphIndex].xAdvance;
+
+			clusters.emplace_back(std::move(data));
+		}
+	}
+
+	std::sort(clusters.begin(), clusters.end(), [](const ClusterFragmentData& lhs, const ClusterFragmentData& rhs) {
+		if (lhs.cluster.sourceByteStart != rhs.cluster.sourceByteStart)
+			return lhs.cluster.sourceByteStart < rhs.cluster.sourceByteStart;
+
+		return lhs.cluster.glyphStart < rhs.cluster.glyphStart;
+	});
+
+	return clusters;
 }
 
 [[nodiscard]] std::size_t ResolveLineSourceOffset(std::span<const fonts::text::TextSpan> spans, std::size_t begin)
@@ -124,6 +199,201 @@ TextLayout TextLayouter::LayoutText(std::string_view utf8, const LayoutOptions& 
 	ApplyVerticalAlignment(layout.lines, layout.measurement, options, ctx.defaultDescender);
 	layout.valid = true;
 	return layout;
+}
+
+std::vector<MeasuredBreakFragment> TextLayouter::AnalyzeWrapText(std::string_view utf8, const LayoutOptions& options) const
+{
+	return AnalyzeWrapSpans(ParseTextSpansInternal(utf8, options.parseColorCodes).spans, options);
+}
+
+std::vector<MeasuredBreakFragment> TextLayouter::AnalyzeWrapSpans(std::span<const TextSpan> spans, const LayoutOptions& options) const
+{
+	std::vector<MeasuredBreakFragment> fragments;
+	if (spans.empty())
+		return fragments;
+
+	LayoutOptions measureOptions = options;
+	measureOptions.maxWidth = 0.0f;
+	measureOptions.maxHeight = 0.0f;
+	measureOptions.enableWrapping = false;
+	measureOptions.ellipsize = false;
+
+	auto appendMeasuredFallbackSpan = [this, &fragments, &measureOptions](const TextSpan& span) {
+		const std::vector<std::size_t> codepointByteOffsets = CollectUtf8CodepointByteOffsets(span.text);
+		std::size_t tokenByteStart = 0;
+		std::size_t tokenCodepointStart = 0;
+
+		while (tokenByteStart < span.text.size()) {
+			const bool isWhitespace = IsWrapWhitespaceByte(span.text[tokenByteStart]);
+			std::size_t tokenByteEnd = tokenByteStart;
+			std::size_t tokenCodepointLength = 0;
+
+			while (tokenByteEnd < span.text.size() && IsWrapWhitespaceByte(span.text[tokenByteEnd]) == isWhitespace) {
+				const auto it = std::upper_bound(codepointByteOffsets.begin(), codepointByteOffsets.end(), tokenByteEnd);
+				if (it == codepointByteOffsets.end())
+					break;
+
+				tokenByteEnd = *it;
+				++tokenCodepointLength;
+			}
+
+			if (tokenByteEnd <= tokenByteStart)
+				break;
+
+			const TextSpan tokenSpan = MakeSubSpan(
+				span,
+				tokenByteStart,
+				tokenByteEnd - tokenByteStart,
+				tokenCodepointStart,
+				tokenCodepointLength
+			);
+
+			MeasuredBreakFragment fragment;
+			fragment.sourceSpan = tokenSpan;
+			fragment.text = std::string(tokenSpan.text);
+			fragment.width = MeasureText(tokenSpan.text, measureOptions).width;
+			fragment.isWhitespace = isWhitespace;
+			fragment.isLineBreak = false;
+			fragment.isControlCode = false;
+
+			if (tokenSpan.printableLength > 0) {
+				BreakOpportunity breakOpportunity;
+				breakOpportunity.sourceByteOffset = tokenSpan.sourceOffset + tokenSpan.sourceLength;
+				breakOpportunity.codepointOffset = tokenSpan.printableOffset + tokenSpan.printableLength;
+				breakOpportunity.xAdvance = fragment.width;
+				breakOpportunity.allowed = isWhitespace;
+				fragment.breakOpportunities.emplace_back(std::move(breakOpportunity));
+			}
+
+			fragments.emplace_back(std::move(fragment));
+			tokenByteStart = tokenByteEnd;
+			tokenCodepointStart += tokenCodepointLength;
+		}
+	};
+
+	for (const TextSpan& span : spans) {
+		if (span.isControl) {
+			MeasuredBreakFragment fragment;
+			fragment.sourceSpan = span;
+			fragment.text = std::string(span.text);
+			fragment.width = 0.0f;
+			fragment.isWhitespace = false;
+			fragment.isLineBreak = false;
+			fragment.isControlCode = true;
+			fragments.emplace_back(std::move(fragment));
+			continue;
+		}
+
+		if (span.isLineBreak) {
+			if (!options.preserveLineBreaks)
+				continue;
+
+			MeasuredBreakFragment fragment;
+			fragment.sourceSpan = span;
+			fragment.text = std::string(span.text);
+			fragment.width = 0.0f;
+			fragment.isWhitespace = false;
+			fragment.isLineBreak = true;
+			fragment.isControlCode = false;
+			fragments.emplace_back(std::move(fragment));
+			continue;
+		}
+
+		if (!IsRenderableSpan(span))
+			continue;
+
+		const bool spanHasTabs = (options.expandTabs && span.text.find('\t') != std::string_view::npos);
+		if (textShaper == nullptr || spanHasTabs) {
+			appendMeasuredFallbackSpan(span);
+			continue;
+		}
+
+		const ShapeResult shapeResult = textShaper->ShapeSpan(span, options.shapeOptions);
+		const std::vector<ClusterFragmentData> clusterData = CollectClusterFragments(shapeResult.runs);
+		if (clusterData.empty()) {
+			appendMeasuredFallbackSpan(span);
+			continue;
+		}
+
+		bool haveFragment = false;
+		bool fragmentIsWhitespace = false;
+		std::size_t fragmentRelByteStart = 0;
+		std::size_t fragmentRelByteEnd = 0;
+		std::size_t fragmentRelCodepointStart = 0;
+		std::size_t fragmentCodepointLength = 0;
+		float fragmentWidth = 0.0f;
+		std::vector<BreakOpportunity> fragmentBreaks;
+
+		auto flushFragment = [&]() {
+			if (!haveFragment)
+				return;
+
+			const TextSpan fragmentSpan = MakeSubSpan(
+				span,
+				fragmentRelByteStart,
+				fragmentRelByteEnd - fragmentRelByteStart,
+				fragmentRelCodepointStart,
+				fragmentCodepointLength
+			);
+
+			MeasuredBreakFragment fragment;
+			fragment.sourceSpan = fragmentSpan;
+			fragment.text = std::string(fragmentSpan.text);
+			fragment.width = fragmentWidth;
+			fragment.isWhitespace = fragmentIsWhitespace;
+			fragment.isLineBreak = false;
+			fragment.isControlCode = false;
+			fragment.breakOpportunities = std::move(fragmentBreaks);
+			fragments.emplace_back(std::move(fragment));
+
+			haveFragment = false;
+			fragmentBreaks.clear();
+		};
+
+		for (const ClusterFragmentData& clusterDataEntry : clusterData) {
+			const std::size_t clusterRelByteStart = clusterDataEntry.cluster.sourceByteStart - span.sourceOffset;
+			const std::size_t clusterRelByteEnd = clusterRelByteStart + clusterDataEntry.cluster.sourceByteLength;
+			const std::size_t clusterRelCodepointStart = clusterDataEntry.cluster.codepointOffset - span.printableOffset;
+			const bool clusterIsWhitespace = IsWhitespaceOnly(span.text.substr(clusterRelByteStart, clusterDataEntry.cluster.sourceByteLength));
+
+			if (!haveFragment) {
+				haveFragment = true;
+				fragmentIsWhitespace = clusterIsWhitespace;
+				fragmentRelByteStart = clusterRelByteStart;
+				fragmentRelByteEnd = clusterRelByteStart;
+				fragmentRelCodepointStart = clusterRelCodepointStart;
+				fragmentCodepointLength = 0;
+				fragmentWidth = 0.0f;
+				fragmentBreaks.clear();
+			} else if (fragmentIsWhitespace != clusterIsWhitespace || fragmentRelByteEnd != clusterRelByteStart) {
+				flushFragment();
+
+				haveFragment = true;
+				fragmentIsWhitespace = clusterIsWhitespace;
+				fragmentRelByteStart = clusterRelByteStart;
+				fragmentRelByteEnd = clusterRelByteStart;
+				fragmentRelCodepointStart = clusterRelCodepointStart;
+				fragmentCodepointLength = 0;
+				fragmentWidth = 0.0f;
+				fragmentBreaks.clear();
+			}
+
+			fragmentRelByteEnd = clusterRelByteEnd;
+			fragmentCodepointLength += clusterDataEntry.cluster.codepointLength;
+			fragmentWidth += clusterDataEntry.width;
+
+			BreakOpportunity breakOpportunity;
+			breakOpportunity.sourceByteOffset = clusterDataEntry.cluster.sourceByteStart + clusterDataEntry.cluster.sourceByteLength;
+			breakOpportunity.codepointOffset = clusterDataEntry.cluster.codepointOffset + clusterDataEntry.cluster.codepointLength;
+			breakOpportunity.xAdvance = fragmentWidth;
+			breakOpportunity.allowed = fragmentIsWhitespace;
+			fragmentBreaks.emplace_back(std::move(breakOpportunity));
+		}
+
+		flushFragment();
+	}
+
+	return fragments;
 }
 
 std::vector<TextSpan> TextLayouter::ParseTextSpans(std::string_view utf8, bool parseColorCodes) const

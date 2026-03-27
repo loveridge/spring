@@ -75,6 +75,26 @@ private:
 		HbFontPtr hbFont{nullptr, &hb_font_destroy};
 	};
 
+	struct FacePlanSegment {
+		std::size_t sourceByteStart = 0;
+		std::size_t sourceByteLength = 0;
+		std::size_t codepointOffset = 0;
+		std::size_t codepointLength = 0;
+		std::shared_ptr<fonts::FontFace> face;
+	};
+
+	struct BufferShapeData {
+		std::vector<ShapedGlyph> glyphs;
+		std::vector<ShapedCluster> clusters;
+		std::vector<BreakOpportunity> breakOpportunities;
+		float width = 0.0f;
+		float ascent = 0.0f;
+		float descent = 0.0f;
+		float lineHeight = 0.0f;
+		bool isRtl = false;
+		bool hadMissingGlyphs = false;
+	};
+
 private:
 	static hb_direction_t ToHbDirection(ShapeOptions::Direction direction) noexcept;
 	static ShapeOptions::Direction FromHbDirection(hb_direction_t direction) noexcept;
@@ -90,17 +110,36 @@ private:
 
 	hb_font_t* GetOrCreateHbFont(FT_Face ftFace) const;
 	hb_font_t* GetOrCreateHbFont(const std::shared_ptr<fonts::FontFace>& face) const;
-	std::shared_ptr<fonts::FontFace> ResolveFaceForCodepoint(char32_t codepoint) const;
-	std::shared_ptr<fonts::FontFace> ResolveFaceForGlyphInfo(char32_t codepoint, hb_codepoint_t glyphIndex) const;
+	std::shared_ptr<fonts::FontFace> GetPreferredFace() const;
+	std::shared_ptr<fonts::FontFace> ResolveFallbackFaceForText(std::string_view utf8, const ShapeOptions& options) const;
 
-	ShapedRun ConvertBufferToRun(
-		std::string_view utf8,
-		const TextSpan& sourceSpan,
+	BufferShapeData ShapeBuffer(
+		const TextSpan& span,
 		const ShapeOptions& options,
-		const std::shared_ptr<fonts::FontFace>& runFace,
-		hb_buffer_t* buffer,
+		const std::shared_ptr<fonts::FontFace>& face,
 		ShapeResult& result
 	) const;
+
+	std::vector<ShapedCluster> ExtractClusters(
+		std::string_view utf8,
+		const TextSpan& sourceSpan,
+		hb_buffer_t* buffer
+	) const;
+
+	std::vector<FacePlanSegment> BuildFallbackPlan(
+		const TextSpan& span,
+		const ShapeOptions& options,
+		const std::shared_ptr<fonts::FontFace>& primaryFace,
+		const BufferShapeData& primaryShape
+	) const;
+
+	ShapedRun BuildRunFromShapeData(
+		const TextSpan& sourceSpan,
+		const std::shared_ptr<fonts::FontFace>& runFace,
+		const BufferShapeData& shapeData
+	) const;
+
+	ShapeResult ShapeSpanWithFallbackPlan(const TextSpan& span, const ShapeOptions& options) const;
 
 	void ClearCachedHbFonts() const;
 
@@ -111,6 +150,8 @@ private:
 	FT_Face primaryFTFace = nullptr;
 
 	mutable std::mutex hbFontCacheMutex;
+	// TODO: cached hb_font_t objects are only valid while the underlying FT_Face
+	// size and variation state remain unchanged.
 	mutable std::unordered_map<const FT_FaceRec_*, HbFontCacheEntry> hbFontCache;
 };
 
