@@ -392,12 +392,14 @@ void ShaderFontRenderer::DrawQueued()
 void ShaderFontRenderer::HandleTextureUpdate(GlyphAtlasTexture& primaryAtlas, GlyphAtlasTexture* outlineAtlas, bool onlyUpload)
 {
 	if (createOptions.autoUploadTextures) {
-		if (onlyUpload || primaryAtlas.NeedsUpload() || !primaryAtlas.HasTexture())
+		if (onlyUpload || primaryAtlas.NeedsUpload() || !primaryAtlas.HasTexture()) {
 			primaryAtlas.Upload();
+		}
 
 		if (outlineAtlas != nullptr) {
-			if (onlyUpload || outlineAtlas->NeedsUpload() || !outlineAtlas->HasTexture())
+			if (onlyUpload || outlineAtlas->NeedsUpload() || !outlineAtlas->HasTexture()) {
 				outlineAtlas->Upload();
+			}
 		}
 	}
 
