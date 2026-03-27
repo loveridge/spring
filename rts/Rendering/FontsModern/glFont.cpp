@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
@@ -60,11 +61,14 @@ CONFIG(float, SmallFontOutlineWeight).defaultValue(10.0f).description("see FontO
 std::shared_ptr<CglFont> font = nullptr;
 std::shared_ptr<CglFont> smallFont = nullptr;
 
+const bool debug_DumpAtlases = true;
+
 namespace {
 
 static constexpr float4 WhiteColor(1.00f, 1.00f, 1.00f, 0.95f);
 static constexpr float4 DarkOutlineColor(0.05f, 0.05f, 0.05f, 0.95f);
 static constexpr float4 LightOutlineColor(0.95f, 0.95f, 0.95f, 0.80f);
+static std::atomic<std::uint32_t> nextFontDebugId = 1u;
 
 std::vector<std::weak_ptr<CglFont>>& GetLoadedFonts()
 {
@@ -169,6 +173,57 @@ void ConvertNormalizedToPixels(float& x, float& y)
 	}
 
 	return fontFile;
+}
+
+[[nodiscard]] std::string SanitizeFilenameComponent(std::string text)
+{
+	if (text.empty())
+		return "font";
+
+	for (char& c: text) {
+		const bool isSafe =
+			(c >= '0' && c <= '9') ||
+			(c >= 'A' && c <= 'Z') ||
+			(c >= 'a' && c <= 'z') ||
+			(c == '-') ||
+			(c == '_') ||
+			(c == '.');
+
+		if (!isSafe)
+			c = '_';
+	}
+
+	return text;
+}
+
+[[nodiscard]] std::string BuildAtlasDumpFilename(const FontDescriptor& descriptor, std::uint32_t debugId, const char* atlasName)
+{
+	const std::string fontName = SanitizeFilenameComponent(FileSystem::GetBasename(descriptor.filePath));
+
+	return fmt::sprintf(
+		"font-atlas-debug/font-%u-%s-%dpx-ol%d-%s.png",
+		debugId,
+		fontName.c_str(),
+		descriptor.pixelSize,
+		descriptor.outlineSize,
+		atlasName
+	);
+}
+
+void DumpAtlasBitmap(const GlyphAtlasTexture& atlas, const FontDescriptor& descriptor, std::uint32_t debugId, const char* atlasName)
+{
+	if (atlas.GetBitmap().Empty())
+		return;
+
+	static constexpr const char* debugDir = "font-atlas-debug";
+	if (!FileSystem::CreateDirectory(debugDir)) {
+		LOG_L(L_WARNING, "[CglFont::%s] Failed to create debug atlas directory \"%s\"", __func__, debugDir);
+		return;
+	}
+
+	const std::string filename = BuildAtlasDumpFilename(descriptor, debugId, atlasName);
+	if (!atlas.GetBitmap().Save(filename, false, false))
+		LOG_L(L_WARNING, "[CglFont::%s] Failed to save atlas dump \"%s\"", __func__, filename.c_str());
 }
 
 [[nodiscard]] std::string DescribeFontPathResolution(const std::string& fontFile)
@@ -335,6 +390,7 @@ public:
 	explicit Impl(FontDescriptor descriptor_)
 		: descriptor(std::move(descriptor_))
 	{
+		debugId = nextFontDebugId.fetch_add(1u);
 		fonts::FontRegistry::Init(true, false);
 
 		faceSet = BuildFaceSet(descriptor);
@@ -376,8 +432,18 @@ public:
 		if (commands.empty())
 			return;
 
+		auto& primaryAtlas = glyphCache->GetAtlasTexture();
+		auto& outlineAtlas = glyphCache->GetShadowAtlasTexture();
+		const bool dumpPrimaryAtlas = primaryAtlas.NeedsUpload() || !primaryAtlas.HasTexture();
+		const bool dumpOutlineAtlas = outlineAtlas.NeedsUpload() || !outlineAtlas.HasTexture();
+
 		glyphCache->UpdateAtlases();
-		renderer->HandleTextureUpdate(glyphCache->GetAtlasTexture(), &glyphCache->GetShadowAtlasTexture(), false);
+		renderer->HandleTextureUpdate(primaryAtlas, &outlineAtlas, false);
+
+		if (debug_DumpAtlases && dumpPrimaryAtlas)
+			DumpAtlasBitmap(primaryAtlas, descriptor, debugId, "primary");
+		if (debug_DumpAtlases && dumpOutlineAtlas)
+			DumpAtlasBitmap(outlineAtlas, descriptor, debugId, "outline");
 
 		for (const RenderCommand& command: commands) {
 			fonts::render::FontRenderState state = command.state;
@@ -588,6 +654,7 @@ public:
 	CMatrix44f projMatrix = CMatrix44f::Identity();
 	CMatrix44f worldViewMatrix = CMatrix44f::Identity();
 	CMatrix44f worldProjMatrix = CMatrix44f::Identity();
+	std::uint32_t debugId = 0;
 	std::string familyName;
 	std::string styleName;
 };
