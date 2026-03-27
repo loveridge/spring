@@ -408,6 +408,7 @@ void ShaderFontRenderer::HandleTextureUpdate(GlyphAtlasTexture& primaryAtlas, Gl
 		outlineTextureBinding.textureUnit = 1;
 		outlineTextureBinding.width = std::max(outlineAtlas->GetWidth(), 0);
 		outlineTextureBinding.height = std::max(outlineAtlas->GetHeight(), 0);
+		outlineTextureBinding.alphaOnly = (outlineAtlas->GetPixelFormat() == GlyphAtlasTexture::PixelFormat::Alpha);
 	} else {
 		outlineTextureBinding = {};
 	}
@@ -805,6 +806,28 @@ void ShaderFontRenderer::BindTexture(const TextureBinding& binding)
 	const int textureUnit = std::max(binding.textureUnit, 0);
 	glActiveTexture(GL_TEXTURE0 + textureUnit);
 	glBindTexture(GL_TEXTURE_2D, binding.textureId);
+
+	// Lua can bind the font atlas directly; reassert the font sampling state so
+	// later text draws do not inherit stale texture-object parameters.
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+
+	constexpr GLfloat borderColor[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+	glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+
+	if (binding.alphaOnly) {
+		constexpr GLint swizzleMask[] = {GL_ONE, GL_ONE, GL_ONE, GL_RED};
+		glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
+	} else {
+		constexpr GLint swizzleMask[] = {GL_RED, GL_GREEN, GL_BLUE, GL_ALPHA};
+		glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
+	}
 }
 
 void ShaderFontRenderer::UpdateTextureBindingFromAtlas(const GlyphAtlasTexture& atlas)
@@ -813,6 +836,7 @@ void ShaderFontRenderer::UpdateTextureBindingFromAtlas(const GlyphAtlasTexture& 
 	primaryTextureBinding.textureUnit = 0;
 	primaryTextureBinding.width = std::max(atlas.GetWidth(), 0);
 	primaryTextureBinding.height = std::max(atlas.GetHeight(), 0);
+	primaryTextureBinding.alphaOnly = (atlas.GetPixelFormat() == GlyphAtlasTexture::PixelFormat::Alpha);
 }
 
 void ShaderFontRenderer::ClearQueuedBatches()

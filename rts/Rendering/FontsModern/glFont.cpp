@@ -650,7 +650,7 @@ std::shared_ptr<CglFont> CglFont::LoadFont(const std::string& fontFile, bool sma
 std::shared_ptr<CglFont> CglFont::LoadFont(const std::string& fontFile, int size, int outlineWidth, float outlineWeight)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-		LOG("[%s] loading font \"%s\"", __func__, fontFile.c_str());
+	LOG("[%s] loading font \"%s\"", __func__, fontFile.c_str());
 	const std::string normalizedFontFile = NormalizeFontPath(fontFile);
 
 	if (auto existing = FindFont(normalizedFontFile, size, outlineWidth, outlineWeight); existing != nullptr)

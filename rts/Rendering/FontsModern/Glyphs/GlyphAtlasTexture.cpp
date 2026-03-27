@@ -15,7 +15,7 @@ namespace {
 [[nodiscard]] GLenum ToInternalFormat(GlyphAtlasTexture::PixelFormat format) noexcept
 {
 	switch (format) {
-		case GlyphAtlasTexture::PixelFormat::BGRA: return GL_RGBA8;
+		case GlyphAtlasTexture::PixelFormat::BGRA:  return GL_RGBA8;
 		case GlyphAtlasTexture::PixelFormat::Alpha: return GL_R8;
 	}
 
@@ -25,11 +25,109 @@ namespace {
 [[nodiscard]] GLenum ToExternalFormat(GlyphAtlasTexture::PixelFormat format) noexcept
 {
 	switch (format) {
-		case GlyphAtlasTexture::PixelFormat::BGRA: return GL_BGRA;
+		case GlyphAtlasTexture::PixelFormat::BGRA:  return GL_BGRA;
 		case GlyphAtlasTexture::PixelFormat::Alpha: return GL_RED;
 	}
 
 	return GL_RED;
+}
+
+[[nodiscard]] int GetChannelCountForFormat(GlyphAtlasTexture::PixelFormat format) noexcept
+{
+	switch (format) {
+		case GlyphAtlasTexture::PixelFormat::BGRA:  return 4;
+		case GlyphAtlasTexture::PixelFormat::Alpha: return 1;
+	}
+
+	return 1;
+}
+
+void ClearBitmap(CBitmap& bitmap)
+{
+	if (bitmap.Empty())
+		return;
+
+	std::memset(bitmap.GetRawMem(), 0, bitmap.GetMemSize());
+}
+
+void CopyBitmapSameChannels(
+	CBitmap& dst,
+	const CBitmap& src,
+	int copyWidth,
+	int copyHeight
+)
+{
+	if (copyWidth <= 0 || copyHeight <= 0)
+		return;
+
+	const int channels = dst.channels;
+	if (channels != src.channels)
+		throw std::invalid_argument("CopyBitmapSameChannels requires matching channel counts");
+
+	const std::size_t rowBytes = static_cast<std::size_t>(copyWidth) * channels;
+	const std::uint8_t* srcMem = src.GetRawMem();
+	std::uint8_t* dstMem = dst.GetRawMem();
+
+	for (int row = 0; row < copyHeight; ++row) {
+		const std::size_t srcOffset = static_cast<std::size_t>(row) * src.xsize * channels;
+		const std::size_t dstOffset = static_cast<std::size_t>(row) * dst.xsize * channels;
+		std::memcpy(dstMem + dstOffset, srcMem + srcOffset, rowBytes);
+	}
+}
+
+void ConvertBitmapRegion(
+	CBitmap& dst,
+	const CBitmap& src,
+	int copyWidth,
+	int copyHeight,
+	GlyphAtlasTexture::PixelFormat dstFormat,
+	GlyphAtlasTexture::PixelFormat srcFormat
+)
+{
+	if (copyWidth <= 0 || copyHeight <= 0)
+		return;
+
+	const std::uint8_t* srcMem = src.GetRawMem();
+	std::uint8_t* dstMem = dst.GetRawMem();
+
+	const int srcChannels = src.channels;
+	const int dstChannels = dst.channels;
+
+	if (srcChannels != GetChannelCountForFormat(srcFormat))
+		throw std::invalid_argument("ConvertBitmapRegion source bitmap channel count does not match source format");
+	if (dstChannels != GetChannelCountForFormat(dstFormat))
+		throw std::invalid_argument("ConvertBitmapRegion destination bitmap channel count does not match destination format");
+
+	for (int y = 0; y < copyHeight; ++y) {
+		for (int x = 0; x < copyWidth; ++x) {
+			const std::size_t srcIdx = (static_cast<std::size_t>(y) * src.xsize + x) * srcChannels;
+			const std::size_t dstIdx = (static_cast<std::size_t>(y) * dst.xsize + x) * dstChannels;
+
+			if (srcFormat == dstFormat) {
+				std::memcpy(dstMem + dstIdx, srcMem + srcIdx, srcChannels);
+				continue;
+			}
+
+			if (srcFormat == GlyphAtlasTexture::PixelFormat::Alpha && dstFormat == GlyphAtlasTexture::PixelFormat::BGRA) {
+				// Preserve the semantic used by alpha-mask glyph textures:
+				// sampling an alpha atlas yields white RGB and alpha from the glyph mask.
+				const std::uint8_t alpha = srcMem[srcIdx + 0];
+				dstMem[dstIdx + 0] = 0xFF; // B
+				dstMem[dstIdx + 1] = 0xFF; // G
+				dstMem[dstIdx + 2] = 0xFF; // R
+				dstMem[dstIdx + 3] = alpha;
+				continue;
+			}
+
+			if (srcFormat == GlyphAtlasTexture::PixelFormat::BGRA && dstFormat == GlyphAtlasTexture::PixelFormat::Alpha) {
+				// For color glyphs collapsing to alpha, keep coverage from alpha.
+				dstMem[dstIdx + 0] = srcMem[srcIdx + 3];
+				continue;
+			}
+
+			throw std::invalid_argument("ConvertBitmapRegion encountered an unsupported format conversion");
+		}
+	}
 }
 
 } // namespace
@@ -60,7 +158,8 @@ void GlyphAtlasTexture::SetPixelFormat(PixelFormat pixelFormat) noexcept
 		return;
 
 	CBitmap previousBitmap = std::move(atlasBitmap);
-	Dimensions previousSize = atlasSize;
+	const Dimensions previousSize = atlasSize;
+	const PixelFormat previousFormat = format;
 
 	format = pixelFormat;
 	textureStorageDirty = true;
@@ -68,8 +167,25 @@ void GlyphAtlasTexture::SetPixelFormat(PixelFormat pixelFormat) noexcept
 
 	if (!atlasSize.Empty()) {
 		AllocateBitmap(atlasSize.width, atlasSize.height);
-		if (!previousSize.Empty() && !previousBitmap.Empty())
-			atlasBitmap.CopySubImage(previousBitmap, 0, 0);
+		ClearBitmap(atlasBitmap);
+
+		if (!previousSize.Empty() && !previousBitmap.Empty()) {
+			const int copyWidth = std::min(previousSize.width, atlasSize.width);
+			const int copyHeight = std::min(previousSize.height, atlasSize.height);
+
+			if (previousBitmap.channels == atlasBitmap.channels) {
+				CopyBitmapSameChannels(atlasBitmap, previousBitmap, copyWidth, copyHeight);
+			} else {
+				ConvertBitmapRegion(atlasBitmap, previousBitmap, copyWidth, copyHeight, format, previousFormat);
+			}
+
+			dirtyBitmap = true;
+			dirtyRegions.clear();
+			dirtyRegions.push_back({0, 0, copyWidth, copyHeight});
+		} else {
+			dirtyBitmap = false;
+			dirtyRegions.clear();
+		}
 	}
 }
 
@@ -122,24 +238,21 @@ void GlyphAtlasTexture::Reallocate(int width, int height, bool preserveContents)
 		return;
 
 	CBitmap previousBitmap = std::move(atlasBitmap);
-	Dimensions previousSize = atlasSize;
+	const Dimensions previousSize = atlasSize;
+	const PixelFormat previousFormat = format;
 
 	AllocateBitmap(width, height);
+	ClearBitmap(atlasBitmap);
 	atlasSize = {width, height};
 
 	if (preserveContents && !previousSize.Empty() && !previousBitmap.Empty()) {
 		const int copyWidth = std::min(previousSize.width, width);
 		const int copyHeight = std::min(previousSize.height, height);
-		const int channels = GetChannelCount();
-		const std::size_t rowBytes = static_cast<std::size_t>(copyWidth) * channels;
 
-		const std::uint8_t* src = previousBitmap.GetRawMem();
-		std::uint8_t* dst = atlasBitmap.GetRawMem();
-
-		for (int row = 0; row < copyHeight; ++row) {
-			const std::size_t srcOffset = static_cast<std::size_t>(row) * previousSize.width * channels;
-			const std::size_t dstOffset = static_cast<std::size_t>(row) * width * channels;
-			std::memcpy(dst + dstOffset, src + srcOffset, rowBytes);
+		if (previousBitmap.channels == atlasBitmap.channels) {
+			CopyBitmapSameChannels(atlasBitmap, previousBitmap, copyWidth, copyHeight);
+		} else {
+			ConvertBitmapRegion(atlasBitmap, previousBitmap, copyWidth, copyHeight, format, previousFormat);
 		}
 	}
 
@@ -148,7 +261,7 @@ void GlyphAtlasTexture::Reallocate(int width, int height, bool preserveContents)
 	dirtyBitmap = preserveContents && !previousSize.Empty() && !previousBitmap.Empty();
 	dirtyRegions.clear();
 
-	if (preserveContents && !previousSize.Empty() && !previousBitmap.Empty()) {
+	if (dirtyBitmap) {
 		dirtyRegions.push_back({0, 0, std::min(previousSize.width, width), std::min(previousSize.height, height)});
 	}
 }
@@ -223,6 +336,9 @@ void GlyphAtlasTexture::Upload()
 
 	CreateTexture();
 	glBindTexture(GL_TEXTURE_2D, textureId);
+
+	GLint previousUnpackAlignment = 4;
+	glGetIntegerv(GL_UNPACK_ALIGNMENT, &previousUnpackAlignment);
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
 	const GLenum internalFormat = ToInternalFormat(format);
@@ -272,6 +388,7 @@ void GlyphAtlasTexture::Upload()
 		}
 	}
 
+	glPixelStorei(GL_UNPACK_ALIGNMENT, previousUnpackAlignment);
 	glBindTexture(GL_TEXTURE_2D, 0);
 	MarkUploaded();
 }

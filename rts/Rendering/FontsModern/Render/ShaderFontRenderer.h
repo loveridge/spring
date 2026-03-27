@@ -33,6 +33,7 @@ public:
 		int textureUnit = 0;
 		std::uint32_t width = 0;
 		std::uint32_t height = 0;
+		bool alphaOnly = true;
 	};
 
 	struct UniformState {

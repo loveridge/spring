@@ -61,9 +61,23 @@ namespace {
 	return glyphKey + ":outline";
 }
 
-[[nodiscard]] GlyphRect ToGlyphRect(const AtlasedTexture& uv)
+[[nodiscard]] GlyphRect ToGlyphRectExclusive(const AtlasedTexture& rect, const GlyphAtlasTexture& atlas) noexcept
 {
-	return GlyphRect(uv.x1, uv.y1, uv.x2 - uv.x1, uv.y2 - uv.y1);
+	if (atlas.GetWidth() <= 0 || atlas.GetHeight() <= 0)
+		return {};
+
+	if (rect.x2 <= rect.x1 || rect.y2 <= rect.y1)
+		return {};
+
+	const float invW = 1.0f / atlas.GetWidth();
+	const float invH = 1.0f / atlas.GetHeight();
+
+	return GlyphRect(
+		rect.x1 * invW,
+		rect.y1 * invH,
+		(rect.x2 - rect.x1) * invW,
+		(rect.y2 - rect.y1) * invH
+	);
 }
 
 [[nodiscard]] bool AllowColorFonts() noexcept
@@ -622,11 +636,11 @@ void GlyphAtlasCache::UpdateAtlasRegions()
 	for (auto& [codepoint, glyph] : glyphsByCodepoint) {
 		const std::string glyphKey = MakeAtlasGlyphKey(glyph);
 		if (atlasAllocator->contains(glyphKey))
-			glyph.atlasUV = ToGlyphRect(atlasAllocator->GetTexCoordsEdge(glyphKey));
+			glyph.atlasUV = ToGlyphRectExclusive(atlasAllocator->GetEntry(glyphKey), atlasTexture);
 
 		const std::string outlineKey = MakeOutlineGlyphKey(glyphKey);
 		if (atlasAllocator->contains(outlineKey))
-			glyph.shadowAtlasUV = ToGlyphRect(atlasAllocator->GetTexCoordsEdge(outlineKey));
+			glyph.shadowAtlasUV = ToGlyphRectExclusive(atlasAllocator->GetEntry(outlineKey), shadowAtlasTexture);
 
 		(void)codepoint;
 	}
@@ -634,11 +648,11 @@ void GlyphAtlasCache::UpdateAtlasRegions()
 	for (auto& [glyphKey, glyph] : glyphsByGlyphIndex) {
 		const std::string atlasKey = MakeAtlasGlyphKey(glyph);
 		if (atlasAllocator->contains(atlasKey))
-			glyph.atlasUV = ToGlyphRect(atlasAllocator->GetTexCoordsEdge(atlasKey));
+			glyph.atlasUV = ToGlyphRectExclusive(atlasAllocator->GetEntry(atlasKey), atlasTexture);
 
 		const std::string outlineKey = MakeOutlineGlyphKey(atlasKey);
 		if (atlasAllocator->contains(outlineKey))
-			glyph.shadowAtlasUV = ToGlyphRect(atlasAllocator->GetTexCoordsEdge(outlineKey));
+			glyph.shadowAtlasUV = ToGlyphRectExclusive(atlasAllocator->GetEntry(outlineKey), shadowAtlasTexture);
 
 		(void)glyphKey;
 	}
