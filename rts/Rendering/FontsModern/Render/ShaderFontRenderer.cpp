@@ -197,6 +197,11 @@ void main()
 	return &stateStack.back();
 }
 
+[[nodiscard]] bool ShouldUseDepthTest(const FontRenderState* state) noexcept
+{
+	return (state != nullptr) && state->useWorldSpace;
+}
+
 [[nodiscard]] FontColor ResolveGlyphColor(const FontRenderState* state, bool outlinePass) noexcept
 {
 	if (state == nullptr)
@@ -242,6 +247,104 @@ void main()
 [[nodiscard]] GLenum GetBufferUsage(const ShaderFontRenderer::CreateOptions& options) noexcept
 {
 	return options.bufferedRendering ? GL_STREAM_DRAW : GL_DYNAMIC_DRAW;
+}
+
+struct SavedTextureUnitBinding {
+	int unit = 0;
+	GLint texture2D = 0;
+	bool valid = false;
+};
+
+struct SavedGLRenderState {
+	GLint program = 0;
+	GLint activeTexture = GL_TEXTURE0;
+	GLint vertexArray = 0;
+	GLint arrayBuffer = 0;
+	GLint elementArrayBuffer = 0;
+	SavedTextureUnitBinding primaryTexture;
+	SavedTextureUnitBinding outlineTexture;
+};
+
+void CaptureTextureUnitBinding(SavedTextureUnitBinding& savedBinding, int textureUnit)
+{
+	savedBinding.unit = std::max(textureUnit, 0);
+	savedBinding.valid = true;
+
+	glActiveTexture(GL_TEXTURE0 + savedBinding.unit);
+	glGetIntegerv(GL_TEXTURE_BINDING_2D, &savedBinding.texture2D);
+}
+
+void RestoreTextureUnitBinding(const SavedTextureUnitBinding& savedBinding)
+{
+	if (!savedBinding.valid)
+		return;
+
+	glActiveTexture(GL_TEXTURE0 + savedBinding.unit);
+	glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(savedBinding.texture2D));
+}
+
+void UnbindTextureUnit(int textureUnit)
+{
+	glActiveTexture(GL_TEXTURE0 + std::max(textureUnit, 0));
+	glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+[[nodiscard]] bool UsesSameTextureUnit(const SavedTextureUnitBinding& savedBinding, int textureUnit) noexcept
+{
+	return savedBinding.valid && (savedBinding.unit == std::max(textureUnit, 0));
+}
+
+void CaptureRenderState(
+	SavedGLRenderState& savedState,
+	const ShaderFontRenderer::TextureBinding& primaryBinding,
+	const ShaderFontRenderer::TextureBinding& outlineBinding
+)
+{
+	glGetIntegerv(GL_CURRENT_PROGRAM, &savedState.program);
+	glGetIntegerv(GL_ACTIVE_TEXTURE, &savedState.activeTexture);
+	glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &savedState.arrayBuffer);
+	glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &savedState.elementArrayBuffer);
+
+	if (VAO::IsSupported())
+		glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &savedState.vertexArray);
+
+	CaptureTextureUnitBinding(savedState.primaryTexture, primaryBinding.textureUnit);
+
+	if (!UsesSameTextureUnit(savedState.primaryTexture, outlineBinding.textureUnit))
+		CaptureTextureUnitBinding(savedState.outlineTexture, outlineBinding.textureUnit);
+}
+
+void PrepareCleanRenderState(
+	const ShaderFontRenderer::TextureBinding& primaryBinding,
+	const ShaderFontRenderer::TextureBinding& outlineBinding
+)
+{
+	if (VAO::IsSupported())
+		glBindVertexArray(0);
+
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+	UnbindTextureUnit(primaryBinding.textureUnit);
+
+	if (std::max(outlineBinding.textureUnit, 0) != std::max(primaryBinding.textureUnit, 0))
+		UnbindTextureUnit(outlineBinding.textureUnit);
+
+	glActiveTexture(GL_TEXTURE0);
+}
+
+void RestoreRenderState(const SavedGLRenderState& savedState)
+{
+	RestoreTextureUnitBinding(savedState.primaryTexture);
+	RestoreTextureUnitBinding(savedState.outlineTexture);
+	glActiveTexture(savedState.activeTexture);
+
+	if (VAO::IsSupported())
+		glBindVertexArray(static_cast<GLuint>(savedState.vertexArray));
+
+	glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(savedState.arrayBuffer));
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLuint>(savedState.elementArrayBuffer));
+	glUseProgram(static_cast<GLuint>(savedState.program));
 }
 
 } // namespace
@@ -334,38 +437,69 @@ void ShaderFontRenderer::DrawQueued()
 	if (!HasQueuedGeometry())
 		return;
 
-	EnsureInitialized();
-
-	if (!IsReady()) {
-		if (createOptions.enableStatistics)
-			stats.droppedQuads += (primaryBatch.quadCount + outlineBatch.quadCount);
-
-		ClearQueuedBatches();
-		return;
-	}
-
 	bool autoPushedState = false;
 	if (createOptions.autoPushPopState && stateStack.empty()) {
 		PushState(FontRenderState {});
 		autoPushedState = true;
 	}
 
+#ifndef HEADLESS
+	if (globalRendering == nullptr) {
+		if (createOptions.enableStatistics)
+			stats.droppedQuads += (primaryBatch.quadCount + outlineBatch.quadCount);
+
+		ClearQueuedBatches();
+
+		if (autoPushedState)
+			PopState();
+
+		return;
+	}
+
+	SavedGLRenderState savedState;
+	CaptureRenderState(savedState, primaryTextureBinding, outlineTextureBinding);
+
+	glPushAttrib(GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_TEXTURE_BIT);
+	PrepareCleanRenderState(primaryTextureBinding, outlineTextureBinding);
+#endif
+
+	EnsureInitialized();
+
+	if (!IsReady()) {
+		if (createOptions.enableStatistics)
+			stats.droppedQuads += (primaryBatch.quadCount + outlineBatch.quadCount);
+
+#ifndef HEADLESS
+		glPopAttrib();
+		RestoreRenderState(savedState);
+#endif
+
+		ClearQueuedBatches();
+
+		if (autoPushedState)
+			PopState();
+
+		return;
+	}
+
 	UploadBatch(outlineBatch, outlineBuffers);
 	UploadBatch(primaryBatch, primaryBuffers);
 
 #ifndef HEADLESS
-	GLint prevProgram = 0;
-	GLint prevActiveTexture = GL_TEXTURE0;
-	glGetIntegerv(GL_CURRENT_PROGRAM, &prevProgram);
-	glGetIntegerv(GL_ACTIVE_TEXTURE, &prevActiveTexture);
+	const FontRenderState* state = GetActiveState(stateStack);
 
-	glPushAttrib(GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_TEXTURE_BIT);
-	glDisable(GL_DEPTH_TEST);
+	if (ShouldUseDepthTest(state)) {
+		glEnable(GL_DEPTH_TEST);
+		glDepthFunc(GL_LEQUAL);
+	} else {
+		glDisable(GL_DEPTH_TEST);
+	}
+
+	glDepthMask(GL_FALSE);
 	glDisable(GL_ALPHA_TEST);
 	glDisable(GL_CULL_FACE);
 	glEnable(GL_BLEND);
 
-	const FontRenderState* state = GetActiveState(stateStack);
 	if (state == nullptr || !state->userDefinedBlending)
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -375,12 +509,8 @@ void ShaderFontRenderer::DrawQueued()
 	SubmitBatch(primaryBatch, primaryBuffers, primaryTextureBinding, false);
 
 	programResources.program->Disable();
-
-	if (prevProgram > 0)
-		glUseProgram(prevProgram);
-
-	glActiveTexture(prevActiveTexture);
 	glPopAttrib();
+	RestoreRenderState(savedState);
 #endif
 
 	ClearQueuedBatches();
@@ -391,6 +521,11 @@ void ShaderFontRenderer::DrawQueued()
 
 void ShaderFontRenderer::HandleTextureUpdate(GlyphAtlasTexture& primaryAtlas, GlyphAtlasTexture* outlineAtlas, bool onlyUpload)
 {
+#ifndef HEADLESS
+	GLint prevTextureBinding = 0;
+	glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevTextureBinding);
+#endif
+
 	if (createOptions.autoUploadTextures) {
 		if (onlyUpload || primaryAtlas.NeedsUpload() || !primaryAtlas.HasTexture()) {
 			primaryAtlas.Upload();
@@ -402,6 +537,10 @@ void ShaderFontRenderer::HandleTextureUpdate(GlyphAtlasTexture& primaryAtlas, Gl
 			}
 		}
 	}
+
+#ifndef HEADLESS
+	glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(prevTextureBinding));
+#endif
 
 	UpdateTextureBindingFromAtlas(primaryTextureBinding, primaryAtlas);
 
