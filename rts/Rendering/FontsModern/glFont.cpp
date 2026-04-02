@@ -62,7 +62,7 @@ CONFIG(std::string, FontRendererBackend).defaultValue("slug").description("Selec
 std::shared_ptr<CglFont> font = nullptr;
 std::shared_ptr<CglFont> smallFont = nullptr;
 
-const bool debug_DumpAtlases = true;
+const bool debug_DumpAtlases = false;
 
 namespace {
 
@@ -438,6 +438,8 @@ public:
 
 	void QueueCommand(RenderCommand command, bool worldSpace)
 	{
+		RECOIL_DETAILED_TRACY_ZONE;
+
 		if (worldSpace)
 			worldCommands.emplace_back(std::move(command));
 		else
@@ -446,6 +448,8 @@ public:
 
 	void FlushCommands(std::vector<RenderCommand>& commands, bool userDefinedBlending)
 	{
+		RECOIL_DETAILED_TRACY_ZONE;
+
 #ifdef HEADLESS
 		(void)commands;
 		(void)userDefinedBlending;
@@ -483,16 +487,22 @@ public:
 
 	void FlushScreenCommands(bool userDefinedBlending)
 	{
+		RECOIL_DETAILED_TRACY_ZONE;
+
 		FlushCommands(screenCommands, userDefinedBlending);
 	}
 
 	void FlushWorldCommands(bool userDefinedBlending)
 	{
+		RECOIL_DETAILED_TRACY_ZONE;
+
 		FlushCommands(worldCommands, userDefinedBlending);
 	}
 
 	fonts::text::LayoutOptions MakeLayoutOptions(float x, float y, float size, FontOption options) const
 	{
+		RECOIL_DETAILED_TRACY_ZONE;
+
 		fonts::text::LayoutOptions layoutOptions;
 		layoutOptions.options = NormalizeOptions(options);
 		layoutOptions.fontSize = std::max(size, 1.0f);
@@ -507,6 +517,8 @@ public:
 
 	fonts::render::FontRenderState MakeScreenState(FontOption options, bool buffered) const
 	{
+		RECOIL_DETAILED_TRACY_ZONE;
+
 		fonts::render::FontRenderState state;
 		state.primaryColor = ToFontColor(textColor);
 		state.outlineColor = ToFontColor(outlineColor);
@@ -528,6 +540,8 @@ public:
 
 	fonts::render::FontRenderState MakeWorldState(FontOption options, bool buffered)
 	{
+		RECOIL_DETAILED_TRACY_ZONE;
+
 		fonts::render::FontRenderState state;
 		state.primaryColor = ToFontColor(textColor);
 		state.outlineColor = ToFontColor(outlineColor);
@@ -559,6 +573,8 @@ public:
 
 	void QueueLayout(const RenderCommand& command)
 	{
+		RECOIL_DETAILED_TRACY_ZONE;
+
 		std::vector<const fonts::text::LaidOutRun*> orderedRuns;
 		for (const auto& line: command.layout.lines) {
 			for (const auto& run: line.runs)
@@ -609,6 +625,8 @@ public:
 
 	void QueueRun(const fonts::text::LaidOutRun& run, const RenderCommand& command, const float4& currentTextColor, const float4& currentOutlineColor)
 	{
+		RECOIL_DETAILED_TRACY_ZONE;
+
 		const float outlineExpand = (descriptor.pixelSize > 0)
 			? (command.renderSize * descriptor.outlineSize / static_cast<float>(descriptor.pixelSize))
 			: 0.0f;
