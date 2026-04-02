@@ -93,13 +93,13 @@ uint CalcRootCode(float y1, float y2, float y3)
 {
 	uint shift = 0U;
 
-	if (y1 > 0.0)
+	if (y1 < 0.0)
 		shift += 1U;
 
-	if (y2 > 0.0)
+	if (y2 < 0.0)
 		shift += 2U;
 
-	if (y3 > 0.0)
+	if (y3 < 0.0)
 		shift += 4U;
 
 	return ((0x2E74U >> shift) & 0x0101U);
@@ -299,13 +299,13 @@ uint CalcRootCode(float y1, float y2, float y3)
 {
 	uint shift = 0U;
 
-	if (y1 > 0.0)
+	if (y1 < 0.0)
 		shift += 1U;
 
-	if (y2 > 0.0)
+	if (y2 < 0.0)
 		shift += 2U;
 
-	if (y3 > 0.0)
+	if (y3 < 0.0)
 		shift += 4U;
 
 	return ((0x2E74U >> shift) & 0x0101U);
