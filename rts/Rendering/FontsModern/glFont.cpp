@@ -624,11 +624,15 @@ public:
 			const float w = command.renderSize * bounds.w;
 			const float h = command.renderSize * bounds.h;
 			const bool useSlugDecoratedPass = !glyph.slugInfo.Empty();
+			const float slugShadowPadding = command.drawShadow ? std::max(shadowShift, outlineExpand * 0.5f) : 0.0f;
+			const float slugOutlinePadding = command.drawOutline ? (outlineExpand * 0.5f) : 0.0f;
+			const float slugDecoratedPadding = std::max(slugShadowPadding, slugOutlinePadding);
 
 			fonts::render::PreparedGlyphQuad primaryQuad;
 			primaryQuad.position = GlyphRect(x0, y0, w, h);
 			primaryQuad.atlasUV = glyph.atlasUV;
 			primaryQuad.slugInfo = glyph.slugInfo;
+			primaryQuad.slugCoordRect = GlyphRect(0.0f, 0.0f, glyph.slugInfo.width, glyph.slugInfo.height);
 			primaryQuad.color = ToFontColor(currentTextColor);
 			primaryQuad.z = glyph.z;
 			primaryQuad.visible = true;
@@ -637,28 +641,55 @@ public:
 			if ((!command.drawOutline && !command.drawShadow) || (glyph.outlineAtlasUV.Empty() && glyph.slugInfo.Empty()))
 				continue;
 
-			fonts::render::PreparedGlyphQuad decoratedQuad;
 			if (useSlugDecoratedPass) {
-				decoratedQuad.position = GlyphRect(
-					x0 + shadowShift,
-					y0 - shadowShift,
-					w,
-					h
-				);
+				auto addSlugDecoratedQuad = [&](float offsetX, float offsetY, float quadPadding, float samplePadding) {
+					fonts::render::PreparedGlyphQuad decoratedQuad;
+					decoratedQuad.position = GlyphRect(
+						x0 + offsetX - quadPadding,
+						y0 + offsetY + quadPadding,
+						w + (2.0f * quadPadding),
+						h - (2.0f * quadPadding)
+					);
+					decoratedQuad.atlasUV = glyph.outlineAtlasUV;
+					decoratedQuad.slugInfo = glyph.slugInfo;
+					decoratedQuad.slugCoordRect = GlyphRect(
+						-samplePadding,
+						-samplePadding,
+						glyph.slugInfo.width + (2.0f * samplePadding),
+						glyph.slugInfo.height + (2.0f * samplePadding)
+					);
+					decoratedQuad.color = ToFontColor(currentOutlineColor);
+					decoratedQuad.z = glyph.z;
+					decoratedQuad.visible = true;
+					renderer->AddOutlineQuad(decoratedQuad);
+				};
+
+				if (command.drawShadow) {
+					const float quadPadding = std::max(shadowShift, outlineExpand * 0.25f);
+					const float samplePadding = ((command.renderSize > 0.0f) ? (quadPadding / command.renderSize) : 0.0f) * 0.20f;
+					addSlugDecoratedQuad(shadowShift, -shadowShift, quadPadding, samplePadding);
+				}
+
+				if (command.drawOutline) {
+					const float quadPadding = std::max(outlineExpand * 0.75f, 0.0f);
+					const float samplePadding = ((command.renderSize > 0.0f) ? (quadPadding / command.renderSize) : 0.0f) * 0.45f;
+					addSlugDecoratedQuad(0.0f, 0.0f, quadPadding, samplePadding);
+				}
 			} else {
+				fonts::render::PreparedGlyphQuad decoratedQuad;
 				decoratedQuad.position = GlyphRect(
 					x0 + shadowShift - outlineExpand,
 					y0 - shadowShift + outlineExpand,
 					w + (2.0f * outlineExpand),
 					h - (2.0f * outlineExpand)
 				);
+				decoratedQuad.atlasUV = glyph.outlineAtlasUV;
+				decoratedQuad.slugInfo = glyph.slugInfo;
+				decoratedQuad.color = ToFontColor(currentOutlineColor);
+				decoratedQuad.z = glyph.z;
+				decoratedQuad.visible = true;
+				renderer->AddOutlineQuad(decoratedQuad);
 			}
-			decoratedQuad.atlasUV = glyph.outlineAtlasUV;
-			decoratedQuad.slugInfo = glyph.slugInfo;
-			decoratedQuad.color = ToFontColor(currentOutlineColor);
-			decoratedQuad.z = glyph.z;
-			decoratedQuad.visible = true;
-			renderer->AddOutlineQuad(decoratedQuad);
 		}
 	}
 

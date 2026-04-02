@@ -494,6 +494,7 @@ void main()
 	quad.position.y += glyph.y;
 	quad.atlasUV = outlinePass ? glyph.outlineAtlasUV : glyph.atlasUV;
 	quad.slugInfo = glyph.slugInfo;
+	quad.slugCoordRect = GlyphRect(0.0f, 0.0f, glyph.slugInfo.width, glyph.slugInfo.height);
 	quad.color = ResolveGlyphColor(state, outlinePass);
 	quad.z = ResolveGlyphDepth(glyph, state, outlinePass);
 	quad.visible = glyph.visible && !quad.slugInfo.Empty();
@@ -956,10 +957,14 @@ void SlugFontRenderer::QueueQuad(RenderBatch& batch, const PreparedGlyphQuad& qu
 	float x1 = quad.position.x + quad.position.w;
 	float y1 = quad.position.y + quad.position.h;
 
-	float u0 = 0.0f;
-	float v0 = quad.slugInfo.height;
-	float u1 = quad.slugInfo.width;
-	float v1 = 0.0f;
+	const GlyphRect& coordRect = quad.slugCoordRect.Empty()
+		? GlyphRect(0.0f, 0.0f, quad.slugInfo.width, quad.slugInfo.height)
+		: quad.slugCoordRect;
+
+	float u0 = coordRect.x;
+	float v0 = coordRect.y + coordRect.h;
+	float u1 = coordRect.x + coordRect.w;
+	float v1 = coordRect.y;
 
 	if (x1 < x0) {
 		std::swap(x0, x1);

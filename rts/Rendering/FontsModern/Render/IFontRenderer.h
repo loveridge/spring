@@ -29,6 +29,7 @@ struct PreparedGlyphQuad {
 	GlyphRect position;
 	GlyphRect atlasUV;
 	SlugGlyphInfo slugInfo{};
+	GlyphRect slugCoordRect;
 	FontColor color{};
 	float z = 0.0f;
 	bool visible = true;
