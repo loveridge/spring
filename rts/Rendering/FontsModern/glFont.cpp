@@ -623,6 +623,7 @@ public:
 			const float y0 = glyph.y + (command.renderSize * bounds.y0());
 			const float w = command.renderSize * bounds.w;
 			const float h = command.renderSize * bounds.h;
+			const bool useSlugDecoratedPass = !glyph.slugInfo.Empty();
 
 			fonts::render::PreparedGlyphQuad primaryQuad;
 			primaryQuad.position = GlyphRect(x0, y0, w, h);
@@ -637,12 +638,21 @@ public:
 				continue;
 
 			fonts::render::PreparedGlyphQuad decoratedQuad;
-			decoratedQuad.position = GlyphRect(
-				x0 + shadowShift - outlineExpand,
-				y0 - shadowShift + outlineExpand,
-				w + (2.0f * outlineExpand),
-				h - (2.0f * outlineExpand)
-			);
+			if (useSlugDecoratedPass) {
+				decoratedQuad.position = GlyphRect(
+					x0 + shadowShift,
+					y0 - shadowShift,
+					w,
+					h
+				);
+			} else {
+				decoratedQuad.position = GlyphRect(
+					x0 + shadowShift - outlineExpand,
+					y0 - shadowShift + outlineExpand,
+					w + (2.0f * outlineExpand),
+					h - (2.0f * outlineExpand)
+				);
+			}
 			decoratedQuad.atlasUV = glyph.outlineAtlasUV;
 			decoratedQuad.slugInfo = glyph.slugInfo;
 			decoratedQuad.color = ToFontColor(currentOutlineColor);
