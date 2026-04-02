@@ -15,11 +15,10 @@ namespace Shader {
 class VAO;
 class VBO;
 class CMatrix44f;
-class GlyphAtlasTexture;
 
 namespace fonts::render {
 
-class ShaderFontRenderer final : public IFontRenderer {
+class SlugFontRenderer final : public IFontRenderer {
 public:
 	struct CreateOptions {
 		bool bufferedRendering = true;
@@ -33,36 +32,24 @@ public:
 		int textureUnit = 0;
 		std::uint32_t width = 0;
 		std::uint32_t height = 0;
-		bool alphaOnly = true;
-		bool sdf = false;
 	};
 
 	struct UniformState {
 		const CMatrix44f* matrix = nullptr;
 		float depth = 0.0f;
 		float gamma = 1.0f;
-		float outlineWeight = 0.0f;
-		float outlineRadius = 0.0f;
 		bool usePixelAlignedCoordinates = false;
-		bool enableSDF = false;
-	};
-
-	struct QueuedQuadBuffers {
-		std::size_t primaryQuadCount = 0;
-		std::size_t outlineQuadCount = 0;
-		std::size_t primaryVertexCount = 0;
-		std::size_t outlineVertexCount = 0;
 	};
 
 public:
-	ShaderFontRenderer();
-	explicit ShaderFontRenderer(const CreateOptions& options);
-	~ShaderFontRenderer() override;
+	SlugFontRenderer();
+	explicit SlugFontRenderer(const CreateOptions& options);
+	~SlugFontRenderer() override;
 
-	ShaderFontRenderer(const ShaderFontRenderer&) = delete;
-	ShaderFontRenderer& operator=(const ShaderFontRenderer&) = delete;
-	ShaderFontRenderer(ShaderFontRenderer&&) noexcept;
-	ShaderFontRenderer& operator=(ShaderFontRenderer&&) noexcept;
+	SlugFontRenderer(const SlugFontRenderer&) = delete;
+	SlugFontRenderer& operator=(const SlugFontRenderer&) = delete;
+	SlugFontRenderer(SlugFontRenderer&&) noexcept;
+	SlugFontRenderer& operator=(SlugFontRenderer&&) noexcept;
 
 	void AddPrimaryQuad(const PreparedGlyphQuad& quad) override;
 	void AddOutlineQuad(const PreparedGlyphQuad& quad) override;
@@ -78,34 +65,28 @@ public:
 	void ClearStats() override;
 
 	[[nodiscard]] bool IsValid() const override;
-	[[nodiscard]] bool IsReady() const;
-	[[nodiscard]] bool HasQueuedGeometry() const;
-	[[nodiscard]] QueuedQuadBuffers GetQueuedBufferStats() const;
 
 	void EnsureInitialized();
-	void ReleaseDeviceResources();
-
-	void SetUniformState(const UniformState& state);
-	[[nodiscard]] const UniformState& GetUniformState() const;
-
-	void SetPrimaryTextureBinding(const TextureBinding& binding);
-	void SetOutlineTextureBinding(const TextureBinding& binding);
-	[[nodiscard]] const TextureBinding& GetPrimaryTextureBinding() const;
-	[[nodiscard]] const TextureBinding& GetOutlineTextureBinding() const;
-
-	[[nodiscard]] const CreateOptions& GetCreateOptions() const;
 
 private:
 	struct Vertex {
 		float posX = 0.0f;
 		float posY = 0.0f;
 		float posZ = 0.0f;
-		float uvX = 0.0f;
-		float uvY = 0.0f;
+		float localX = 0.0f;
+		float localY = 0.0f;
+		float bandScaleX = 0.0f;
+		float bandScaleY = 0.0f;
+		float bandOffsetX = 0.0f;
+		float bandOffsetY = 0.0f;
 		float colorR = 1.0f;
 		float colorG = 1.0f;
 		float colorB = 1.0f;
 		float colorA = 1.0f;
+		std::uint32_t glyphX = 0;
+		std::uint32_t glyphY = 0;
+		std::uint32_t bandMaxX = 0;
+		std::uint32_t bandMaxY = 0;
 	};
 
 	struct RenderBatch {
@@ -130,17 +111,16 @@ private:
 	void EnsureBufferCapacity(RenderBatch& batch, BufferResources& bufferResources);
 	void QueueQuad(RenderBatch& batch, const PreparedGlyphQuad& quad);
 	void UploadBatch(RenderBatch& batch, BufferResources& bufferResources);
-	void SubmitBatch(const RenderBatch& batch, const BufferResources& bufferResources, const TextureBinding& binding, bool outlinePass);
-	void ApplyUniforms(const TextureBinding& binding, bool outlinePass);
-	void BindTexture(const TextureBinding& binding);
-	void UpdateTextureBindingFromAtlas(TextureBinding& binding, const GlyphAtlasTexture& atlas);
+	void SubmitBatch(const RenderBatch& batch, const BufferResources& bufferResources);
+	void ApplyUniforms();
+	void BindTextures() const;
 	void ClearQueuedBatches();
 
 private:
 	CreateOptions createOptions;
 	UniformState uniformState;
-	TextureBinding primaryTextureBinding;
-	TextureBinding outlineTextureBinding;
+	TextureBinding curveTextureBinding;
+	TextureBinding bandTextureBinding;
 	FontRendererStats stats;
 	std::vector<FontRenderState> stateStack;
 	ProgramResources programResources;

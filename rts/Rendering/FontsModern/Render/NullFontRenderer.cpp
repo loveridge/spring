@@ -2,6 +2,8 @@
 
 #include "NullFontRenderer.h"
 
+#include "Rendering/FontsModern/Glyphs/GlyphAtlasCache.h"
+
 namespace fonts::render {
 
 NullFontRenderer::NullFontRenderer() = default;
@@ -32,7 +34,7 @@ void NullFontRenderer::AddOutlineQuad(const PreparedGlyphQuad& quad)
 
 void NullFontRenderer::AddPrimaryGlyph(const fonts::text::LaidOutGlyph& glyph)
 {
-	if (!glyph.visible || glyph.atlasUV.Empty()) {
+	if (!glyph.visible || (glyph.atlasUV.Empty() && glyph.slugInfo.Empty())) {
 		stats.droppedQuads += 1;
 		return;
 	}
@@ -42,7 +44,7 @@ void NullFontRenderer::AddPrimaryGlyph(const fonts::text::LaidOutGlyph& glyph)
 
 void NullFontRenderer::AddOutlineGlyph(const fonts::text::LaidOutGlyph& glyph)
 {
-	if (!glyph.visible || !glyph.usesOutline || glyph.outlineAtlasUV.Empty()) {
+	if (!glyph.visible || !glyph.usesOutline || (glyph.outlineAtlasUV.Empty() && glyph.slugInfo.Empty())) {
 		stats.droppedQuads += 1;
 		return;
 	}
@@ -54,14 +56,14 @@ void NullFontRenderer::DrawQueued()
 {
 }
 
-void NullFontRenderer::HandleTextureUpdate(GlyphAtlasTexture& primaryAtlas, GlyphAtlasTexture* outlineAtlas, bool onlyUpload)
+void NullFontRenderer::HandleGlyphCacheUpdate(fonts::GlyphAtlasCache& glyphCache, bool onlyUpload)
 {
 	stats.primaryTextureUploads += 1;
 
-	if (outlineAtlas != nullptr)
+	if (glyphCache.GetShadowAtlasTexture().HasTexture() || glyphCache.GetShadowAtlasTexture().NeedsUpload())
 		stats.outlineTextureUploads += 1;
 
-	(void)primaryAtlas;
+	(void)glyphCache;
 	(void)onlyUpload;
 }
 

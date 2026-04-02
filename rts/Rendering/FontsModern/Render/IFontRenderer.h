@@ -12,6 +12,7 @@
 #include "System/Matrix44f.h"
 
 class GlyphAtlasTexture;
+namespace fonts { class GlyphAtlasCache; }
 struct SColor;
 struct float3;
 struct float4;
@@ -27,13 +28,14 @@ namespace fonts::render {
 struct PreparedGlyphQuad {
 	GlyphRect position;
 	GlyphRect atlasUV;
+	SlugGlyphInfo slugInfo{};
 	FontColor color{};
 	float z = 0.0f;
 	bool visible = true;
 
 	bool Empty() const noexcept
 	{
-		return position.Empty() || atlasUV.Empty() || !visible;
+		return position.Empty() || (atlasUV.Empty() && slugInfo.Empty()) || !visible;
 	}
 };
 
@@ -102,9 +104,7 @@ public:
 
 	virtual void DrawQueued() = 0;
 
-	virtual void HandleTextureUpdate(GlyphAtlasTexture& primaryAtlas,
-	                                 GlyphAtlasTexture* outlineAtlas = nullptr,
-	                                 bool onlyUpload = false) = 0;
+	virtual void HandleGlyphCacheUpdate(fonts::GlyphAtlasCache& glyphCache, bool onlyUpload = false) = 0;
 
 	virtual void PushState(const FontRenderState& state) = 0;
 	virtual void PopState() = 0;

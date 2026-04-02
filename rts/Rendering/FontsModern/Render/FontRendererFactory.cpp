@@ -4,6 +4,7 @@
 
 #include "NullFontRenderer.h"
 #include "ShaderFontRenderer.h"
+#include "SlugFontRenderer.h"
 
 #include "Rendering/Fonts/FontLogSection.h"
 
@@ -15,6 +16,7 @@ namespace {
 	switch (backend) {
 		case FontRendererBackend::Auto:   return "auto";
 		case FontRendererBackend::OpenGL: return "opengl";
+		case FontRendererBackend::Slug:   return "slug";
 		case FontRendererBackend::Null:   return "null";
 	}
 
@@ -46,6 +48,22 @@ namespace {
 				createOptions.enableStatistics = options.enableStatistics;
 
 				auto renderer = std::make_unique<ShaderFontRenderer>(createOptions);
+				if (renderer->IsValid())
+					return renderer;
+			}
+
+			return nullptr;
+
+		case FontRendererBackend::Slug:
+			if (!SupportsOpenGLBackend())
+				return nullptr;
+
+			{
+				SlugFontRenderer::CreateOptions createOptions;
+				createOptions.bufferedRendering = options.preferBufferedRendering;
+				createOptions.enableStatistics = options.enableStatistics;
+
+				auto renderer = std::make_unique<SlugFontRenderer>(createOptions);
 				if (renderer->IsValid())
 					return renderer;
 			}
@@ -105,6 +123,9 @@ bool FontRendererFactory::IsBackendSupported(FontRendererBackend backend)
 			return true;
 
 		case FontRendererBackend::OpenGL:
+			return SupportsOpenGLBackend();
+
+		case FontRendererBackend::Slug:
 			return SupportsOpenGLBackend();
 
 		case FontRendererBackend::Null:

@@ -52,6 +52,33 @@ struct FontMetrics {
 
 
 /**
+ * Per-glyph metadata for Slug-style vector rendering.
+ *
+ * The glyph-local render coordinates span [0, width] x [0, height], matching
+ * the control-point data stored in the Slug curve texture.
+ */
+struct SlugGlyphInfo {
+	float width = 0.0f;
+	float height = 0.0f;
+	float bandScaleX = 0.0f;
+	float bandScaleY = 0.0f;
+	float bandOffsetX = 0.0f;
+	float bandOffsetY = 0.0f;
+
+	std::uint32_t bandTexelX = 0;
+	std::uint32_t bandTexelY = 0;
+	std::uint32_t bandMaxX = 0;
+	std::uint32_t bandMaxY = 0;
+	std::uint32_t flags = 0;
+
+	constexpr bool Empty() const noexcept
+	{
+		return (width <= 0.0f) || (height <= 0.0f);
+	}
+};
+
+
+/**
  * Per-glyph metrics independent from renderer/backend ownership.
  */
 struct GlyphMetrics {
@@ -165,4 +192,3 @@ struct FontDepth {
  * New code should prefer GlyphRect directly.
  */
 using IGlyphRect = GlyphRect;
-

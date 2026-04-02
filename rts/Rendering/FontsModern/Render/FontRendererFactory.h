@@ -17,6 +17,7 @@ namespace fonts::render {
 enum class FontRendererBackend {
 	Auto,
 	OpenGL,
+	Slug,
 	Null,
 };
 

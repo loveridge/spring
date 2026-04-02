@@ -10,6 +10,7 @@
 #include <limits>
 
 #include "Rendering/Fonts/FontLogSection.h"
+#include "Rendering/FontsModern/Glyphs/GlyphAtlasCache.h"
 #include "Rendering/FontsModern/Glyphs/GlyphAtlasTexture.h"
 #include "Rendering/GL/VAO.h"
 #include "Rendering/GL/VBO.h"
@@ -519,8 +520,11 @@ void ShaderFontRenderer::DrawQueued()
 		PopState();
 }
 
-void ShaderFontRenderer::HandleTextureUpdate(GlyphAtlasTexture& primaryAtlas, GlyphAtlasTexture* outlineAtlas, bool onlyUpload)
+void ShaderFontRenderer::HandleGlyphCacheUpdate(fonts::GlyphAtlasCache& glyphCache, bool onlyUpload)
 {
+	auto& primaryAtlas = glyphCache.GetAtlasTexture();
+	auto& outlineAtlas = glyphCache.GetShadowAtlasTexture();
+
 #ifndef HEADLESS
 	GLint prevTextureBinding = 0;
 	glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevTextureBinding);
@@ -531,10 +535,8 @@ void ShaderFontRenderer::HandleTextureUpdate(GlyphAtlasTexture& primaryAtlas, Gl
 			primaryAtlas.Upload();
 		}
 
-		if (outlineAtlas != nullptr) {
-			if (onlyUpload || outlineAtlas->NeedsUpload() || !outlineAtlas->HasTexture()) {
-				outlineAtlas->Upload();
-			}
+		if (onlyUpload || outlineAtlas.NeedsUpload() || !outlineAtlas.HasTexture()) {
+			outlineAtlas.Upload();
 		}
 	}
 
@@ -543,18 +545,12 @@ void ShaderFontRenderer::HandleTextureUpdate(GlyphAtlasTexture& primaryAtlas, Gl
 #endif
 
 	UpdateTextureBindingFromAtlas(primaryTextureBinding, primaryAtlas);
-
-	if (outlineAtlas != nullptr) {
-		UpdateTextureBindingFromAtlas(outlineTextureBinding, *outlineAtlas);
-		outlineTextureBinding.textureUnit = 1;
-	} else {
-		outlineTextureBinding = {};
-	}
+	UpdateTextureBindingFromAtlas(outlineTextureBinding, outlineAtlas);
+	outlineTextureBinding.textureUnit = 1;
 
 	if (createOptions.enableStatistics) {
 		stats.primaryTextureUploads += 1;
-		if (outlineAtlas != nullptr)
-			stats.outlineTextureUploads += 1;
+		stats.outlineTextureUploads += 1;
 	}
 }
 

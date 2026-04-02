@@ -26,9 +26,7 @@ public:
 	void AddOutlineGlyph(const fonts::text::LaidOutGlyph& glyph) override;
 	void DrawQueued() override;
 
-	void HandleTextureUpdate(GlyphAtlasTexture& primaryAtlas,
-	                         GlyphAtlasTexture* outlineAtlas = nullptr,
-	                         bool onlyUpload = false) override;
+	void HandleGlyphCacheUpdate(fonts::GlyphAtlasCache& glyphCache, bool onlyUpload = false) override;
 	void PushState(const FontRenderState& state) override;
 	void PopState() override;
 

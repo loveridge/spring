@@ -155,6 +155,7 @@ set(sources_engine_Rendering
 		"${CMAKE_CURRENT_SOURCE_DIR}/FontsModern/Render/FontRendererFactory.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/FontsModern/Render/NullFontRenderer.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/FontsModern/Render/ShaderFontRenderer.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/FontsModern/Render/SlugFontRenderer.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/FontsModern/Text/HarfBuzzTextShaper.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/FontsModern/Text/TextControlCodes.cpp"
 		"${CMAKE_CURRENT_SOURCE_DIR}/FontsModern/Text/TextLayouter.cpp"

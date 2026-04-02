@@ -57,6 +57,7 @@ CONFIG(int,      FontOutlineWidth).defaultValue(2).description("Sets the width o
 CONFIG(int, SmallFontOutlineWidth).defaultValue(2).description("see FontOutlineWidth");
 CONFIG(float,      FontOutlineWeight).defaultValue(25.0f).description("Sets the opacity of Spring engine text, such as the title screen version number, clock, and basic UI. Does not affect LuaUI elements.");
 CONFIG(float, SmallFontOutlineWeight).defaultValue(10.0f).description("see FontOutlineWeight");
+CONFIG(std::string, FontRendererBackend).defaultValue("slug").description("Selects the modern font renderer backend: opengl, slug, auto, or null.");
 
 std::shared_ptr<CglFont> font = nullptr;
 std::shared_ptr<CglFont> smallFont = nullptr;
@@ -361,6 +362,23 @@ std::shared_ptr<fonts::FontFaceSet> BuildFaceSet(const FontDescriptor& descripto
 	return descriptor;
 }
 
+[[nodiscard]] fonts::render::FontRendererBackend ResolveRendererBackend()
+{
+	if (configHandler == nullptr)
+		return fonts::render::FontRendererBackend::OpenGL;
+
+	const std::string configuredBackend = StringToLower(configHandler->GetString("FontRendererBackend"));
+
+	if (configuredBackend == "auto")
+		return fonts::render::FontRendererBackend::Auto;
+	if (configuredBackend == "slug")
+		return fonts::render::FontRendererBackend::Slug;
+	if (configuredBackend == "null")
+		return fonts::render::FontRendererBackend::Null;
+
+	return fonts::render::FontRendererBackend::OpenGL;
+}
+
 [[nodiscard]] bool SameSpan(const fonts::text::TextSpan& lhs, const fonts::text::TextSpan& rhs) noexcept
 {
 	return
@@ -397,11 +415,15 @@ public:
 		if (faceSet == nullptr || faceSet->Empty())
 			throw content_error("Failed to load font file: " + descriptor.filePath);
 
-		glyphCache = std::make_shared<fonts::GlyphAtlasCache>(faceSet, descriptor.pixelSize, descriptor.outlineSize, descriptor.outlineWeight);
+		fonts::render::FontRendererCreateOptions rendererOptions;
+		rendererOptions.backend = ResolveRendererBackend();
+
+		const bool enableSlugRendering = (rendererOptions.backend == fonts::render::FontRendererBackend::Slug);
+		glyphCache = std::make_shared<fonts::GlyphAtlasCache>(faceSet, descriptor.pixelSize, descriptor.outlineSize, descriptor.outlineWeight, enableSlugRendering);
 		shaper = std::make_shared<fonts::text::HarfBuzzTextShaper>(faceSet);
 		layouter = std::make_shared<fonts::text::TextLayouter>(shaper, glyphCache);
 		wrapper = std::make_shared<fonts::text::TextWrapper>(std::make_shared<fonts::text::TextLayouterMeasurer>(layouter));
-		renderer = fonts::render::FontRendererFactory::Create();
+		renderer = fonts::render::FontRendererFactory::Create(rendererOptions);
 		if (renderer == nullptr)
 			throw content_error("Failed to create modern font renderer");
 
@@ -438,7 +460,7 @@ public:
 		const bool dumpOutlineAtlas = outlineAtlas.NeedsUpload() || !outlineAtlas.HasTexture();
 
 		glyphCache->UpdateAtlases();
-		renderer->HandleTextureUpdate(primaryAtlas, &outlineAtlas, false);
+		renderer->HandleGlyphCacheUpdate(*glyphCache, false);
 
 		if (debug_DumpAtlases && dumpPrimaryAtlas)
 			DumpAtlasBitmap(primaryAtlas, descriptor, debugId, "primary");
@@ -593,7 +615,7 @@ public:
 		const float shadowShift = command.drawShadow ? (command.renderSize * 0.1f) : 0.0f;
 
 		for (const auto& glyph: run.glyphs) {
-			if (!glyph.visible || glyph.atlasUV.Empty())
+			if (!glyph.visible || (glyph.atlasUV.Empty() && glyph.slugInfo.Empty()))
 				continue;
 
 			const GlyphRect& bounds = glyph.shaped.metrics.bounds;
@@ -605,12 +627,13 @@ public:
 			fonts::render::PreparedGlyphQuad primaryQuad;
 			primaryQuad.position = GlyphRect(x0, y0, w, h);
 			primaryQuad.atlasUV = glyph.atlasUV;
+			primaryQuad.slugInfo = glyph.slugInfo;
 			primaryQuad.color = ToFontColor(currentTextColor);
 			primaryQuad.z = glyph.z;
 			primaryQuad.visible = true;
 			renderer->AddPrimaryQuad(primaryQuad);
 
-			if ((!command.drawOutline && !command.drawShadow) || glyph.outlineAtlasUV.Empty())
+			if ((!command.drawOutline && !command.drawShadow) || (glyph.outlineAtlasUV.Empty() && glyph.slugInfo.Empty()))
 				continue;
 
 			fonts::render::PreparedGlyphQuad decoratedQuad;
@@ -621,6 +644,7 @@ public:
 				h - (2.0f * outlineExpand)
 			);
 			decoratedQuad.atlasUV = glyph.outlineAtlasUV;
+			decoratedQuad.slugInfo = glyph.slugInfo;
 			decoratedQuad.color = ToFontColor(currentOutlineColor);
 			decoratedQuad.z = glyph.z;
 			decoratedQuad.visible = true;

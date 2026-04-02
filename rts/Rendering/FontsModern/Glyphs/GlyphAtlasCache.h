@@ -44,6 +44,22 @@ public:
 	using FacePtr = std::shared_ptr<fonts::FontFace>;
 	using FaceSetPtr = std::shared_ptr<fonts::FontFaceSet>;
 
+	struct SlugTextureInfo {
+		unsigned int curveTextureId = 0;
+		unsigned int bandTextureId = 0;
+		std::uint32_t curveTextureWidth = 0;
+		std::uint32_t curveTextureHeight = 0;
+		std::uint32_t bandTextureWidth = 0;
+		std::uint32_t bandTextureHeight = 0;
+
+		constexpr bool Empty() const noexcept
+		{
+			return (curveTextureId == 0) || (bandTextureId == 0) ||
+				(curveTextureWidth == 0) || (curveTextureHeight == 0) ||
+				(bandTextureWidth == 0) || (bandTextureHeight == 0);
+		}
+	};
+
 	struct GlyphIndexKey {
 		std::uintptr_t faceIdentity = 0;
 		std::uint32_t glyphIndex = 0;
@@ -64,7 +80,7 @@ public:
 
 public:
 	GlyphAtlasCache() = default;
-	GlyphAtlasCache(FaceSetPtr faceSet, int fontSize, int outlineSize = 0, float outlineWeight = 0.0f);
+	GlyphAtlasCache(FaceSetPtr faceSet, int fontSize, int outlineSize = 0, float outlineWeight = 0.0f, bool enableSlugData = false);
 	~GlyphAtlasCache();
 
 	GlyphAtlasCache(const GlyphAtlasCache&) = delete;
@@ -90,6 +106,7 @@ public:
 	float GetNormScale() const noexcept { return normScale; }
 	bool HasColorGlyphs() const noexcept { return needsColor; }
 	bool IsColorFont() const noexcept { return isColor; }
+	bool IsSlugEnabled() const noexcept { return slugDataEnabled; }
 
 	const GlyphInfo& GetGlyphByCodepoint(char32_t codepoint);
 	const GlyphInfo& GetGlyphByGlyphIndex(std::uint32_t glyphIndex, const FacePtr& face, char32_t sourceCodepoint = 0);
@@ -115,6 +132,10 @@ public:
 	void UpdateAtlases();
 	void UploadAtlases();
 
+	bool NeedsSlugUpload() const noexcept;
+	void UploadSlugTextures();
+	SlugTextureInfo GetSlugTextureInfo() const noexcept;
+
 	float GetKerning(const GlyphInfo& leftGlyph, const GlyphInfo& rightGlyph);
 
 	const auto& GetGlyphsByCodepoint() const noexcept { return glyphsByCodepoint; }
@@ -127,6 +148,7 @@ private:
 	const GlyphInfo& GetResolvedGlyphByCodepoint(char32_t codepoint);
 	std::pair<FacePtr, std::uint32_t> ResolveGlyphForCodepoint(char32_t codepoint, char32_t* resolvedCodepoint = nullptr) const;
 	void ClearAtlasState();
+	void ClearSlugState();
 	void ResetKerningCaches();
 	void ConfigureFaceMetrics();
 
@@ -136,9 +158,11 @@ private:
 	void CacheGlyphRecord(const GlyphIndexKey& key, GlyphInfo glyph);
 
 	void QueueGlyphBitmap(const std::string& cacheKey, const CBitmap& bitmap, const CBitmap* outlineBitmap = nullptr);
+	void BuildSlugGlyph(const FacePtr& face, std::uint32_t glyphIndex, GlyphInfo& glyph);
 	void PackPendingGlyphs();
 	void UpdateAtlasRegions();
 	void UploadAtlasTextures();
+	void DeleteSlugTextures() noexcept;
 
 private:
 	static inline const GlyphInfo dummyGlyph = {};
@@ -153,6 +177,7 @@ private:
 	float normScale = 1.0f;
 	bool needsColor = false;
 	bool isColor = false;
+	bool slugDataEnabled = false;
 
 	std::array<float, 128 * 128> kerningPrecached = {};
 	std::unordered_map<std::uint64_t, float> kerningDynamic;
@@ -168,6 +193,16 @@ private:
 	std::vector<CBitmap> pendingGlyphBitmaps;
 	std::vector<SRectangle> blurRectangles;
 	std::unordered_map<std::string, std::size_t> glyphNameToBitmapIndex;
+
+	unsigned int slugCurveTextureId = 0;
+	unsigned int slugBandTextureId = 0;
+	std::vector<float> slugCurveTexels;
+	std::vector<std::uint16_t> slugBandTexels;
+	std::uint32_t slugCurveTextureWidth = 4096;
+	std::uint32_t slugCurveTextureHeight = 0;
+	std::uint32_t slugBandTextureWidth = 4096;
+	std::uint32_t slugBandTextureHeight = 0;
+	bool slugTexturesDirty = false;
 };
 
 }

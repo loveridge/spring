@@ -6,6 +6,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <string>
 #include <utility>
@@ -13,9 +14,12 @@
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
+#include FT_OUTLINE_H
+#include FT_BBOX_H
 
 #include "Rendering/FontsModern/FreeType/FontFace.h"
 #include "Rendering/FontsModern/FreeType/FontFaceSet.h"
+#include "Rendering/GL/myGL.h"
 #include "Rendering/GlobalRendering.h"
 #include "Rendering/Textures/Bitmap.h"
 #include "Rendering/Textures/RowAtlasAlloc.h"
@@ -33,6 +37,152 @@ namespace {
 
 static constexpr char32_t PrimaryReplacementCodepoint = 0xfffd;
 static constexpr char32_t SecondaryReplacementCodepoint = U'?';
+static constexpr std::uint32_t SlugTextureWidth = 4096u;
+static constexpr std::uint32_t SlugBandCount = 16u;
+
+struct SlugCurveData {
+	float x1 = 0.0f;
+	float y1 = 0.0f;
+	float x2 = 0.0f;
+	float y2 = 0.0f;
+	float x3 = 0.0f;
+	float y3 = 0.0f;
+	std::uint32_t texelIndex = 0;
+};
+
+[[nodiscard]] float Min3(float a, float b, float c) noexcept
+{
+	return std::min(a, std::min(b, c));
+}
+
+[[nodiscard]] float Max3(float a, float b, float c) noexcept
+{
+	return std::max(a, std::max(b, c));
+}
+
+[[nodiscard]] bool NearlyEqual(float a, float b, float eps = 1.0e-6f) noexcept
+{
+	return std::fabs(a - b) <= eps;
+}
+
+struct SlugOutlineBuilder {
+	std::vector<SlugCurveData> curves;
+	FT_Vector currentPoint {};
+	FT_Vector contourStart {};
+	float minX = 0.0f;
+	float minY = 0.0f;
+	float scale = 1.0f;
+	bool havePoint = false;
+	bool contourOpen = false;
+
+	[[nodiscard]] float ToX(const FT_Vector& point) const noexcept { return (point.x - minX) * scale; }
+	[[nodiscard]] float ToY(const FT_Vector& point) const noexcept { return (point.y - minY) * scale; }
+
+	void AddQuadratic(const FT_Vector& control, const FT_Vector& endPoint)
+	{
+		if (!havePoint)
+			return;
+
+		SlugCurveData curve;
+		curve.x1 = ToX(currentPoint);
+		curve.y1 = ToY(currentPoint);
+		curve.x2 = ToX(control);
+		curve.y2 = ToY(control);
+		curve.x3 = ToX(endPoint);
+		curve.y3 = ToY(endPoint);
+
+		if ((NearlyEqual(curve.x1, curve.x2) && NearlyEqual(curve.y1, curve.y2)) ||
+		    (NearlyEqual(curve.x2, curve.x3) && NearlyEqual(curve.y2, curve.y3))) {
+			curve.x2 = 0.5f * (curve.x1 + curve.x3);
+			curve.y2 = 0.5f * (curve.y1 + curve.y3);
+		}
+
+		curves.emplace_back(curve);
+		currentPoint = endPoint;
+		havePoint = true;
+	}
+
+	void AddLine(const FT_Vector& endPoint)
+	{
+		FT_Vector control;
+		control.x = (currentPoint.x + endPoint.x) / 2;
+		control.y = (currentPoint.y + endPoint.y) / 2;
+		AddQuadratic(control, endPoint);
+	}
+
+	static FT_Vector EvalCubic(const FT_Vector& p0, const FT_Vector& p1, const FT_Vector& p2, const FT_Vector& p3, float t)
+	{
+		const float omt = 1.0f - t;
+		const float omt2 = omt * omt;
+		const float t2 = t * t;
+
+		FT_Vector out;
+		out.x = static_cast<FT_Pos>(std::lround(
+			omt2 * omt * static_cast<double>(p0.x) +
+			3.0 * omt2 * t * static_cast<double>(p1.x) +
+			3.0 * omt * t2 * static_cast<double>(p2.x) +
+			t2 * t * static_cast<double>(p3.x)
+		));
+		out.y = static_cast<FT_Pos>(std::lround(
+			omt2 * omt * static_cast<double>(p0.y) +
+			3.0 * omt2 * t * static_cast<double>(p1.y) +
+			3.0 * omt * t2 * static_cast<double>(p2.y) +
+			t2 * t * static_cast<double>(p3.y)
+		));
+		return out;
+	}
+
+	void AddCubic(const FT_Vector& c1, const FT_Vector& c2, const FT_Vector& endPoint)
+	{
+		const FT_Vector p0 = currentPoint;
+		constexpr std::array<float, 4> ts = {0.25f, 0.5f, 0.75f, 1.0f};
+
+		for (float t: ts)
+			AddLine(EvalCubic(p0, c1, c2, endPoint, t));
+	}
+
+	void CloseContour()
+	{
+		if (!contourOpen || !havePoint)
+			return;
+
+		if (currentPoint.x != contourStart.x || currentPoint.y != contourStart.y)
+			AddLine(contourStart);
+
+		currentPoint = contourStart;
+		contourOpen = false;
+		havePoint = false;
+	}
+
+	static int MoveTo(const FT_Vector* to, void* user)
+	{
+		auto* builder = static_cast<SlugOutlineBuilder*>(user);
+		builder->CloseContour();
+		builder->contourStart = *to;
+		builder->currentPoint = *to;
+		builder->havePoint = true;
+		builder->contourOpen = true;
+		return 0;
+	}
+
+	static int LineTo(const FT_Vector* to, void* user)
+	{
+		static_cast<SlugOutlineBuilder*>(user)->AddLine(*to);
+		return 0;
+	}
+
+	static int ConicTo(const FT_Vector* control, const FT_Vector* to, void* user)
+	{
+		static_cast<SlugOutlineBuilder*>(user)->AddQuadratic(*control, *to);
+		return 0;
+	}
+
+	static int CubicTo(const FT_Vector* c1, const FT_Vector* c2, const FT_Vector* to, void* user)
+	{
+		static_cast<SlugOutlineBuilder*>(user)->AddCubic(*c1, *c2, *to);
+		return 0;
+	}
+};
 
 [[nodiscard]] std::uint64_t MakeAsciiKerningHash(char32_t left, char32_t right) noexcept
 {
@@ -114,18 +264,22 @@ void RescaleGlyphRectUV(GlyphRect& rect, int oldWidth, int oldHeight, int newWid
 } // namespace
 
 namespace fonts {
-GlyphAtlasCache::GlyphAtlasCache(FaceSetPtr faceSet, int fontSize_, int outlineSize_, float outlineWeight_)
+GlyphAtlasCache::GlyphAtlasCache(FaceSetPtr faceSet, int fontSize_, int outlineSize_, float outlineWeight_, bool enableSlugData)
 	: faces(std::move(faceSet))
 	, fontSize(fontSize_ > 0 ? fontSize_ : 14)
 	, outlineSize(std::max(outlineSize_, 0))
 	, outlineWeight(outlineWeight_)
+	, slugDataEnabled(enableSlugData)
 {
 	ClearAtlasState();
 	ConfigureFaceMetrics();
 	PreloadGlyphs();
 }
 
-GlyphAtlasCache::~GlyphAtlasCache() = default;
+GlyphAtlasCache::~GlyphAtlasCache()
+{
+	DeleteSlugTextures();
+}
 
 void GlyphAtlasCache::SetFaceSet(FaceSetPtr faceSet)
 {
@@ -333,6 +487,75 @@ void GlyphAtlasCache::UploadAtlases()
 	UploadAtlasTextures();
 }
 
+bool GlyphAtlasCache::NeedsSlugUpload() const noexcept
+{
+	return slugDataEnabled && slugTexturesDirty && !slugCurveTexels.empty() && !slugBandTexels.empty();
+}
+
+void GlyphAtlasCache::UploadSlugTextures()
+{
+#ifdef HEADLESS
+	return;
+#else
+	if (!NeedsSlugUpload())
+		return;
+
+	if (slugCurveTextureHeight == 0u || slugBandTextureHeight == 0u)
+		return;
+
+	const std::size_t curveTexelCount = static_cast<std::size_t>(slugCurveTextureWidth) * slugCurveTextureHeight;
+	std::vector<float> curveUpload(curveTexelCount * 4u, 0.0f);
+	std::memcpy(curveUpload.data(), slugCurveTexels.data(), slugCurveTexels.size() * sizeof(float));
+
+	const std::size_t bandTexelCount = static_cast<std::size_t>(slugBandTextureWidth) * slugBandTextureHeight;
+	std::vector<std::uint16_t> bandUpload(bandTexelCount * 2u, 0u);
+	std::memcpy(bandUpload.data(), slugBandTexels.data(), slugBandTexels.size() * sizeof(std::uint16_t));
+
+	if (slugCurveTextureId == 0u)
+		glGenTextures(1, &slugCurveTextureId);
+	if (slugBandTextureId == 0u)
+		glGenTextures(1, &slugBandTextureId);
+
+	GLint prevTextureBinding = 0;
+	glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevTextureBinding);
+
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+	glBindTexture(GL_TEXTURE_2D, slugCurveTextureId);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>(slugCurveTextureWidth), static_cast<GLsizei>(slugCurveTextureHeight), 0, GL_RGBA, GL_FLOAT, curveUpload.data());
+
+	glBindTexture(GL_TEXTURE_2D, slugBandTextureId);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RG16UI, static_cast<GLsizei>(slugBandTextureWidth), static_cast<GLsizei>(slugBandTextureHeight), 0, GL_RG_INTEGER, GL_UNSIGNED_SHORT, bandUpload.data());
+
+	glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(prevTextureBinding));
+	slugTexturesDirty = false;
+#endif
+}
+
+GlyphAtlasCache::SlugTextureInfo GlyphAtlasCache::GetSlugTextureInfo() const noexcept
+{
+	return SlugTextureInfo {
+		.curveTextureId = slugCurveTextureId,
+		.bandTextureId = slugBandTextureId,
+		.curveTextureWidth = slugCurveTextureWidth,
+		.curveTextureHeight = slugCurveTextureHeight,
+		.bandTextureWidth = slugBandTextureWidth,
+		.bandTextureHeight = slugBandTextureHeight,
+	};
+}
+
 float GlyphAtlasCache::GetKerning(const GlyphInfo& leftGlyph, const GlyphInfo& rightGlyph)
 {
 #ifndef HEADLESS
@@ -453,6 +676,20 @@ void GlyphAtlasCache::ClearAtlasState()
 	pendingGlyphBitmaps.clear();
 	blurRectangles.clear();
 	glyphNameToBitmapIndex.clear();
+
+	ClearSlugState();
+}
+
+void GlyphAtlasCache::ClearSlugState()
+{
+	DeleteSlugTextures();
+	slugCurveTexels.clear();
+	slugBandTexels.clear();
+	slugCurveTextureWidth = SlugTextureWidth;
+	slugCurveTextureHeight = 0;
+	slugBandTextureWidth = SlugTextureWidth;
+	slugBandTextureHeight = 0;
+	slugTexturesDirty = false;
 }
 
 void GlyphAtlasCache::ResetKerningCaches()
@@ -645,6 +882,9 @@ void GlyphAtlasCache::LoadGlyphByIndex(const FacePtr& face, char32_t sourceCodep
 	}
 
 	QueueGlyphBitmap(MakeAtlasGlyphKey(glyph), glyphBitmap, outlineBitmapPtr);
+
+	if (slugDataEnabled)
+		BuildSlugGlyph(face, glyphIndex, glyph);
 #endif
 
 	CacheGlyphRecord(glyphKey, std::move(glyph));
@@ -679,6 +919,173 @@ void GlyphAtlasCache::QueueGlyphBitmap(const std::string& cacheKey, const CBitma
 			atlasAllocator->AddEntry(outlineKey, {outlineBitmap->xsize, outlineBitmap->ysize});
 		}
 	}
+}
+
+void GlyphAtlasCache::BuildSlugGlyph(const FacePtr& face, std::uint32_t glyphIndex, GlyphInfo& glyph)
+{
+#ifdef HEADLESS
+	(void)face;
+	(void)glyphIndex;
+	(void)glyph;
+#else
+	if (!slugDataEnabled || face == nullptr)
+		return;
+
+	FT_Face ftFace = face->GetFTFace();
+	if (ftFace == nullptr)
+		return;
+
+	if (face->LoadGlyph(glyphIndex, FT_LOAD_NO_BITMAP) != 0)
+		return;
+
+	FT_GlyphSlot slot = ftFace->glyph;
+	if (slot == nullptr)
+		return;
+
+	if (slot->format != FT_GLYPH_FORMAT_OUTLINE || slot->outline.n_contours <= 0 || slot->outline.n_points <= 0)
+		return;
+
+	FT_BBox bbox {};
+	if (FT_Outline_Get_BBox(&slot->outline, &bbox) != 0)
+		return;
+
+	const float width = (bbox.xMax - bbox.xMin) * normScale;
+	const float height = (bbox.yMax - bbox.yMin) * normScale;
+	if (width <= 0.0f || height <= 0.0f)
+		return;
+
+	SlugOutlineBuilder builder;
+	builder.minX = static_cast<float>(bbox.xMin);
+	builder.minY = static_cast<float>(bbox.yMin);
+	builder.scale = normScale;
+
+	FT_Outline_Funcs funcs {};
+	funcs.move_to = &SlugOutlineBuilder::MoveTo;
+	funcs.line_to = &SlugOutlineBuilder::LineTo;
+	funcs.conic_to = &SlugOutlineBuilder::ConicTo;
+	funcs.cubic_to = &SlugOutlineBuilder::CubicTo;
+	funcs.shift = 0;
+	funcs.delta = 0;
+
+	if (FT_Outline_Decompose(&slot->outline, &funcs, &builder) != 0)
+		return;
+
+	builder.CloseContour();
+	if (builder.curves.empty())
+		return;
+
+	auto storeCurve = [this](SlugCurveData& curve) {
+		std::uint32_t texelIndex = static_cast<std::uint32_t>(slugCurveTexels.size() / 4u);
+
+		if ((texelIndex % SlugTextureWidth) == (SlugTextureWidth - 1u)) {
+			slugCurveTexels.insert(slugCurveTexels.end(), 4u, 0.0f);
+			texelIndex += 1u;
+		}
+
+		curve.texelIndex = texelIndex;
+		slugCurveTexels.push_back(curve.x1);
+		slugCurveTexels.push_back(curve.y1);
+		slugCurveTexels.push_back(curve.x2);
+		slugCurveTexels.push_back(curve.y2);
+		slugCurveTexels.push_back(curve.x3);
+		slugCurveTexels.push_back(curve.y3);
+		slugCurveTexels.push_back(0.0f);
+		slugCurveTexels.push_back(0.0f);
+	};
+
+	for (auto& curve: builder.curves)
+		storeCurve(curve);
+
+	const std::uint32_t bandCount = SlugBandCount;
+	const float bandDimX = width / static_cast<float>(bandCount);
+	const float bandDimY = height / static_cast<float>(bandCount);
+	if (bandDimX <= 0.0f || bandDimY <= 0.0f)
+		return;
+
+	const std::size_t glyphBaseTexel = slugBandTexels.size() / 2u;
+	slugBandTexels.resize(slugBandTexels.size() + static_cast<std::size_t>(bandCount * 2u * 2u), 0u);
+
+	auto writeBandHeader = [this, glyphBaseTexel](std::uint32_t bandIndex, std::uint16_t curveCount, std::uint16_t relativeOffset) {
+		const std::size_t header = (glyphBaseTexel + bandIndex) * 2u;
+		slugBandTexels[header + 0u] = curveCount;
+		slugBandTexels[header + 1u] = relativeOffset;
+	};
+
+	auto appendBandCurves = [this, glyphBaseTexel](const std::vector<SlugCurveData*>& sortedCurves, bool horizontal, float bandSize, float glyphExtent) -> std::vector<std::pair<std::uint16_t, std::uint16_t>> {
+		std::vector<std::pair<std::uint16_t, std::uint16_t>> descriptors;
+		descriptors.reserve(SlugBandCount);
+
+		for (std::uint32_t band = 0; band < SlugBandCount; ++band) {
+			const float bandMin = band * bandSize;
+			const float bandMax = (band == (SlugBandCount - 1u)) ? glyphExtent : ((band + 1u) * bandSize);
+			const std::uint16_t relativeOffset = static_cast<std::uint16_t>(slugBandTexels.size() / 2u - glyphBaseTexel);
+			std::uint16_t curveCount = 0u;
+
+			for (const SlugCurveData* curve: sortedCurves) {
+				const float c1 = horizontal ? curve->y1 : curve->x1;
+				const float c2 = horizontal ? curve->y2 : curve->x2;
+				const float c3 = horizontal ? curve->y3 : curve->x3;
+
+				if (NearlyEqual(c1, c2) && NearlyEqual(c2, c3))
+					continue;
+
+				if (Min3(c1, c2, c3) > bandMax || Max3(c1, c2, c3) < bandMin)
+					continue;
+
+				const std::uint16_t curveX = static_cast<std::uint16_t>(curve->texelIndex % SlugTextureWidth);
+				const std::uint16_t curveY = static_cast<std::uint16_t>(curve->texelIndex / SlugTextureWidth);
+				slugBandTexels.push_back(curveX);
+				slugBandTexels.push_back(curveY);
+				curveCount += 1u;
+			}
+
+			descriptors.emplace_back(curveCount, relativeOffset);
+		}
+
+		return descriptors;
+	};
+
+	std::vector<SlugCurveData*> horizontalCurves;
+	std::vector<SlugCurveData*> verticalCurves;
+	horizontalCurves.reserve(builder.curves.size());
+	verticalCurves.reserve(builder.curves.size());
+
+	for (auto& curve: builder.curves) {
+		horizontalCurves.push_back(&curve);
+		verticalCurves.push_back(&curve);
+	}
+
+	std::stable_sort(horizontalCurves.begin(), horizontalCurves.end(), [](const SlugCurveData* lhs, const SlugCurveData* rhs) {
+		return Max3(lhs->x1, lhs->x2, lhs->x3) > Max3(rhs->x1, rhs->x2, rhs->x3);
+	});
+	std::stable_sort(verticalCurves.begin(), verticalCurves.end(), [](const SlugCurveData* lhs, const SlugCurveData* rhs) {
+		return Max3(lhs->y1, lhs->y2, lhs->y3) > Max3(rhs->y1, rhs->y2, rhs->y3);
+	});
+
+	const auto horizontalBands = appendBandCurves(horizontalCurves, true, bandDimY, height);
+	const auto verticalBands = appendBandCurves(verticalCurves, false, bandDimX, width);
+
+	for (std::uint32_t i = 0; i < bandCount; ++i) {
+		writeBandHeader(i, horizontalBands[i].first, horizontalBands[i].second);
+		writeBandHeader(bandCount + i, verticalBands[i].first, verticalBands[i].second);
+	}
+
+	glyph.slugInfo.width = width;
+	glyph.slugInfo.height = height;
+	glyph.slugInfo.bandScaleX = 1.0f / bandDimX;
+	glyph.slugInfo.bandScaleY = 1.0f / bandDimY;
+	glyph.slugInfo.bandOffsetX = 0.0f;
+	glyph.slugInfo.bandOffsetY = 0.0f;
+	glyph.slugInfo.bandTexelX = static_cast<std::uint32_t>(glyphBaseTexel % SlugTextureWidth);
+	glyph.slugInfo.bandTexelY = static_cast<std::uint32_t>(glyphBaseTexel / SlugTextureWidth);
+	glyph.slugInfo.bandMaxX = bandCount - 1u;
+	glyph.slugInfo.bandMaxY = bandCount - 1u;
+	glyph.slugInfo.flags = 0u;
+
+	slugCurveTextureHeight = static_cast<std::uint32_t>((slugCurveTexels.size() / 4u + SlugTextureWidth - 1u) / SlugTextureWidth);
+	slugBandTextureHeight = static_cast<std::uint32_t>((slugBandTexels.size() / 2u + SlugTextureWidth - 1u) / SlugTextureWidth);
+	slugTexturesDirty = true;
+#endif
 }
 
 void GlyphAtlasCache::PackPendingGlyphs()
@@ -778,5 +1185,23 @@ void GlyphAtlasCache::UploadAtlasTextures()
 {
 	atlasTexture.Upload();
 	shadowAtlasTexture.Upload();
+}
+
+void GlyphAtlasCache::DeleteSlugTextures() noexcept
+{
+#ifndef HEADLESS
+	if (slugCurveTextureId != 0u) {
+		glDeleteTextures(1, &slugCurveTextureId);
+		slugCurveTextureId = 0u;
+	}
+
+	if (slugBandTextureId != 0u) {
+		glDeleteTextures(1, &slugBandTextureId);
+		slugBandTextureId = 0u;
+	}
+#else
+	slugCurveTextureId = 0u;
+	slugBandTextureId = 0u;
+#endif
 }
 }
