@@ -110,6 +110,14 @@ struct SlugOutlineBuilder {
 		AddQuadratic(control, endPoint);
 	}
 
+	static FT_Vector LerpPoint(const FT_Vector& a, const FT_Vector& b, float t)
+	{
+		FT_Vector out;
+		out.x = static_cast<FT_Pos>(std::lround((1.0 - t) * static_cast<double>(a.x) + t * static_cast<double>(b.x)));
+		out.y = static_cast<FT_Pos>(std::lround((1.0 - t) * static_cast<double>(a.y) + t * static_cast<double>(b.y)));
+		return out;
+	}
+
 	static FT_Vector EvalCubic(const FT_Vector& p0, const FT_Vector& p1, const FT_Vector& p2, const FT_Vector& p3, float t)
 	{
 		const float omt = 1.0f - t;
@@ -132,13 +140,79 @@ struct SlugOutlineBuilder {
 		return out;
 	}
 
+	static FT_Vector EvalQuadratic(const FT_Vector& p0, const FT_Vector& p1, const FT_Vector& p2, float t)
+	{
+		const float omt = 1.0f - t;
+		const float omt2 = omt * omt;
+		const float t2 = t * t;
+
+		FT_Vector out;
+		out.x = static_cast<FT_Pos>(std::lround(
+			omt2 * static_cast<double>(p0.x) +
+			2.0 * omt * t * static_cast<double>(p1.x) +
+			t2 * static_cast<double>(p2.x)
+		));
+		out.y = static_cast<FT_Pos>(std::lround(
+			omt2 * static_cast<double>(p0.y) +
+			2.0 * omt * t * static_cast<double>(p1.y) +
+			t2 * static_cast<double>(p2.y)
+		));
+		return out;
+	}
+
+	static FT_Vector FitQuadraticControl(const FT_Vector& p0, const FT_Vector& p3, const FT_Vector& cubicMid)
+	{
+		FT_Vector control;
+		control.x = static_cast<FT_Pos>(std::lround(2.0 * static_cast<double>(cubicMid.x) - 0.5 * static_cast<double>(p0.x + p3.x)));
+		control.y = static_cast<FT_Pos>(std::lround(2.0 * static_cast<double>(cubicMid.y) - 0.5 * static_cast<double>(p0.y + p3.y)));
+		return control;
+	}
+
+	static bool CubicFitsQuadratic(const FT_Vector& p0, const FT_Vector& c1, const FT_Vector& c2, const FT_Vector& p3, const FT_Vector& q1)
+	{
+		constexpr std::array<float, 2> sampleTs = {0.25f, 0.75f};
+		constexpr double maxErrorPixels = 0.125;
+		constexpr double ftUnitsPerPixel = 64.0;
+		constexpr double maxErrorSq = maxErrorPixels * maxErrorPixels;
+
+		for (float t: sampleTs) {
+			const FT_Vector cubicPoint = EvalCubic(p0, c1, c2, p3, t);
+			const FT_Vector quadraticPoint = EvalQuadratic(p0, q1, p3, t);
+			const double dx = (static_cast<double>(cubicPoint.x) - static_cast<double>(quadraticPoint.x)) / ftUnitsPerPixel;
+			const double dy = (static_cast<double>(cubicPoint.y) - static_cast<double>(quadraticPoint.y)) / ftUnitsPerPixel;
+
+			if ((dx * dx + dy * dy) > maxErrorSq)
+				return false;
+		}
+
+		return true;
+	}
+
 	void AddCubic(const FT_Vector& c1, const FT_Vector& c2, const FT_Vector& endPoint)
 	{
 		const FT_Vector p0 = currentPoint;
-		constexpr std::array<float, 4> ts = {0.25f, 0.5f, 0.75f, 1.0f};
+		const auto addCubicRecursive = [&](const auto& self, const FT_Vector& rp0, const FT_Vector& rc1, const FT_Vector& rc2, const FT_Vector& rp3, int depth) -> void {
+			const FT_Vector cubicMid = EvalCubic(rp0, rc1, rc2, rp3, 0.5f);
+			const FT_Vector quadraticControl = FitQuadraticControl(rp0, rp3, cubicMid);
+			constexpr int maxSubdivisionDepth = 8;
 
-		for (float t: ts)
-			AddLine(EvalCubic(p0, c1, c2, endPoint, t));
+			if (depth >= maxSubdivisionDepth || CubicFitsQuadratic(rp0, rc1, rc2, rp3, quadraticControl)) {
+				AddQuadratic(quadraticControl, rp3);
+				return;
+			}
+
+			const FT_Vector p01 = LerpPoint(rp0, rc1, 0.5f);
+			const FT_Vector p12 = LerpPoint(rc1, rc2, 0.5f);
+			const FT_Vector p23 = LerpPoint(rc2, rp3, 0.5f);
+			const FT_Vector p012 = LerpPoint(p01, p12, 0.5f);
+			const FT_Vector p123 = LerpPoint(p12, p23, 0.5f);
+			const FT_Vector p0123 = LerpPoint(p012, p123, 0.5f);
+
+			self(self, rp0, p01, p012, p0123, depth + 1);
+			self(self, p0123, p123, p23, rp3, depth + 1);
+		};
+
+		addCubicRecursive(addCubicRecursive, p0, c1, c2, endPoint, 0);
 	}
 
 	void CloseContour()
