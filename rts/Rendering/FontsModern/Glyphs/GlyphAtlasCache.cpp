@@ -41,6 +41,7 @@ static constexpr char32_t PrimaryReplacementCodepoint = 0xfffd;
 static constexpr char32_t SecondaryReplacementCodepoint = U'?';
 static constexpr std::uint32_t SlugTextureWidth = 4096u;
 static constexpr std::uint32_t SlugBandCount = 16u;
+static constexpr float SlugOutlineStrokeScale = 0.2f;
 
 struct SlugCurveData {
 	float x1 = 0.0f;
@@ -1236,9 +1237,11 @@ bool GlyphAtlasCache::BuildSlugOutlineGlyph(const FacePtr& face, std::uint32_t g
 		~ScopedStroker() { if (value != nullptr) FT_Stroker_Done(value); }
 	} scopedStroker {stroker};
 
+	const FT_Fixed outlineRadius = static_cast<FT_Fixed>(std::lround(outlineSize * SlugOutlineStrokeScale * 64.0f));
+
 	FT_Stroker_Set(
 		stroker,
-		static_cast<FT_Fixed>(outlineSize << 6),
+		std::max<FT_Fixed>(outlineRadius, 1),
 		FT_STROKER_LINECAP_ROUND,
 		FT_STROKER_LINEJOIN_ROUND,
 		0
