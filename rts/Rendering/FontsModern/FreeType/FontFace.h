@@ -15,7 +15,7 @@
 namespace fonts {
 
 /**
- * Owns the raw font file bytes used to construct an FT_Face via
+ * Owns the immutable raw font file bytes used to construct an FT_Face via
  * FT_New_Memory_Face. The bytes must outlive the face, so they are held by
  * shared ownership and can be reused across multiple face wrappers if needed.
  */
@@ -35,17 +35,10 @@ public:
 	FontFileBytes& operator=(FontFileBytes&&) noexcept = default;
 	~FontFileBytes() = default;
 
-	value_type* Data() noexcept;
 	const value_type* Data() const noexcept;
 
 	std::size_t Size() const noexcept;
 	bool Empty() const noexcept;
-
-	container_type& Storage() noexcept;
-	const container_type& Storage() const noexcept;
-
-	void Resize(std::size_t size);
-	void Clear() noexcept;
 
 private:
 	container_type bytes;
@@ -64,7 +57,7 @@ private:
 class FontFace {
 public:
 	FontFace() = default;
-	explicit FontFace(FT_Face ftFace, std::shared_ptr<FontFileBytes> fileBytes = {}) noexcept;
+	explicit FontFace(FT_Face ftFace, std::shared_ptr<const FontFileBytes> fileBytes = {}) noexcept;
 
 	~FontFace();
 
@@ -75,7 +68,7 @@ public:
 
 	FontFace& operator=(FontFace&& other) noexcept;
 
-	void Reset(FT_Face newFace = nullptr, std::shared_ptr<FontFileBytes> newMemory = {}) noexcept;
+	void Reset(FT_Face newFace = nullptr, std::shared_ptr<const FontFileBytes> newMemory = {}) noexcept;
 
 	FT_Face GetFTFace() const noexcept;
 	operator FT_Face() const noexcept { return face; }
@@ -83,8 +76,7 @@ public:
 	bool IsValid() const noexcept { return face != nullptr; }
 	explicit operator bool() const noexcept { return IsValid(); }
 
-	const std::shared_ptr<FontFileBytes>& GetBackingBytes() const noexcept { return memory; }
-	std::shared_ptr<FontFileBytes>& GetBackingBytes() noexcept { return memory; }
+	const std::shared_ptr<const FontFileBytes>& GetBackingBytes() const noexcept { return memory; }
 	bool HasBackingBytes() const noexcept { return static_cast<bool>(memory); }
 
 	const char* GetFamilyName() const noexcept;
@@ -97,7 +89,7 @@ public:
 
 	long GetFaceIndex() const noexcept;
 
-	long GetNumGlyphs() const noexcept;
+	FT_UInt GetNumGlyphs() const noexcept;
 
 	bool HasKerning() const noexcept;
 
@@ -107,7 +99,7 @@ public:
 
 private:
 	FT_Face face = nullptr;
-	std::shared_ptr<FontFileBytes> memory;
+	std::shared_ptr<const FontFileBytes> memory;
 };
 
-} // namespace font
+} // namespace fonts

@@ -9,7 +9,6 @@
 #include <utility>
 #include <vector>
 
-#include "../FontTypes.h"
 #include "FontFace.h"
 
 namespace fonts {
@@ -19,7 +18,8 @@ namespace fonts {
  *
  * The first entry is the primary face for a font descriptor. Remaining entries
  * are fallback faces consulted in insertion order when the primary face does
- * not provide a requested codepoint or glyph.
+ * not provide a requested codepoint. Glyph indices remain face-local and must
+ * be resolved against a known face rather than searched across the set.
  *
  * This type is deliberately narrow: it knows about FreeType faces and glyph
  * lookup, but not about glyph atlases, rendering, shaping policy, or wrapping.
@@ -59,18 +59,6 @@ public:
 	FacePtr FindFaceForCodepoint(char32_t codepoint) const;
 
 	/**
-	 * Returns the first face in the ordered set that provides the given glyph
-	 * index. This is the direct glyph-addressing path needed by HarfBuzz-driven
-	 * shaping, where lookup is by glyph ID rather than Unicode codepoint.
-	 */
-	FacePtr FindFaceForGlyph(std::uint32_t glyphIndex) const;
-
-	/**
-	 * Resolves either a codepoint-addressed or glyph-index-addressed lookup.
-	 */
-	FacePtr FindFaceForGlyphKey(const GlyphKey& key) const;
-
-	/**
 	 * Returns the glyph index in the first supporting face for a codepoint.
 	 * When no face supports the codepoint, returns {nullptr, 0}.
 	 */
@@ -80,13 +68,13 @@ public:
 	 * Optional glyph-name lookup.
 	 *
 	 * This is retained as a compatibility helper because the current atlas path
-	 * still derives string names from glyph identifiers. It should remain an
-	 * edge helper rather than a central API.
+	 * still derives string names from glyph identifiers. It remains a linear
+	 * scan over the face's glyph table, so it should stay a compatibility helper
+	 * rather than a central API.
 	 */
 	FacePtr FindFaceForGlyphName(const std::string& glyphName) const;
 
 	bool SupportsCodepoint(char32_t codepoint) const;
-	bool SupportsGlyph(std::uint32_t glyphIndex) const;
 
 	static bool SupportsCodepoint(const FacePtr& face, char32_t codepoint);
 	static bool SupportsGlyphIndex(const FacePtr& face, std::uint32_t glyphIndex);
@@ -108,4 +96,4 @@ private:
 	FaceList fallbacks;
 };
 
-} // namespace font
+} // namespace fonts

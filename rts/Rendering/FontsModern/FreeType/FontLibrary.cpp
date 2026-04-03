@@ -109,10 +109,12 @@ bool FontLibrary::InitializeFontconfig(bool consoleOutput)
 	(void)consoleOutput;
 	return false;
 #elif defined(USE_FONTCONFIG)
+	std::lock_guard<std::mutex> lock(fontconfigMutex);
+
 	if (!UseFontconfig())
 		return false;
 
-	if (fcConfig != nullptr)
+	if (fcConfig != nullptr && fontconfigInitialized)
 		return true;
 
 	searchSystemFonts = (configHandler == nullptr) || configHandler->GetBool("UseFontConfigSystemFonts");
@@ -131,7 +133,7 @@ bool FontLibrary::InitializeFontconfig(bool consoleOutput)
 	fcConfig = FcConfigCreate();
 	if (fcConfig == nullptr) {
 		LogFontconfigMessage(consoleOutput, true, errorPrefix + " config");
-		HandleFontconfigInitFailure();
+		DestroyFontconfigUnlocked();
 		return false;
 	}
 
@@ -165,7 +167,7 @@ bool FontLibrary::InitializeFontconfig(bool consoleOutput)
 		result = FcConfigBuildFonts(fcConfig);
 		if (!result) {
 			LogFontconfigMessage(consoleOutput, true, errorPrefix + " fonts");
-			HandleFontconfigInitFailure();
+			DestroyFontconfigUnlocked();
 			return false;
 		}
 	} else {
@@ -183,13 +185,13 @@ bool FontLibrary::InitializeFontconfig(bool consoleOutput)
 	basePattern = FcPatternCreate();
 	if (gameFontSet == nullptr || basePattern == nullptr) {
 		LogFontconfigMessage(consoleOutput, true, errorPrefix + " state");
-		HandleFontconfigInitFailure();
+		DestroyFontconfigUnlocked();
 		return false;
 	}
 
 	if (!FcConfigAppFontAddDir(fcConfig, reinterpret_cast<const FcChar8*>("fonts"))) {
 		LogFontconfigMessage(consoleOutput, true, errorPrefix + " font dir");
-		HandleFontconfigInitFailure();
+		DestroyFontconfigUnlocked();
 		return false;
 	}
 
@@ -212,6 +214,7 @@ bool FontLibrary::InitializeFontconfig(bool consoleOutput)
 bool FontLibrary::HasFontconfig() const noexcept
 {
 #ifdef USE_FONTCONFIG
+	std::lock_guard<std::mutex> lock(fontconfigMutex);
 	return (fcConfig != nullptr) && fontconfigInitialized;
 #else
 	return false;
@@ -221,6 +224,8 @@ bool FontLibrary::HasFontconfig() const noexcept
 #ifdef USE_FONTCONFIG
 void FontLibrary::ClearGameFontSet()
 {
+	std::lock_guard<std::mutex> lock(fontconfigMutex);
+
 	if (gameFontSet != nullptr)
 		FcFontSetDestroy(gameFontSet);
 
@@ -229,6 +234,8 @@ void FontLibrary::ClearGameFontSet()
 
 void FontLibrary::ClearBasePattern()
 {
+	std::lock_guard<std::mutex> lock(fontconfigMutex);
+
 	if (basePattern != nullptr)
 		FcPatternDestroy(basePattern);
 
@@ -246,11 +253,23 @@ bool FontLibrary::CheckFontconfig()
 		return false;
 
 	FontLibrary& library = Instance();
-	return library.InitializeFontconfig(false) && FcConfigUptoDate(library.GetFontconfig());
+	if (!library.InitializeFontconfig(false))
+		return false;
+
+	std::lock_guard<std::mutex> lock(library.fontconfigMutex);
+	return (library.fcConfig != nullptr) && FcConfigUptoDate(library.fcConfig);
 }
 #endif
 
 void FontLibrary::DestroyFontconfig() noexcept
+{
+#ifdef USE_FONTCONFIG
+	std::lock_guard<std::mutex> lock(fontconfigMutex);
+	DestroyFontconfigUnlocked();
+#endif
+}
+
+void FontLibrary::DestroyFontconfigUnlocked() noexcept
 {
 #ifdef USE_FONTCONFIG
 	if (gameFontSet != nullptr) {
@@ -272,9 +291,4 @@ void FontLibrary::DestroyFontconfig() noexcept
 #endif
 }
 
-void FontLibrary::HandleFontconfigInitFailure() noexcept
-{
-	DestroyFontconfig();
-}
-
-} // namespace font
+} // namespace fonts

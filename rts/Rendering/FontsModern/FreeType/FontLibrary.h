@@ -34,7 +34,7 @@ public:
 	FT_Library GetFTLibrary() const noexcept { return ftLibrary; }
 	operator FT_Library() const noexcept { return ftLibrary; }
 
-	// Optional Fontconfig bootstrap. Safe to call repeatedly.
+	// Optional Fontconfig bootstrap. Safe to call repeatedly and serialized internally.
 	bool InitializeFontconfig(bool consoleOutput = false);
 	bool HasFontconfig() const noexcept;
 
@@ -59,7 +59,7 @@ public:
 
 private:
 	void DestroyFontconfig() noexcept;
-	void HandleFontconfigInitFailure() noexcept;
+	void DestroyFontconfigUnlocked() noexcept;
 
 	FT_Library ftLibrary = nullptr;
 
@@ -71,10 +71,11 @@ private:
 	bool searchFontAttributes = false;
 	bool searchApplySubstitutions = false;
 	bool fontconfigInitialized = false;
+	mutable std::mutex fontconfigMutex;
 #endif
 
 	static std::once_flag initFlag;
 	static std::unique_ptr<FontLibrary> instance;
 };
 
-} // namespace font
+} // namespace fonts

@@ -2,6 +2,7 @@
 
 #include "FontFace.h"
 
+#include <limits>
 #include <utility>
 
 namespace fonts {
@@ -13,11 +14,6 @@ FontFileBytes::FontFileBytes(std::size_t size)
 FontFileBytes::FontFileBytes(container_type data)
 	: bytes(std::move(data))
 {}
-
-FontFileBytes::value_type* FontFileBytes::Data() noexcept
-{
-	return bytes.data();
-}
 
 const FontFileBytes::value_type* FontFileBytes::Data() const noexcept
 {
@@ -34,28 +30,7 @@ bool FontFileBytes::Empty() const noexcept
 	return bytes.empty();
 }
 
-FontFileBytes::container_type& FontFileBytes::Storage() noexcept
-{
-	return bytes;
-}
-
-const FontFileBytes::container_type& FontFileBytes::Storage() const noexcept
-{
-	return bytes;
-}
-
-void FontFileBytes::Resize(std::size_t size)
-{
-	bytes.resize(size);
-}
-
-void FontFileBytes::Clear() noexcept
-{
-	bytes.clear();
-	bytes.shrink_to_fit();
-}
-
-FontFace::FontFace(FT_Face ftFace, std::shared_ptr<FontFileBytes> fileBytes) noexcept
+FontFace::FontFace(FT_Face ftFace, std::shared_ptr<const FontFileBytes> fileBytes) noexcept
 	: face(ftFace)
 	, memory(std::move(fileBytes))
 {}
@@ -81,7 +56,7 @@ FontFace& FontFace::operator=(FontFace&& other) noexcept
 	return *this;
 }
 
-void FontFace::Reset(FT_Face newFace, std::shared_ptr<FontFileBytes> newMemory) noexcept
+void FontFace::Reset(FT_Face newFace, std::shared_ptr<const FontFileBytes> newMemory) noexcept
 {
 	if (face != nullptr)
 		FT_Done_Face(face);
@@ -107,12 +82,18 @@ const char* FontFace::GetStyleName() const noexcept
 
 std::string FontFace::GetFamilyNameString() const
 {
-	return (GetFamilyName() != nullptr) ? std::string(GetFamilyName()) : std::string();
+	if (const char* familyName = GetFamilyName(); familyName != nullptr)
+		return std::string(familyName);
+
+	return {};
 }
 
 std::string FontFace::GetStyleNameString() const
 {
-	return (GetStyleName() != nullptr) ? std::string(GetStyleName()) : std::string();
+	if (const char* styleName = GetStyleName(); styleName != nullptr)
+		return std::string(styleName);
+
+	return {};
 }
 
 long FontFace::GetFaceIndex() const noexcept
@@ -120,9 +101,16 @@ long FontFace::GetFaceIndex() const noexcept
 	return (face != nullptr) ? face->face_index : 0;
 }
 
-long FontFace::GetNumGlyphs() const noexcept
+FT_UInt FontFace::GetNumGlyphs() const noexcept
 {
-	return (face != nullptr) ? face->num_glyphs : 0;
+	if (face == nullptr || face->num_glyphs <= 0)
+		return 0u;
+
+	const auto glyphCount = static_cast<unsigned long>(face->num_glyphs);
+	if (glyphCount > std::numeric_limits<FT_UInt>::max())
+		return std::numeric_limits<FT_UInt>::max();
+
+	return static_cast<FT_UInt>(glyphCount);
 }
 
 bool FontFace::HasKerning() const noexcept
@@ -137,7 +125,7 @@ FT_UInt FontFace::GetCharIndex(char32_t codepoint) const noexcept
 
 FT_Error FontFace::LoadGlyph(FT_UInt glyphIndex, FT_Int32 loadFlags) const noexcept
 {
-	return (face != nullptr) ? FT_Load_Glyph(face, glyphIndex, loadFlags) : static_cast<FT_Error>(1);
+	return (face != nullptr) ? FT_Load_Glyph(face, glyphIndex, loadFlags) : FT_Err_Invalid_Face_Handle;
 }
 
-} // namespace font
+} // namespace fonts

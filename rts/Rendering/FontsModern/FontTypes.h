@@ -135,6 +135,10 @@ struct FontDescriptor {
 /**
  * Small POD used when text shaping addresses glyphs directly by glyph index,
  * while legacy callers still address them by Unicode codepoint.
+ *
+ * Glyph indices are face-local. When kind == GlyphIndex, the key must stay
+ * paired with the originating FontFace; a FontFaceSet cannot resolve it across
+ * fallback faces by glyph index alone.
  */
 struct GlyphKey {
 	enum class Kind : std::uint8_t {

@@ -107,18 +107,6 @@ FontFaceSet::FacePtr FontFaceSet::FindFaceForCodepoint(char32_t codepoint) const
 	});
 }
 
-FontFaceSet::FacePtr FontFaceSet::FindFaceForGlyph(std::uint32_t glyphIndex) const
-{
-	return FindFaceIf([glyphIndex](const FacePtr& face) {
-		return SupportsGlyphIndex(face, glyphIndex);
-	});
-}
-
-FontFaceSet::FacePtr FontFaceSet::FindFaceForGlyphKey(const GlyphKey& key) const
-{
-	return key.IsGlyphIndex() ? FindFaceForGlyph(key.glyphIndex) : FindFaceForCodepoint(key.codepoint);
-}
-
 std::pair<FontFaceSet::FacePtr, std::uint32_t> FontFaceSet::FindGlyphForCodepoint(char32_t codepoint) const
 {
 	FacePtr face = FindFaceForCodepoint(codepoint);
@@ -143,11 +131,6 @@ bool FontFaceSet::SupportsCodepoint(char32_t codepoint) const
 	return FindFaceForCodepoint(codepoint) != nullptr;
 }
 
-bool FontFaceSet::SupportsGlyph(std::uint32_t glyphIndex) const
-{
-	return FindFaceForGlyph(glyphIndex) != nullptr;
-}
-
 bool FontFaceSet::SupportsCodepoint(const FacePtr& face, char32_t codepoint)
 {
 	return (face != nullptr) && (face->GetCharIndex(codepoint) != 0u);
@@ -155,7 +138,7 @@ bool FontFaceSet::SupportsCodepoint(const FacePtr& face, char32_t codepoint)
 
 bool FontFaceSet::SupportsGlyphIndex(const FacePtr& face, std::uint32_t glyphIndex)
 {
-	return (face != nullptr) && (glyphIndex > 0u) && (static_cast<long>(glyphIndex) < face->GetNumGlyphs());
+	return (face != nullptr) && (glyphIndex > 0u) && (glyphIndex < face->GetNumGlyphs());
 }
 
 bool FontFaceSet::SupportsGlyphName(const FacePtr& face, const std::string& glyphName)
@@ -169,7 +152,7 @@ bool FontFaceSet::SupportsGlyphName(const FacePtr& face, const std::string& glyp
 		return false;
 
 	char buffer[128] = {0};
-	for (FT_UInt glyphIndex = 0; glyphIndex < static_cast<FT_UInt>(face->GetNumGlyphs()); ++glyphIndex) {
+	for (FT_UInt glyphIndex = 0; glyphIndex < face->GetNumGlyphs(); ++glyphIndex) {
 		buffer[0] = '\0';
 		if (FT_Get_Glyph_Name(ftFace, glyphIndex, buffer, sizeof(buffer)) != 0)
 			continue;
@@ -181,4 +164,4 @@ bool FontFaceSet::SupportsGlyphName(const FacePtr& face, const std::string& glyp
 	return false;
 }
 
-} // namespace font
+} // namespace fonts

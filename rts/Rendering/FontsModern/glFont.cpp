@@ -277,7 +277,7 @@ void DumpAtlasBitmap(const GlyphAtlasTexture& atlas, const FontDescriptor& descr
 	);
 }
 
-[[nodiscard]] bool LoadFontFileBytes(const std::string& fontFile, std::shared_ptr<fonts::FontFileBytes>& fileBytes)
+[[nodiscard]] bool LoadFontFileBytes(const std::string& fontFile, std::shared_ptr<const fonts::FontFileBytes>& fileBytes)
 {
 	const std::string resolvedFontFile = ResolveFontPathForRead(fontFile);
 	CFileHandler fileHandler(resolvedFontFile);
@@ -290,11 +290,13 @@ void DumpAtlasBitmap(const GlyphAtlasTexture& atlas, const FontDescriptor& descr
 		return false;
 	}
 
-	fileBytes = std::make_shared<fonts::FontFileBytes>(static_cast<std::size_t>(fileHandler.FileSize()));
-	if (fileBytes->Empty())
+	const auto fileSize = static_cast<std::size_t>(fileHandler.FileSize());
+	if (fileSize == 0u)
 		return false;
 
-	fileHandler.Read(fileBytes->Data(), fileHandler.FileSize());
+	fonts::FontFileBytes::container_type bytes(fileSize);
+	fileHandler.Read(bytes.data(), fileHandler.FileSize());
+	fileBytes = std::make_shared<const fonts::FontFileBytes>(std::move(bytes));
 	return true;
 }
 
@@ -310,7 +312,7 @@ std::shared_ptr<fonts::FontFace> LoadSizedFace(const FontDescriptor& descriptor)
 	if (auto cachedFace = fonts::FontRegistry::FindLoadedFace(descriptor); cachedFace != nullptr)
 		return cachedFace;
 
-	std::shared_ptr<fonts::FontFileBytes> fileBytes;
+	std::shared_ptr<const fonts::FontFileBytes> fileBytes;
 	if (!LoadFontFileBytes(descriptor.filePath, fileBytes))
 		throw content_error("Couldn't find font '" + descriptor.filePath + "'.");
 
