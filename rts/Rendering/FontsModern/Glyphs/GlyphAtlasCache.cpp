@@ -588,37 +588,40 @@ void GlyphAtlasCache::UploadSlugTextures()
 	std::vector<std::uint16_t> bandUpload(bandTexelCount * 2u, 0u);
 	std::memcpy(bandUpload.data(), slugBandTexels.data(), slugBandTexels.size() * sizeof(std::uint16_t));
 
-	if (slugCurveTextureId == 0u)
-		glGenTextures(1, &slugCurveTextureId);
-	if (slugBandTextureId == 0u)
-		glGenTextures(1, &slugBandTextureId);
+		if (slugCurveTextureId == 0u)
+			glGenTextures(1, &slugCurveTextureId);
+		if (slugBandTextureId == 0u)
+			glGenTextures(1, &slugBandTextureId);
 
-	GLint prevTextureBinding = 0;
-	glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevTextureBinding);
+		GLint prevTextureBinding = 0;
+		GLint prevUnpackAlignment = 4;
+		glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevTextureBinding);
+		glGetIntegerv(GL_UNPACK_ALIGNMENT, &prevUnpackAlignment);
 
-	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-	glBindTexture(GL_TEXTURE_2D, slugCurveTextureId);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>(slugCurveTextureWidth), static_cast<GLsizei>(slugCurveTextureHeight), 0, GL_RGBA, GL_FLOAT, curveUpload.data());
+		glBindTexture(GL_TEXTURE_2D, slugCurveTextureId);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, static_cast<GLsizei>(slugCurveTextureWidth), static_cast<GLsizei>(slugCurveTextureHeight), 0, GL_RGBA, GL_FLOAT, curveUpload.data());
 
-	glBindTexture(GL_TEXTURE_2D, slugBandTextureId);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RG16UI, static_cast<GLsizei>(slugBandTextureWidth), static_cast<GLsizei>(slugBandTextureHeight), 0, GL_RG_INTEGER, GL_UNSIGNED_SHORT, bandUpload.data());
+		glBindTexture(GL_TEXTURE_2D, slugBandTextureId);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RG16UI, static_cast<GLsizei>(slugBandTextureWidth), static_cast<GLsizei>(slugBandTextureHeight), 0, GL_RG_INTEGER, GL_UNSIGNED_SHORT, bandUpload.data());
 
-	glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(prevTextureBinding));
-	slugTexturesDirty = false;
-#endif
+		glPixelStorei(GL_UNPACK_ALIGNMENT, prevUnpackAlignment);
+		glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(prevTextureBinding));
+		slugTexturesDirty = false;
+	#endif
 }
 
 GlyphAtlasCache::SlugTextureInfo GlyphAtlasCache::GetSlugTextureInfo() const noexcept
