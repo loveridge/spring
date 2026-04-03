@@ -172,6 +172,8 @@ public:
 	void SetProjMatrix(const CMatrix44f& mat);
 	const CMatrix44f& GetViewMatrix() const;
 	const CMatrix44f& GetProjMatrix() const;
+	void SetUseCurrentGLMatrices(bool enable);
+	bool GetUseCurrentGLMatrices() const;
 
 	static CMatrix44f DefViewMatrix();
 	static CMatrix44f DefProjMatrix();

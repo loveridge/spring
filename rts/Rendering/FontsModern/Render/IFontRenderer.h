@@ -67,8 +67,11 @@ struct FontRenderState {
 
 	CMatrix44f modelViewMatrix = CMatrix44f::Identity();
 	CMatrix44f projectionMatrix = CMatrix44f::Identity();
+	CMatrix44f localTransformMatrix = CMatrix44f::Identity();
 	bool hasModelViewMatrix = false;
 	bool hasProjectionMatrix = false;
+	bool hasLocalTransformMatrix = false;
+	bool useCurrentGLMatrices = false;
 
 	const float3* worldPos = nullptr;
 	const float4* clipPlane = nullptr;

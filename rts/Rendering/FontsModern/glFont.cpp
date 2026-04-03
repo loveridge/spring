@@ -527,6 +527,7 @@ public:
 		state.projectionMatrix = projMatrix;
 		state.hasModelViewMatrix = true;
 		state.hasProjectionMatrix = true;
+		state.useCurrentGLMatrices = useCurrentGLMatrices;
 		state.useWorldSpace = false;
 		state.normalizedCoordinates = false;
 		state.useColorAtlas = glyphCache->HasColorGlyphs();
@@ -552,15 +553,23 @@ public:
 		state.useOutline = HasOption(options, FontOption::Outline);
 		state.useShadow = HasOption(options, FontOption::Shadow);
 		state.buffered = buffered;
+		state.useCurrentGLMatrices = useCurrentGLMatrices;
 
 		CCamera* activeCam = CCamera::GetActive();
+		const bool useSyncedMatrices =
+			useCurrentGLMatrices ||
+			(viewMatrix != CglFont::DefViewMatrix()) ||
+			(projMatrix != CglFont::DefProjMatrix());
+
 		if (activeCam != nullptr) {
-			worldViewMatrix = activeCam->GetViewMatrix() * activeCam->GetBillBoardMatrix();
-			worldProjMatrix = activeCam->GetProjectionMatrix();
+			worldViewMatrix = useSyncedMatrices ? viewMatrix : activeCam->GetViewMatrix();
+			worldProjMatrix = useSyncedMatrices ? projMatrix : activeCam->GetProjectionMatrix();
 			state.modelViewMatrix = worldViewMatrix;
 			state.projectionMatrix = worldProjMatrix;
+			state.localTransformMatrix = activeCam->GetBillBoardMatrix();
 			state.hasModelViewMatrix = true;
 			state.hasProjectionMatrix = true;
+			state.hasLocalTransformMatrix = true;
 		} else {
 			state.modelViewMatrix = viewMatrix;
 			state.projectionMatrix = projMatrix;
@@ -737,6 +746,7 @@ public:
 	CMatrix44f projMatrix = CMatrix44f::Identity();
 	CMatrix44f worldViewMatrix = CMatrix44f::Identity();
 	CMatrix44f worldProjMatrix = CMatrix44f::Identity();
+	bool useCurrentGLMatrices = false;
 	std::uint32_t debugId = 0;
 	std::string familyName;
 	std::string styleName;
@@ -1435,6 +1445,18 @@ const CMatrix44f& CglFont::GetViewMatrix() const
 const CMatrix44f& CglFont::GetProjMatrix() const
 {
 	return impl->projMatrix;
+}
+
+void CglFont::SetUseCurrentGLMatrices(bool enable)
+{
+	std::scoped_lock lock(impl->mutex);
+	impl->useCurrentGLMatrices = enable;
+}
+
+bool CglFont::GetUseCurrentGLMatrices() const
+{
+	std::scoped_lock lock(impl->mutex);
+	return impl->useCurrentGLMatrices;
 }
 
 CMatrix44f CglFont::DefViewMatrix()

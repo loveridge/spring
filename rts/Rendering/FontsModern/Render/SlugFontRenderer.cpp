@@ -33,8 +33,11 @@ layout (location = 3) in vec4 aColor;
 layout (location = 4) in uvec4 aGlyphData;
 
 uniform mat4 uMVP;
+uniform mat4 uLocalTransform;
 uniform float uDepthBias;
 uniform int uUsePixelAlignedCoordinates;
+uniform int uUseCurrentGLMatrices;
+uniform int uHasLocalTransform;
 
 out Data {
 	vec4 vColor;
@@ -52,11 +55,13 @@ void main()
 
 	pos.z += uDepthBias;
 
+	vec4 worldPos = (uHasLocalTransform != 0)? (uLocalTransform * vec4(pos, 1.0)): vec4(pos, 1.0);
+
 	vColor = aColor;
 	vRenderCoord = aLocalCoord;
 	vBandTransform = aBandTransform;
 	vGlyphData = aGlyphData;
-	gl_Position = uMVP * vec4(pos, 1.0);
+	gl_Position = ((uUseCurrentGLMatrices != 0)? gl_ModelViewProjectionMatrix: uMVP) * worldPos;
 }
 )";
 
@@ -245,8 +250,11 @@ in vec4 aColor;
 in uvec4 aGlyphData;
 
 uniform mat4 uMVP;
+uniform mat4 uLocalTransform;
 uniform float uDepthBias;
 uniform int uUsePixelAlignedCoordinates;
+uniform int uUseCurrentGLMatrices;
+uniform int uHasLocalTransform;
 
 out vec4 vColor;
 out vec2 vRenderCoord;
@@ -262,11 +270,13 @@ void main()
 
 	pos.z += uDepthBias;
 
+	vec4 worldPos = (uHasLocalTransform != 0)? (uLocalTransform * vec4(pos, 1.0)): vec4(pos, 1.0);
+
 	vColor = aColor;
 	vRenderCoord = aLocalCoord;
 	vBandTransform = aBandTransform;
 	vGlyphData = aGlyphData;
-	gl_Position = uMVP * vec4(pos, 1.0);
+	gl_Position = ((uUseCurrentGLMatrices != 0)? gl_ModelViewProjectionMatrix: uMVP) * worldPos;
 }
 )";
 
@@ -455,6 +465,11 @@ void main()
 [[nodiscard]] bool ShouldUseDepthTest(const FontRenderState* state) noexcept
 {
 	return (state != nullptr) && state->useWorldSpace;
+}
+
+[[nodiscard]] bool ShouldUseClientSideSubmission(const FontRenderState* state) noexcept
+{
+	return (state != nullptr) && state->useCurrentGLMatrices;
 }
 
 [[nodiscard]] FontColor ResolveGlyphColor(const FontRenderState* state, bool outlinePass) noexcept
@@ -723,11 +738,14 @@ void SlugFontRenderer::DrawQueued()
 		return;
 	}
 
-	UploadBatch(outlineBatch, outlineBuffers);
-	UploadBatch(primaryBatch, primaryBuffers);
-
 #ifndef HEADLESS
 	const FontRenderState* state = GetActiveState(stateStack);
+	const bool useClientSideSubmission = ShouldUseClientSideSubmission(state);
+
+	if (!useClientSideSubmission) {
+		UploadBatch(outlineBatch, outlineBuffers);
+		UploadBatch(primaryBatch, primaryBuffers);
+	}
 
 	if (ShouldUseDepthTest(state)) {
 		glEnable(GL_DEPTH_TEST);
@@ -1032,7 +1050,33 @@ void SlugFontRenderer::SubmitBatch(const RenderBatch& batch, const BufferResourc
 
 	assert(batch.vertices.size() <= static_cast<std::size_t>(std::numeric_limits<GLsizei>::max()));
 
-	if (bufferResources.vao != nullptr) {
+	const FontRenderState* state = GetActiveState(stateStack);
+	if (ShouldUseClientSideSubmission(state)) {
+		GLint prevArrayBuffer = 0;
+		glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &prevArrayBuffer);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+		glEnableVertexAttribArray(0);
+		glEnableVertexAttribArray(1);
+		glEnableVertexAttribArray(2);
+		glEnableVertexAttribArray(3);
+		glEnableVertexAttribArray(4);
+
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), &(batch.vertices[0].posX));
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), &(batch.vertices[0].localX));
+		glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), &(batch.vertices[0].bandScaleX));
+		glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), &(batch.vertices[0].colorR));
+		glVertexAttribIPointer(4, 4, GL_UNSIGNED_INT, sizeof(Vertex), &(batch.vertices[0].glyphX));
+
+		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(batch.vertices.size()));
+
+		glDisableVertexAttribArray(0);
+		glDisableVertexAttribArray(1);
+		glDisableVertexAttribArray(2);
+		glDisableVertexAttribArray(3);
+		glDisableVertexAttribArray(4);
+		glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(prevArrayBuffer));
+	} else if (bufferResources.vao != nullptr) {
 		bufferResources.vao->Bind();
 		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(batch.vertices.size()));
 		bufferResources.vao->Unbind();
@@ -1093,13 +1137,19 @@ void SlugFontRenderer::ApplyUniforms()
 	if (matrix == nullptr)
 		matrix = &mvp;
 
+	const CMatrix44f localTransform = (state != nullptr && state->hasLocalTransformMatrix)
+		? state->localTransformMatrix
+		: CMatrix44f::Identity();
 	const bool usePixelAlignedCoordinates = uniformState.usePixelAlignedCoordinates ||
 		(state != nullptr && !state->useWorldSpace && !state->normalizedCoordinates);
 
 	programResources.program->SetUniformMatrix4x4("uMVP", false, matrix->m);
+	programResources.program->SetUniformMatrix4x4("uLocalTransform", false, localTransform.m);
 	programResources.program->SetUniform("uDepthBias", uniformState.depth);
 	programResources.program->SetUniform("uGamma", uniformState.gamma);
 	programResources.program->SetUniform("uUsePixelAlignedCoordinates", static_cast<int>(usePixelAlignedCoordinates));
+	programResources.program->SetUniform("uHasLocalTransform", static_cast<int>(state != nullptr && state->hasLocalTransformMatrix));
+	programResources.program->SetUniform("uUseCurrentGLMatrices", static_cast<int>(state != nullptr && state->useCurrentGLMatrices));
 }
 
 void SlugFontRenderer::BindTextures() const

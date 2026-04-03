@@ -86,8 +86,14 @@ CONFIG(int, DeprecatedGLWarnLevel).defaultValue(0).headlessValue(0).safemodeValu
 
 namespace {
 
-void SyncFontMatricesFromOpenGL(CglFont& font)
+void SyncFontMatricesFromOpenGL(lua_State* L, CglFont& font)
 {
+	const bool useCurrentGLMatrices = GetLuaContextData(L)->glMatrixTracker.listMode;
+	font.SetUseCurrentGLMatrices(useCurrentGLMatrices);
+
+	if (useCurrentGLMatrices)
+		return;
+
 	CMatrix44f modelViewMatrix;
 	CMatrix44f projectionMatrix;
 
@@ -97,6 +103,30 @@ void SyncFontMatricesFromOpenGL(CglFont& font)
 	font.SetViewMatrix(modelViewMatrix);
 	font.SetProjMatrix(projectionMatrix);
 }
+
+class ScopedFontMatrixState
+{
+public:
+	explicit ScopedFontMatrixState(CglFont& font_)
+		: font(font_)
+		, viewMatrix(font_.GetViewMatrix())
+		, projMatrix(font_.GetProjMatrix())
+		, useCurrentGLMatrices(font_.GetUseCurrentGLMatrices())
+	{}
+
+	~ScopedFontMatrixState()
+	{
+		font.SetViewMatrix(viewMatrix);
+		font.SetProjMatrix(projMatrix);
+		font.SetUseCurrentGLMatrices(useCurrentGLMatrices);
+	}
+
+private:
+	CglFont& font;
+	CMatrix44f viewMatrix;
+	CMatrix44f projMatrix;
+	bool useCurrentGLMatrices;
+};
 
 }
 
@@ -1455,7 +1485,8 @@ int LuaOpenGL::Text(lua_State* L)
 	}
 
 	font->SetTextColor(SColor(color.data()));
-	SyncFontMatricesFromOpenGL(*font);
+	ScopedFontMatrixState scopedFontMatrices(*font);
+	SyncFontMatricesFromOpenGL(L, *font);
 	font->Print(x, y, size, options, text);
 
 	return 0;

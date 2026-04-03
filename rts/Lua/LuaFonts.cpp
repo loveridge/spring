@@ -30,8 +30,14 @@
 
 namespace {
 
-void SyncFontMatricesFromOpenGL(CglFont& font)
+void SyncFontMatricesFromOpenGL(lua_State* L, CglFont& font)
 {
+	const bool useCurrentGLMatrices = GetLuaContextData(L)->glMatrixTracker.listMode;
+	font.SetUseCurrentGLMatrices(useCurrentGLMatrices);
+
+	if (useCurrentGLMatrices)
+		return;
+
 	CMatrix44f modelViewMatrix;
 	CMatrix44f projectionMatrix;
 
@@ -41,6 +47,30 @@ void SyncFontMatricesFromOpenGL(CglFont& font)
 	font.SetViewMatrix(modelViewMatrix);
 	font.SetProjMatrix(projectionMatrix);
 }
+
+class ScopedFontMatrixState
+{
+public:
+	explicit ScopedFontMatrixState(CglFont& font_)
+		: font(font_)
+		, viewMatrix(font_.GetViewMatrix())
+		, projMatrix(font_.GetProjMatrix())
+		, useCurrentGLMatrices(font_.GetUseCurrentGLMatrices())
+	{}
+
+	~ScopedFontMatrixState()
+	{
+		font.SetViewMatrix(viewMatrix);
+		font.SetProjMatrix(projMatrix);
+		font.SetUseCurrentGLMatrices(useCurrentGLMatrices);
+	}
+
+private:
+	CglFont& font;
+	CMatrix44f viewMatrix;
+	CMatrix44f projMatrix;
+	bool useCurrentGLMatrices;
+};
 
 }
 
@@ -325,7 +355,8 @@ int LuaFonts::Print(lua_State* L)
 		}
 	}
 
-	SyncFontMatricesFromOpenGL(*f);
+	ScopedFontMatrixState scopedFontMatrices(*f);
+	SyncFontMatricesFromOpenGL(L, *f);
 	f->Print(x, y, size, options, text);
 	return 0;
 }
@@ -377,6 +408,8 @@ int LuaFonts::PrintWorld(lua_State* L)
 		}
 	}
 
+	ScopedFontMatrixState scopedFontMatrices(*f);
+	SyncFontMatricesFromOpenGL(L, *f);
 	f->PrintWorld(pos, size, text, options);
 	return 0;
 }
