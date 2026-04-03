@@ -84,52 +84,6 @@
 CONFIG(bool, LuaShaders).defaultValue(true).headlessValue(false).safemodeValue(false);
 CONFIG(int, DeprecatedGLWarnLevel).defaultValue(0).headlessValue(0).safemodeValue(0);
 
-namespace {
-
-void SyncFontMatricesFromOpenGL(lua_State* L, CglFont& font)
-{
-	const bool useCurrentGLMatrices = GetLuaContextData(L)->glMatrixTracker.listMode;
-	font.SetUseCurrentGLMatrices(useCurrentGLMatrices);
-
-	if (useCurrentGLMatrices)
-		return;
-
-	CMatrix44f modelViewMatrix;
-	CMatrix44f projectionMatrix;
-
-	glGetFloatv(GL_MODELVIEW_MATRIX, modelViewMatrix.m);
-	glGetFloatv(GL_PROJECTION_MATRIX, projectionMatrix.m);
-
-	font.SetViewMatrix(modelViewMatrix);
-	font.SetProjMatrix(projectionMatrix);
-}
-
-class ScopedFontMatrixState
-{
-public:
-	explicit ScopedFontMatrixState(CglFont& font_)
-		: font(font_)
-		, viewMatrix(font_.GetViewMatrix())
-		, projMatrix(font_.GetProjMatrix())
-		, useCurrentGLMatrices(font_.GetUseCurrentGLMatrices())
-	{}
-
-	~ScopedFontMatrixState()
-	{
-		font.SetViewMatrix(viewMatrix);
-		font.SetProjMatrix(projMatrix);
-		font.SetUseCurrentGLMatrices(useCurrentGLMatrices);
-	}
-
-private:
-	CglFont& font;
-	CMatrix44f viewMatrix;
-	CMatrix44f projMatrix;
-	bool useCurrentGLMatrices;
-};
-
-}
-
 /*** Callouts for OpenGL API
  *
  * Only setters and getters for OpenGL usage in Recoil, see `GL` for constants.
@@ -1485,8 +1439,6 @@ int LuaOpenGL::Text(lua_State* L)
 	}
 
 	font->SetTextColor(SColor(color.data()));
-	ScopedFontMatrixState scopedFontMatrices(*font);
-	SyncFontMatricesFromOpenGL(L, *font);
 	font->Print(x, y, size, options, text);
 
 	return 0;

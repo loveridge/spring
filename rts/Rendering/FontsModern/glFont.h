@@ -168,16 +168,6 @@ public:
 	void SetDepths(const FontDepth& depth);
 	FontDepth GetDepths() const;
 
-	void SetViewMatrix(const CMatrix44f& mat);
-	void SetProjMatrix(const CMatrix44f& mat);
-	const CMatrix44f& GetViewMatrix() const;
-	const CMatrix44f& GetProjMatrix() const;
-	void SetUseCurrentGLMatrices(bool enable);
-	bool GetUseCurrentGLMatrices() const;
-
-	static CMatrix44f DefViewMatrix();
-	static CMatrix44f DefProjMatrix();
-
 public:
 	const std::string& GetFilePath() const;
 	FontDescriptor GetDescriptor() const;

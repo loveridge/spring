@@ -30,11 +30,9 @@ layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec2 aUV;
 layout (location = 2) in vec4 aColor;
 
-uniform mat4 uMVP;
 uniform mat4 uLocalTransform;
 uniform float uDepthBias;
 uniform int uUsePixelAlignedCoordinates;
-uniform int uUseCurrentGLMatrices;
 uniform int uHasLocalTransform;
 
 out Data {
@@ -55,7 +53,7 @@ void main()
 
 	vColor = aColor;
 	vUV = aUV;
-	gl_Position = ((uUseCurrentGLMatrices != 0)? gl_ModelViewProjectionMatrix: uMVP) * worldPos;
+	gl_Position = gl_ModelViewProjectionMatrix * worldPos;
 }
 )";
 
@@ -116,11 +114,9 @@ in vec3 aPos;
 in vec2 aUV;
 in vec4 aColor;
 
-uniform mat4 uMVP;
 uniform mat4 uLocalTransform;
 uniform float uDepthBias;
 uniform int uUsePixelAlignedCoordinates;
-uniform int uUseCurrentGLMatrices;
 uniform int uHasLocalTransform;
 
 out vec4 vColor;
@@ -139,7 +135,7 @@ void main()
 
 	vColor = aColor;
 	vUV = aUV;
-	gl_Position = ((uUseCurrentGLMatrices != 0)? gl_ModelViewProjectionMatrix: uMVP) * worldPos;
+	gl_Position = gl_ModelViewProjectionMatrix * worldPos;
 }
 )";
 
@@ -208,14 +204,11 @@ void main()
 	return &stateStack.back();
 }
 
-[[nodiscard]] bool ShouldUseDepthTest(const FontRenderState* state) noexcept
+[[nodiscard]] bool IsCompilingDisplayList() noexcept
 {
-	return (state != nullptr) && state->useWorldSpace;
-}
-
-[[nodiscard]] bool ShouldUseClientSideSubmission(const FontRenderState* state) noexcept
-{
-	return (state != nullptr) && state->useCurrentGLMatrices;
+	GLint listIndex = 0;
+	glGetIntegerv(GL_LIST_INDEX, &listIndex);
+	return (listIndex != 0);
 }
 
 [[nodiscard]] FontColor ResolveGlyphColor(const FontRenderState* state, bool outlinePass) noexcept
@@ -263,104 +256,6 @@ void main()
 [[nodiscard]] GLenum GetBufferUsage(const ShaderFontRenderer::CreateOptions& options) noexcept
 {
 	return options.bufferedRendering ? GL_STREAM_DRAW : GL_DYNAMIC_DRAW;
-}
-
-struct SavedTextureUnitBinding {
-	int unit = 0;
-	GLint texture2D = 0;
-	bool valid = false;
-};
-
-struct SavedGLRenderState {
-	GLint program = 0;
-	GLint activeTexture = GL_TEXTURE0;
-	GLint vertexArray = 0;
-	GLint arrayBuffer = 0;
-	GLint elementArrayBuffer = 0;
-	SavedTextureUnitBinding primaryTexture;
-	SavedTextureUnitBinding outlineTexture;
-};
-
-void CaptureTextureUnitBinding(SavedTextureUnitBinding& savedBinding, int textureUnit)
-{
-	savedBinding.unit = std::max(textureUnit, 0);
-	savedBinding.valid = true;
-
-	glActiveTexture(GL_TEXTURE0 + savedBinding.unit);
-	glGetIntegerv(GL_TEXTURE_BINDING_2D, &savedBinding.texture2D);
-}
-
-void RestoreTextureUnitBinding(const SavedTextureUnitBinding& savedBinding)
-{
-	if (!savedBinding.valid)
-		return;
-
-	glActiveTexture(GL_TEXTURE0 + savedBinding.unit);
-	glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(savedBinding.texture2D));
-}
-
-void UnbindTextureUnit(int textureUnit)
-{
-	glActiveTexture(GL_TEXTURE0 + std::max(textureUnit, 0));
-	glBindTexture(GL_TEXTURE_2D, 0);
-}
-
-[[nodiscard]] bool UsesSameTextureUnit(const SavedTextureUnitBinding& savedBinding, int textureUnit) noexcept
-{
-	return savedBinding.valid && (savedBinding.unit == std::max(textureUnit, 0));
-}
-
-void CaptureRenderState(
-	SavedGLRenderState& savedState,
-	const ShaderFontRenderer::TextureBinding& primaryBinding,
-	const ShaderFontRenderer::TextureBinding& outlineBinding
-)
-{
-	glGetIntegerv(GL_CURRENT_PROGRAM, &savedState.program);
-	glGetIntegerv(GL_ACTIVE_TEXTURE, &savedState.activeTexture);
-	glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &savedState.arrayBuffer);
-	glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &savedState.elementArrayBuffer);
-
-	if (VAO::IsSupported())
-		glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &savedState.vertexArray);
-
-	CaptureTextureUnitBinding(savedState.primaryTexture, primaryBinding.textureUnit);
-
-	if (!UsesSameTextureUnit(savedState.primaryTexture, outlineBinding.textureUnit))
-		CaptureTextureUnitBinding(savedState.outlineTexture, outlineBinding.textureUnit);
-}
-
-void PrepareCleanRenderState(
-	const ShaderFontRenderer::TextureBinding& primaryBinding,
-	const ShaderFontRenderer::TextureBinding& outlineBinding
-)
-{
-	if (VAO::IsSupported())
-		glBindVertexArray(0);
-
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-
-	UnbindTextureUnit(primaryBinding.textureUnit);
-
-	if (std::max(outlineBinding.textureUnit, 0) != std::max(primaryBinding.textureUnit, 0))
-		UnbindTextureUnit(outlineBinding.textureUnit);
-
-	glActiveTexture(GL_TEXTURE0);
-}
-
-void RestoreRenderState(const SavedGLRenderState& savedState)
-{
-	RestoreTextureUnitBinding(savedState.primaryTexture);
-	RestoreTextureUnitBinding(savedState.outlineTexture);
-	glActiveTexture(savedState.activeTexture);
-
-	if (VAO::IsSupported())
-		glBindVertexArray(static_cast<GLuint>(savedState.vertexArray));
-
-	glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(savedState.arrayBuffer));
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLuint>(savedState.elementArrayBuffer));
-	glUseProgram(static_cast<GLuint>(savedState.program));
 }
 
 } // namespace
@@ -472,11 +367,11 @@ void ShaderFontRenderer::DrawQueued()
 		return;
 	}
 
-	SavedGLRenderState savedState;
-	CaptureRenderState(savedState, primaryTextureBinding, outlineTextureBinding);
-
-	glPushAttrib(GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_TEXTURE_BIT);
-	PrepareCleanRenderState(primaryTextureBinding, outlineTextureBinding);
+	GLint prevProgram = 0;
+	GLint prevActiveTexture = GL_TEXTURE0;
+	glPushAttrib(GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT);
+	glGetIntegerv(GL_CURRENT_PROGRAM, &prevProgram);
+	glGetIntegerv(GL_ACTIVE_TEXTURE, &prevActiveTexture);
 #endif
 
 	EnsureInitialized();
@@ -486,8 +381,9 @@ void ShaderFontRenderer::DrawQueued()
 			stats.droppedQuads += (primaryBatch.quadCount + outlineBatch.quadCount);
 
 #ifndef HEADLESS
+		glUseProgram(static_cast<GLuint>(prevProgram));
+		glActiveTexture(prevActiveTexture);
 		glPopAttrib();
-		RestoreRenderState(savedState);
 #endif
 
 		ClearQueuedBatches();
@@ -500,23 +396,15 @@ void ShaderFontRenderer::DrawQueued()
 
 #ifndef HEADLESS
 	const FontRenderState* state = GetActiveState(stateStack);
-	const bool useClientSideSubmission = ShouldUseClientSideSubmission(state);
+	const bool useClientSideSubmission = IsCompilingDisplayList();
 
 	if (!useClientSideSubmission) {
 		UploadBatch(outlineBatch, outlineBuffers);
 		UploadBatch(primaryBatch, primaryBuffers);
 	}
 
-	if (ShouldUseDepthTest(state)) {
-		glEnable(GL_DEPTH_TEST);
-		glDepthFunc(GL_LEQUAL);
-	} else {
-		glDisable(GL_DEPTH_TEST);
-	}
-
-	glDepthMask(GL_FALSE);
+	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_ALPHA_TEST);
-	glDisable(GL_CULL_FACE);
 	glEnable(GL_BLEND);
 
 	if (state == nullptr || !state->userDefinedBlending)
@@ -528,8 +416,17 @@ void ShaderFontRenderer::DrawQueued()
 	SubmitBatch(primaryBatch, primaryBuffers, primaryTextureBinding, false);
 
 	programResources.program->Disable();
+	glActiveTexture(GL_TEXTURE0 + std::max(primaryTextureBinding.textureUnit, 0));
+	glBindTexture(GL_TEXTURE_2D, 0);
+
+	if (std::max(outlineTextureBinding.textureUnit, 0) != std::max(primaryTextureBinding.textureUnit, 0)) {
+		glActiveTexture(GL_TEXTURE0 + std::max(outlineTextureBinding.textureUnit, 0));
+		glBindTexture(GL_TEXTURE_2D, 0);
+	}
+
+	glUseProgram(static_cast<GLuint>(prevProgram));
+	glActiveTexture(prevActiveTexture);
 	glPopAttrib();
-	RestoreRenderState(savedState);
 #endif
 
 	ClearQueuedBatches();
@@ -887,8 +784,7 @@ void ShaderFontRenderer::SubmitBatch(const RenderBatch& batch, const BufferResou
 
 	assert(batch.vertices.size() <= static_cast<std::size_t>(std::numeric_limits<GLsizei>::max()));
 
-	const FontRenderState* state = GetActiveState(stateStack);
-	if (ShouldUseClientSideSubmission(state)) {
+	if (IsCompilingDisplayList()) {
 		GLint prevArrayBuffer = 0;
 		glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &prevArrayBuffer);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -944,24 +840,6 @@ void ShaderFontRenderer::ApplyUniforms(const TextureBinding& binding, bool outli
 		return;
 
 	const FontRenderState* state = GetActiveState(stateStack);
-
-	CMatrix44f mvp = CMatrix44f::Identity();
-	const CMatrix44f* matrix = uniformState.matrix;
-
-	if (matrix == nullptr && state != nullptr) {
-		if (state->hasProjectionMatrix && state->hasModelViewMatrix) {
-			mvp = state->projectionMatrix * state->modelViewMatrix;
-			matrix = &mvp;
-		} else if (state->hasProjectionMatrix) {
-			matrix = &state->projectionMatrix;
-		} else if (state->hasModelViewMatrix) {
-			matrix = &state->modelViewMatrix;
-		}
-	}
-
-	if (matrix == nullptr)
-		matrix = &mvp;
-
 	const CMatrix44f localTransform = (state != nullptr && state->hasLocalTransformMatrix)
 		? state->localTransformMatrix
 		: CMatrix44f::Identity();
@@ -971,7 +849,6 @@ void ShaderFontRenderer::ApplyUniforms(const TextureBinding& binding, bool outli
 	// SDF shading is only valid for atlases explicitly tagged as distance fields.
 	const bool enableSDF = uniformState.enableSDF && binding.sdf;
 
-	programResources.program->SetUniformMatrix4x4("uMVP", false, matrix->m);
 	programResources.program->SetUniformMatrix4x4("uLocalTransform", false, localTransform.m);
 	programResources.program->SetUniform("uDepthBias", uniformState.depth);
 	programResources.program->SetUniform("uGamma", uniformState.gamma);
@@ -979,7 +856,6 @@ void ShaderFontRenderer::ApplyUniforms(const TextureBinding& binding, bool outli
 	programResources.program->SetUniform("uOutlineRadius", uniformState.outlineRadius);
 	programResources.program->SetUniform("uUsePixelAlignedCoordinates", static_cast<int>(usePixelAlignedCoordinates));
 	programResources.program->SetUniform("uHasLocalTransform", static_cast<int>(state != nullptr && state->hasLocalTransformMatrix));
-	programResources.program->SetUniform("uUseCurrentGLMatrices", static_cast<int>(state != nullptr && state->useCurrentGLMatrices));
 	programResources.program->SetUniform("uUseColorAtlas", static_cast<int>(useColorAtlas));
 	programResources.program->SetUniform("uOutlinePass", static_cast<int>(outlinePass));
 	programResources.program->SetUniform("uEnableSDF", static_cast<int>(enableSDF));
