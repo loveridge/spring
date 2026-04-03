@@ -16,6 +16,8 @@
 #include FT_FREETYPE_H
 #include FT_OUTLINE_H
 #include FT_BBOX_H
+#include FT_GLYPH_H
+#include FT_STROKER_H
 
 #include "Rendering/FontsModern/FreeType/FontFace.h"
 #include "Rendering/FontsModern/FreeType/FontFaceSet.h"
@@ -957,8 +959,10 @@ void GlyphAtlasCache::LoadGlyphByIndex(const FacePtr& face, char32_t sourceCodep
 
 	QueueGlyphBitmap(MakeAtlasGlyphKey(glyph), glyphBitmap, outlineBitmapPtr);
 
-	if (slugDataEnabled)
-		BuildSlugGlyph(face, glyphIndex, glyph);
+	if (slugDataEnabled) {
+		BuildSlugFillGlyph(face, glyphIndex, glyph);
+		BuildSlugOutlineGlyph(face, glyphIndex, glyph);
+	}
 #endif
 
 	CacheGlyphRecord(glyphKey, std::move(glyph));
@@ -995,38 +999,26 @@ void GlyphAtlasCache::QueueGlyphBitmap(const std::string& cacheKey, const CBitma
 	}
 }
 
-void GlyphAtlasCache::BuildSlugGlyph(const FacePtr& face, std::uint32_t glyphIndex, GlyphInfo& glyph)
+bool GlyphAtlasCache::BuildSlugGlyphFromFTOutline(const FT_Outline& outline, SlugGlyphInfo& outInfo)
 {
 #ifdef HEADLESS
-	(void)face;
-	(void)glyphIndex;
-	(void)glyph;
+	(void)outline;
+	(void)outInfo;
+	return false;
 #else
-	if (!slugDataEnabled || face == nullptr)
-		return;
+	outInfo = {};
 
-	FT_Face ftFace = face->GetFTFace();
-	if (ftFace == nullptr)
-		return;
-
-	if (face->LoadGlyph(glyphIndex, FT_LOAD_NO_BITMAP) != 0)
-		return;
-
-	FT_GlyphSlot slot = ftFace->glyph;
-	if (slot == nullptr)
-		return;
-
-	if (slot->format != FT_GLYPH_FORMAT_OUTLINE || slot->outline.n_contours <= 0 || slot->outline.n_points <= 0)
-		return;
+	if (!slugDataEnabled || outline.n_contours <= 0 || outline.n_points <= 0)
+		return false;
 
 	FT_BBox bbox {};
-	if (FT_Outline_Get_BBox(&slot->outline, &bbox) != 0)
-		return;
+	if (FT_Outline_Get_BBox(const_cast<FT_Outline*>(&outline), &bbox) != 0)
+		return false;
 
 	const float width = (bbox.xMax - bbox.xMin) * normScale;
 	const float height = (bbox.yMax - bbox.yMin) * normScale;
 	if (width <= 0.0f || height <= 0.0f)
-		return;
+		return false;
 
 	SlugOutlineBuilder builder;
 	builder.minX = static_cast<float>(bbox.xMin);
@@ -1041,12 +1033,12 @@ void GlyphAtlasCache::BuildSlugGlyph(const FacePtr& face, std::uint32_t glyphInd
 	funcs.shift = 0;
 	funcs.delta = 0;
 
-	if (FT_Outline_Decompose(&slot->outline, &funcs, &builder) != 0)
-		return;
+	if (FT_Outline_Decompose(const_cast<FT_Outline*>(&outline), &funcs, &builder) != 0)
+		return false;
 
 	builder.CloseContour();
 	if (builder.curves.empty())
-		return;
+		return false;
 
 	auto storeCurve = [this](SlugCurveData& curve) {
 		std::uint32_t texelIndex = static_cast<std::uint32_t>(slugCurveTexels.size() / 4u);
@@ -1074,7 +1066,7 @@ void GlyphAtlasCache::BuildSlugGlyph(const FacePtr& face, std::uint32_t glyphInd
 	const float bandDimX = width / static_cast<float>(bandCount);
 	const float bandDimY = height / static_cast<float>(bandCount);
 	if (bandDimX <= 0.0f || bandDimY <= 0.0f)
-		return;
+		return false;
 
 	const std::size_t glyphBaseTexel = slugBandTexels.size() / 2u;
 	slugBandTexels.resize(slugBandTexels.size() + static_cast<std::size_t>(bandCount * 2u * 2u), 0u);
@@ -1144,21 +1136,132 @@ void GlyphAtlasCache::BuildSlugGlyph(const FacePtr& face, std::uint32_t glyphInd
 		writeBandHeader(bandCount + i, verticalBands[i].first, verticalBands[i].second);
 	}
 
-	glyph.slugInfo.width = width;
-	glyph.slugInfo.height = height;
-	glyph.slugInfo.bandScaleX = 1.0f / bandDimX;
-	glyph.slugInfo.bandScaleY = 1.0f / bandDimY;
-	glyph.slugInfo.bandOffsetX = 0.0f;
-	glyph.slugInfo.bandOffsetY = 0.0f;
-	glyph.slugInfo.bandTexelX = static_cast<std::uint32_t>(glyphBaseTexel % SlugTextureWidth);
-	glyph.slugInfo.bandTexelY = static_cast<std::uint32_t>(glyphBaseTexel / SlugTextureWidth);
-	glyph.slugInfo.bandMaxX = bandCount - 1u;
-	glyph.slugInfo.bandMaxY = bandCount - 1u;
-	glyph.slugInfo.flags = 0u;
+	outInfo.offsetX = bbox.xMin * normScale;
+	outInfo.offsetY = bbox.yMin * normScale - fontDescender;
+	outInfo.width = width;
+	outInfo.height = height;
+	outInfo.bandScaleX = 1.0f / bandDimX;
+	outInfo.bandScaleY = 1.0f / bandDimY;
+	outInfo.bandOffsetX = 0.0f;
+	outInfo.bandOffsetY = 0.0f;
+	outInfo.bandTexelX = static_cast<std::uint32_t>(glyphBaseTexel % SlugTextureWidth);
+	outInfo.bandTexelY = static_cast<std::uint32_t>(glyphBaseTexel / SlugTextureWidth);
+	outInfo.bandMaxX = bandCount - 1u;
+	outInfo.bandMaxY = bandCount - 1u;
+	outInfo.flags = 0u;
 
 	slugCurveTextureHeight = static_cast<std::uint32_t>((slugCurveTexels.size() / 4u + SlugTextureWidth - 1u) / SlugTextureWidth);
 	slugBandTextureHeight = static_cast<std::uint32_t>((slugBandTexels.size() / 2u + SlugTextureWidth - 1u) / SlugTextureWidth);
 	slugTexturesDirty = true;
+	return true;
+#endif
+}
+
+bool GlyphAtlasCache::BuildSlugFillGlyph(const FacePtr& face, std::uint32_t glyphIndex, GlyphInfo& glyph)
+{
+#ifdef HEADLESS
+	(void)face;
+	(void)glyphIndex;
+	(void)glyph;
+	return false;
+#else
+	glyph.slugFillInfo = {};
+
+	if (!slugDataEnabled || face == nullptr)
+		return false;
+
+	FT_Face ftFace = face->GetFTFace();
+	if (ftFace == nullptr)
+		return false;
+
+	if (face->LoadGlyph(glyphIndex, FT_LOAD_NO_BITMAP) != 0)
+		return false;
+
+	FT_GlyphSlot slot = ftFace->glyph;
+	if (slot == nullptr)
+		return false;
+
+	if (slot->format != FT_GLYPH_FORMAT_OUTLINE || slot->outline.n_contours <= 0 || slot->outline.n_points <= 0)
+		return false;
+
+	return BuildSlugGlyphFromFTOutline(slot->outline, glyph.slugFillInfo);
+#endif
+}
+
+bool GlyphAtlasCache::BuildSlugOutlineGlyph(const FacePtr& face, std::uint32_t glyphIndex, GlyphInfo& glyph)
+{
+#ifdef HEADLESS
+	(void)face;
+	(void)glyphIndex;
+	(void)glyph;
+	return false;
+#else
+	glyph.slugOutlineInfo = glyph.slugFillInfo;
+
+	if (!slugDataEnabled || face == nullptr)
+		return false;
+
+	if (outlineSize <= 0)
+		return !glyph.slugOutlineInfo.Empty();
+
+	FT_Face ftFace = face->GetFTFace();
+	if (ftFace == nullptr)
+		return false;
+
+	if (face->LoadGlyph(glyphIndex, FT_LOAD_NO_BITMAP) != 0)
+		return false;
+
+	FT_GlyphSlot slot = ftFace->glyph;
+	if (slot == nullptr)
+		return false;
+
+	if (slot->format != FT_GLYPH_FORMAT_OUTLINE || slot->outline.n_contours <= 0 || slot->outline.n_points <= 0)
+		return false;
+
+	FT_Glyph glyphHandle = nullptr;
+	if (FT_Get_Glyph(slot, &glyphHandle) != 0 || glyphHandle == nullptr)
+		return false;
+
+	struct ScopedGlyph {
+		FT_Glyph value = nullptr;
+		~ScopedGlyph() { if (value != nullptr) FT_Done_Glyph(value); }
+	} scopedGlyph {glyphHandle};
+
+	FT_Stroker stroker = nullptr;
+	if (FT_Stroker_New(ftFace->glyph->library, &stroker) != 0)
+		return false;
+
+	struct ScopedStroker {
+		FT_Stroker value = nullptr;
+		~ScopedStroker() { if (value != nullptr) FT_Stroker_Done(value); }
+	} scopedStroker {stroker};
+
+	FT_Stroker_Set(
+		stroker,
+		static_cast<FT_Fixed>(outlineSize << 6),
+		FT_STROKER_LINECAP_ROUND,
+		FT_STROKER_LINEJOIN_ROUND,
+		0
+	);
+
+	if (FT_Glyph_StrokeBorder(&glyphHandle, stroker, 0, 1) != 0 || glyphHandle == nullptr)
+		return false;
+
+	scopedGlyph.value = glyphHandle;
+
+	if (glyphHandle->format != FT_GLYPH_FORMAT_OUTLINE)
+		return false;
+
+	const FT_OutlineGlyph outlineGlyph = reinterpret_cast<FT_OutlineGlyph>(glyphHandle);
+	if (outlineGlyph == nullptr)
+		return false;
+
+	SlugGlyphInfo strokedInfo;
+	if (!BuildSlugGlyphFromFTOutline(outlineGlyph->outline, strokedInfo))
+		return false;
+
+	glyph.slugOutlineInfo = strokedInfo;
+	return true;
 #endif
 }
 

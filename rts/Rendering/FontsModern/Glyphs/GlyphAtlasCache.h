@@ -11,6 +11,9 @@
 #include <unordered_map>
 #include <vector>
 
+#include <ft2build.h>
+#include FT_OUTLINE_H
+
 #include "GlyphInfo.h"
 #include "GlyphAtlasTexture.h"
 #include "../FontTypes.h"
@@ -158,7 +161,9 @@ private:
 	void CacheGlyphRecord(const GlyphIndexKey& key, GlyphInfo glyph);
 
 	void QueueGlyphBitmap(const std::string& cacheKey, const CBitmap& bitmap, const CBitmap* outlineBitmap = nullptr);
-	void BuildSlugGlyph(const FacePtr& face, std::uint32_t glyphIndex, GlyphInfo& glyph);
+	bool BuildSlugGlyphFromFTOutline(const FT_Outline& outline, SlugGlyphInfo& outInfo);
+	bool BuildSlugFillGlyph(const FacePtr& face, std::uint32_t glyphIndex, GlyphInfo& glyph);
+	bool BuildSlugOutlineGlyph(const FacePtr& face, std::uint32_t glyphIndex, GlyphInfo& glyph);
 	void PackPendingGlyphs();
 	void UpdateAtlasRegions();
 	void UploadAtlasTextures();

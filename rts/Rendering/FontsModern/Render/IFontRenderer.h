@@ -28,15 +28,16 @@ namespace fonts::render {
 struct PreparedGlyphQuad {
 	GlyphRect position;
 	GlyphRect atlasUV;
-	SlugGlyphInfo slugInfo{};
-	GlyphRect slugCoordRect;
-	FontColor color{};
+	SlugGlyphInfo fillSlugInfo{};
+	SlugGlyphInfo outlineSlugInfo{};
+	FontColor fillColor{};
+	FontColor outlineColor{};
 	float z = 0.0f;
 	bool visible = true;
 
 	bool Empty() const noexcept
 	{
-		return position.Empty() || (atlasUV.Empty() && slugInfo.Empty()) || !visible;
+		return position.Empty() || (atlasUV.Empty() && fillSlugInfo.Empty()) || !visible;
 	}
 };
 

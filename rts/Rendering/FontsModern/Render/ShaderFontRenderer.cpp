@@ -247,7 +247,8 @@ void main()
 	quad.position.x += glyph.x;
 	quad.position.y += glyph.y;
 	quad.atlasUV = outlinePass ? glyph.outlineAtlasUV : glyph.atlasUV;
-	quad.color = ResolveGlyphColor(state, outlinePass);
+	quad.fillColor = ResolveGlyphColor(state, outlinePass);
+	quad.outlineColor = quad.fillColor;
 	quad.z = ResolveGlyphDepth(glyph, state, outlinePass);
 	quad.visible = glyph.visible && !quad.atlasUV.Empty();
 	return quad;
@@ -735,10 +736,10 @@ void ShaderFontRenderer::QueueQuad(RenderBatch& batch, const PreparedGlyphQuad& 
 		return;
 	}
 
-	const Vertex tl {x0, y0, quad.z, u0, v0, quad.color.r, quad.color.g, quad.color.b, quad.color.a};
-	const Vertex tr {x1, y0, quad.z, u1, v0, quad.color.r, quad.color.g, quad.color.b, quad.color.a};
-	const Vertex br {x1, y1, quad.z, u1, v1, quad.color.r, quad.color.g, quad.color.b, quad.color.a};
-	const Vertex bl {x0, y1, quad.z, u0, v1, quad.color.r, quad.color.g, quad.color.b, quad.color.a};
+	const Vertex tl {x0, y0, quad.z, u0, v0, quad.fillColor.r, quad.fillColor.g, quad.fillColor.b, quad.fillColor.a};
+	const Vertex tr {x1, y0, quad.z, u1, v0, quad.fillColor.r, quad.fillColor.g, quad.fillColor.b, quad.fillColor.a};
+	const Vertex br {x1, y1, quad.z, u1, v1, quad.fillColor.r, quad.fillColor.g, quad.fillColor.b, quad.fillColor.a};
+	const Vertex bl {x0, y1, quad.z, u0, v1, quad.fillColor.r, quad.fillColor.g, quad.fillColor.b, quad.fillColor.a};
 
 	batch.vertices.emplace_back(tl);
 	batch.vertices.emplace_back(bl);

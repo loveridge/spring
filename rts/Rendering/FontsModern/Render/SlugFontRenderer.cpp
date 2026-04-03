@@ -27,10 +27,15 @@ static constexpr const char* vsSlug150 = R"(
 #extension GL_ARB_explicit_attrib_location : enable
 
 layout (location = 0) in vec3 aPos;
-layout (location = 1) in vec2 aLocalCoord;
-layout (location = 2) in vec4 aBandTransform;
-layout (location = 3) in vec4 aColor;
-layout (location = 4) in uvec4 aGlyphData;
+layout (location = 1) in vec2 aUnionCoord;
+layout (location = 2) in vec2 aFillCoordOffset;
+layout (location = 3) in vec2 aOutlineCoordOffset;
+layout (location = 4) in vec4 aFillBandTransform;
+layout (location = 5) in vec4 aOutlineBandTransform;
+layout (location = 6) in vec4 aFillColor;
+layout (location = 7) in vec4 aOutlineColor;
+layout (location = 8) in uvec4 aFillGlyphData;
+layout (location = 9) in uvec4 aOutlineGlyphData;
 
 uniform mat4 uLocalTransform;
 uniform float uDepthBias;
@@ -38,10 +43,15 @@ uniform int uUsePixelAlignedCoordinates;
 uniform int uHasLocalTransform;
 
 out Data {
-	vec4 vColor;
-	vec2 vRenderCoord;
-	flat vec4 vBandTransform;
-	flat uvec4 vGlyphData;
+	vec2 vUnionCoord;
+	flat vec2 vFillCoordOffset;
+	flat vec2 vOutlineCoordOffset;
+	flat vec4 vFillBandTransform;
+	flat vec4 vOutlineBandTransform;
+	vec4 vFillColor;
+	vec4 vOutlineColor;
+	flat uvec4 vFillGlyphData;
+	flat uvec4 vOutlineGlyphData;
 };
 
 void main()
@@ -55,10 +65,15 @@ void main()
 
 	vec4 worldPos = (uHasLocalTransform != 0)? (uLocalTransform * vec4(pos, 1.0)): vec4(pos, 1.0);
 
-	vColor = aColor;
-	vRenderCoord = aLocalCoord;
-	vBandTransform = aBandTransform;
-	vGlyphData = aGlyphData;
+	vUnionCoord = aUnionCoord;
+	vFillCoordOffset = aFillCoordOffset;
+	vOutlineCoordOffset = aOutlineCoordOffset;
+	vFillBandTransform = aFillBandTransform;
+	vOutlineBandTransform = aOutlineBandTransform;
+	vFillColor = aFillColor;
+	vOutlineColor = aOutlineColor;
+	vFillGlyphData = aFillGlyphData;
+	vOutlineGlyphData = aOutlineGlyphData;
 	gl_Position = gl_ModelViewProjectionMatrix * worldPos;
 }
 )";
@@ -71,10 +86,15 @@ uniform usampler2D uBandTex;
 uniform float uGamma;
 
 in Data {
-	vec4 vColor;
-	vec2 vRenderCoord;
-	flat vec4 vBandTransform;
-	flat uvec4 vGlyphData;
+	vec2 vUnionCoord;
+	flat vec2 vFillCoordOffset;
+	flat vec2 vOutlineCoordOffset;
+	flat vec4 vFillBandTransform;
+	flat vec4 vOutlineBandTransform;
+	vec4 vFillColor;
+	vec4 vOutlineColor;
+	flat uvec4 vFillGlyphData;
+	flat uvec4 vOutlineGlyphData;
 };
 
 out vec4 outColor;
@@ -232,9 +252,23 @@ float SlugRender(vec2 renderCoord, vec4 bandTransform, uvec4 glyphData)
 
 void main()
 {
-	float coverage = SlugRender(vRenderCoord, vBandTransform, vGlyphData);
-	coverage = pow(clamp(coverage, 0.0, 1.0), 1.0 / max(uGamma, 0.0001));
-	outColor = vec4(vColor.rgb, vColor.a * coverage);
+	vec2 fillRenderCoord = vUnionCoord - vFillCoordOffset;
+	vec2 outlineRenderCoord = vUnionCoord - vOutlineCoordOffset;
+
+	float rawFillCoverage = clamp(SlugRender(fillRenderCoord, vFillBandTransform, vFillGlyphData), 0.0, 1.0);
+	float rawOuterCoverage = clamp(SlugRender(outlineRenderCoord, vOutlineBandTransform, vOutlineGlyphData), 0.0, 1.0);
+	float rawOutlineCoverage = clamp(rawOuterCoverage - rawFillCoverage, 0.0, 1.0);
+	float invGamma = 1.0 / max(uGamma, 0.0001);
+
+	float fillCoverage = pow(rawFillCoverage, invGamma);
+	float outlineCoverage = pow(rawOutlineCoverage, invGamma);
+	float fillAlpha = clamp(vFillColor.a * fillCoverage, 0.0, 1.0);
+	float outlineAlpha = clamp(vOutlineColor.a * outlineCoverage, 0.0, 1.0);
+	float compositeAlpha = fillAlpha + outlineAlpha * (1.0 - fillAlpha);
+	vec3 compositePremul = vFillColor.rgb * fillAlpha + vOutlineColor.rgb * outlineAlpha * (1.0 - fillAlpha);
+	vec3 compositeColor = (compositeAlpha > 0.0)? (compositePremul / compositeAlpha): vec3(0.0);
+
+	outColor = vec4(compositeColor, compositeAlpha);
 }
 )";
 
@@ -242,20 +276,30 @@ static constexpr const char* vsSlug130 = R"(
 #version 130
 
 in vec3 aPos;
-in vec2 aLocalCoord;
-in vec4 aBandTransform;
-in vec4 aColor;
-in uvec4 aGlyphData;
+in vec2 aUnionCoord;
+in vec2 aFillCoordOffset;
+in vec2 aOutlineCoordOffset;
+in vec4 aFillBandTransform;
+in vec4 aOutlineBandTransform;
+in vec4 aFillColor;
+in vec4 aOutlineColor;
+in uvec4 aFillGlyphData;
+in uvec4 aOutlineGlyphData;
 
 uniform mat4 uLocalTransform;
 uniform float uDepthBias;
 uniform int uUsePixelAlignedCoordinates;
 uniform int uHasLocalTransform;
 
-out vec4 vColor;
-out vec2 vRenderCoord;
-flat out vec4 vBandTransform;
-flat out uvec4 vGlyphData;
+out vec2 vUnionCoord;
+flat out vec2 vFillCoordOffset;
+flat out vec2 vOutlineCoordOffset;
+flat out vec4 vFillBandTransform;
+flat out vec4 vOutlineBandTransform;
+out vec4 vFillColor;
+out vec4 vOutlineColor;
+flat out uvec4 vFillGlyphData;
+flat out uvec4 vOutlineGlyphData;
 
 void main()
 {
@@ -268,10 +312,15 @@ void main()
 
 	vec4 worldPos = (uHasLocalTransform != 0)? (uLocalTransform * vec4(pos, 1.0)): vec4(pos, 1.0);
 
-	vColor = aColor;
-	vRenderCoord = aLocalCoord;
-	vBandTransform = aBandTransform;
-	vGlyphData = aGlyphData;
+	vUnionCoord = aUnionCoord;
+	vFillCoordOffset = aFillCoordOffset;
+	vOutlineCoordOffset = aOutlineCoordOffset;
+	vFillBandTransform = aFillBandTransform;
+	vOutlineBandTransform = aOutlineBandTransform;
+	vFillColor = aFillColor;
+	vOutlineColor = aOutlineColor;
+	vFillGlyphData = aFillGlyphData;
+	vOutlineGlyphData = aOutlineGlyphData;
 	gl_Position = gl_ModelViewProjectionMatrix * worldPos;
 }
 )";
@@ -283,10 +332,15 @@ uniform sampler2D uCurveTex;
 uniform usampler2D uBandTex;
 uniform float uGamma;
 
-in vec4 vColor;
-in vec2 vRenderCoord;
-flat in vec4 vBandTransform;
-flat in uvec4 vGlyphData;
+in vec2 vUnionCoord;
+flat in vec2 vFillCoordOffset;
+flat in vec2 vOutlineCoordOffset;
+flat in vec4 vFillBandTransform;
+flat in vec4 vOutlineBandTransform;
+in vec4 vFillColor;
+in vec4 vOutlineColor;
+flat in uvec4 vFillGlyphData;
+flat in uvec4 vOutlineGlyphData;
 
 const int kLogBandTextureWidth = 12;
 const int kBandTextureWidth = 1 << kLogBandTextureWidth;
@@ -441,9 +495,23 @@ float SlugRender(vec2 renderCoord, vec4 bandTransform, uvec4 glyphData)
 
 void main()
 {
-	float coverage = SlugRender(vRenderCoord, vBandTransform, vGlyphData);
-	coverage = pow(clamp(coverage, 0.0, 1.0), 1.0 / max(uGamma, 0.0001));
-	gl_FragColor = vec4(vColor.rgb, vColor.a * coverage);
+	vec2 fillRenderCoord = vUnionCoord - vFillCoordOffset;
+	vec2 outlineRenderCoord = vUnionCoord - vOutlineCoordOffset;
+
+	float rawFillCoverage = clamp(SlugRender(fillRenderCoord, vFillBandTransform, vFillGlyphData), 0.0, 1.0);
+	float rawOuterCoverage = clamp(SlugRender(outlineRenderCoord, vOutlineBandTransform, vOutlineGlyphData), 0.0, 1.0);
+	float rawOutlineCoverage = clamp(rawOuterCoverage - rawFillCoverage, 0.0, 1.0);
+	float invGamma = 1.0 / max(uGamma, 0.0001);
+
+	float fillCoverage = pow(rawFillCoverage, invGamma);
+	float outlineCoverage = pow(rawOutlineCoverage, invGamma);
+	float fillAlpha = clamp(vFillColor.a * fillCoverage, 0.0, 1.0);
+	float outlineAlpha = clamp(vOutlineColor.a * outlineCoverage, 0.0, 1.0);
+	float compositeAlpha = fillAlpha + outlineAlpha * (1.0 - fillAlpha);
+	vec3 compositePremul = vFillColor.rgb * fillAlpha + vOutlineColor.rgb * outlineAlpha * (1.0 - fillAlpha);
+	vec3 compositeColor = (compositeAlpha > 0.0)? (compositePremul / compositeAlpha): vec3(0.0);
+
+	gl_FragColor = vec4(compositeColor, compositeAlpha);
 }
 )";
 
@@ -483,7 +551,7 @@ void main()
 	return state->primaryColor;
 }
 
-[[nodiscard]] float ResolveGlyphDepth(const fonts::text::LaidOutGlyph& glyph, const FontRenderState* state, bool outlinePass) noexcept
+[[nodiscard]] float ResolveGlyphDepth(const fonts::text::LaidOutGlyph& glyph, const FontRenderState* state) noexcept
 {
 	if (glyph.z != 0.0f)
 		return glyph.z;
@@ -491,21 +559,38 @@ void main()
 	if (state == nullptr)
 		return 0.0f;
 
-	return outlinePass ? state->depth.outline : state->depth.text;
+	return state->depth.text;
 }
 
-[[nodiscard]] PreparedGlyphQuad MakePreparedGlyphQuad(const fonts::text::LaidOutGlyph& glyph, const FontRenderState* state, bool outlinePass)
+[[nodiscard]] FontColor TransparentColor(const FontColor& color) noexcept
+{
+	return FontColor {color.r, color.g, color.b, 0.0f};
+}
+
+[[nodiscard]] PreparedGlyphQuad MakePreparedGlyphQuad(const fonts::text::LaidOutGlyph& glyph, const FontRenderState* state)
 {
 	PreparedGlyphQuad quad;
-	quad.position = glyph.shaped.metrics.bounds;
-	quad.position.x += glyph.x;
-	quad.position.y += glyph.y;
-	quad.atlasUV = outlinePass ? glyph.outlineAtlasUV : glyph.atlasUV;
-	quad.slugInfo = glyph.slugInfo;
-	quad.slugCoordRect = GlyphRect(0.0f, 0.0f, glyph.slugInfo.width, glyph.slugInfo.height);
-	quad.color = ResolveGlyphColor(state, outlinePass);
-	quad.z = ResolveGlyphDepth(glyph, state, outlinePass);
-	quad.visible = glyph.visible && !quad.slugInfo.Empty();
+	quad.fillSlugInfo = glyph.slugFillInfo;
+	quad.outlineSlugInfo = glyph.slugOutlineInfo.Empty() ? glyph.slugFillInfo : glyph.slugOutlineInfo;
+	quad.fillColor = ResolveGlyphColor(state, false);
+	quad.outlineColor = glyph.usesOutline ? ResolveGlyphColor(state, true) : TransparentColor(ResolveGlyphColor(state, true));
+	quad.z = ResolveGlyphDepth(glyph, state);
+	quad.visible = glyph.visible && !quad.fillSlugInfo.Empty();
+
+	if (!quad.visible)
+		return quad;
+
+	const float unionMinX = std::min(quad.fillSlugInfo.offsetX, quad.outlineSlugInfo.offsetX);
+	const float unionMinY = std::min(quad.fillSlugInfo.offsetY, quad.outlineSlugInfo.offsetY);
+	const float unionMaxX = std::max(quad.fillSlugInfo.offsetX + quad.fillSlugInfo.width, quad.outlineSlugInfo.offsetX + quad.outlineSlugInfo.width);
+	const float unionMaxY = std::max(quad.fillSlugInfo.offsetY + quad.fillSlugInfo.height, quad.outlineSlugInfo.offsetY + quad.outlineSlugInfo.height);
+
+	quad.position = GlyphRect(
+		glyph.x + unionMinX,
+		glyph.y + unionMaxY,
+		unionMaxX - unionMinX,
+		-(unionMaxY - unionMinY)
+	);
 	return quad;
 }
 
@@ -547,10 +632,8 @@ SlugFontRenderer& SlugFontRenderer::operator=(SlugFontRenderer&& other) noexcept
 	stats = other.stats;
 	stateStack = std::move(other.stateStack);
 	programResources = std::move(other.programResources);
-	primaryBatch = std::move(other.primaryBatch);
-	outlineBatch = std::move(other.outlineBatch);
-	primaryBuffers = std::move(other.primaryBuffers);
-	outlineBuffers = std::move(other.outlineBuffers);
+	slugBatch = std::move(other.slugBatch);
+	slugBuffers = std::move(other.slugBuffers);
 	initialized = other.initialized;
 
 	other.curveTextureBinding = {};
@@ -563,7 +646,7 @@ SlugFontRenderer& SlugFontRenderer::operator=(SlugFontRenderer&& other) noexcept
 
 void SlugFontRenderer::AddPrimaryQuad(const PreparedGlyphQuad& quad)
 {
-	QueueQuad(primaryBatch, quad);
+	QueueQuad(slugBatch, quad);
 
 	if (createOptions.enableStatistics && !quad.Empty())
 		stats.queuedPrimaryQuads += 1;
@@ -571,7 +654,7 @@ void SlugFontRenderer::AddPrimaryQuad(const PreparedGlyphQuad& quad)
 
 void SlugFontRenderer::AddOutlineQuad(const PreparedGlyphQuad& quad)
 {
-	QueueQuad(outlineBatch, quad);
+	QueueQuad(slugBatch, quad);
 
 	if (createOptions.enableStatistics && !quad.Empty())
 		stats.queuedOutlineQuads += 1;
@@ -579,23 +662,17 @@ void SlugFontRenderer::AddOutlineQuad(const PreparedGlyphQuad& quad)
 
 void SlugFontRenderer::AddPrimaryGlyph(const fonts::text::LaidOutGlyph& glyph)
 {
-	AddPrimaryQuad(MakePreparedGlyphQuad(glyph, GetActiveState(stateStack), false));
+	AddPrimaryQuad(MakePreparedGlyphQuad(glyph, GetActiveState(stateStack)));
 }
 
 void SlugFontRenderer::AddOutlineGlyph(const fonts::text::LaidOutGlyph& glyph)
 {
-	if (!glyph.usesOutline) {
-		if (createOptions.enableStatistics)
-			stats.droppedQuads += 1;
-		return;
-	}
-
-	AddOutlineQuad(MakePreparedGlyphQuad(glyph, GetActiveState(stateStack), true));
+	(void)glyph;
 }
 
 void SlugFontRenderer::DrawQueued()
 {
-	if (primaryBatch.quadCount == 0 && outlineBatch.quadCount == 0)
+	if (slugBatch.quadCount == 0)
 		return;
 
 	bool autoPushedState = false;
@@ -607,7 +684,7 @@ void SlugFontRenderer::DrawQueued()
 #ifndef HEADLESS
 	if (globalRendering == nullptr) {
 		if (createOptions.enableStatistics)
-			stats.droppedQuads += (primaryBatch.quadCount + outlineBatch.quadCount);
+			stats.droppedQuads += slugBatch.quadCount;
 
 		ClearQueuedBatches();
 
@@ -628,7 +705,7 @@ void SlugFontRenderer::DrawQueued()
 
 	if (!IsValid()) {
 		if (createOptions.enableStatistics)
-			stats.droppedQuads += (primaryBatch.quadCount + outlineBatch.quadCount);
+			stats.droppedQuads += slugBatch.quadCount;
 
 #ifndef HEADLESS
 		glUseProgram(static_cast<GLuint>(prevProgram));
@@ -648,10 +725,8 @@ void SlugFontRenderer::DrawQueued()
 	const FontRenderState* state = GetActiveState(stateStack);
 	const bool useClientSideSubmission = IsCompilingDisplayList();
 
-	if (!useClientSideSubmission) {
-		UploadBatch(outlineBatch, outlineBuffers);
-		UploadBatch(primaryBatch, primaryBuffers);
-	}
+	if (!useClientSideSubmission)
+		UploadBatch(slugBatch, slugBuffers);
 
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_ALPHA_TEST);
@@ -661,8 +736,7 @@ void SlugFontRenderer::DrawQueued()
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	programResources.program->Enable();
-	SubmitBatch(outlineBatch, outlineBuffers);
-	SubmitBatch(primaryBatch, primaryBuffers);
+	SubmitBatch(slugBatch, slugBuffers);
 	programResources.program->Disable();
 	glActiveTexture(GL_TEXTURE0 + std::max(curveTextureBinding.textureUnit, 0));
 	glBindTexture(GL_TEXTURE_2D, 0);
@@ -757,7 +831,7 @@ void SlugFontRenderer::EnsureInitialized()
 
 	InitializeProgram();
 	InitializeBuffers();
-	initialized = IsValid() && (primaryBuffers.vbo != nullptr) && (outlineBuffers.vbo != nullptr);
+	initialized = IsValid() && (slugBuffers.vbo != nullptr);
 #endif
 }
 
@@ -773,10 +847,15 @@ void SlugFontRenderer::InitializeProgram()
 
 	if (!globalRendering->supportExplicitAttribLoc) {
 		program->BindAttribLocation("aPos", 0);
-		program->BindAttribLocation("aLocalCoord", 1);
-		program->BindAttribLocation("aBandTransform", 2);
-		program->BindAttribLocation("aColor", 3);
-		program->BindAttribLocation("aGlyphData", 4);
+		program->BindAttribLocation("aUnionCoord", 1);
+		program->BindAttribLocation("aFillCoordOffset", 2);
+		program->BindAttribLocation("aOutlineCoordOffset", 3);
+		program->BindAttribLocation("aFillBandTransform", 4);
+		program->BindAttribLocation("aOutlineBandTransform", 5);
+		program->BindAttribLocation("aFillColor", 6);
+		program->BindAttribLocation("aOutlineColor", 7);
+		program->BindAttribLocation("aFillGlyphData", 8);
+		program->BindAttribLocation("aOutlineGlyphData", 9);
 	}
 
 	program->AttachShaderObject(new Shader::GLSLShaderObject(GL_VERTEX_SHADER, globalRendering->supportExplicitAttribLoc ? vsSlug150 : vsSlug130));
@@ -824,8 +903,7 @@ void SlugFontRenderer::InitializeBuffers()
 		ConfigureVertexAttributes(bufferResources);
 	};
 
-	initBufferResources(primaryBuffers);
-	initBufferResources(outlineBuffers);
+	initBufferResources(slugBuffers);
 #endif
 }
 
@@ -839,17 +917,19 @@ void SlugFontRenderer::ConfigureVertexAttributes(BufferResources& bufferResource
 
 	bufferResources.vbo->Bind();
 
-	glEnableVertexAttribArray(0);
-	glEnableVertexAttribArray(1);
-	glEnableVertexAttribArray(2);
-	glEnableVertexAttribArray(3);
-	glEnableVertexAttribArray(4);
+	for (GLuint attribIndex = 0; attribIndex < 10u; ++attribIndex)
+		glEnableVertexAttribArray(attribIndex);
 
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, posX)));
-	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, localX)));
-	glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, bandScaleX)));
-	glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, colorR)));
-	glVertexAttribIPointer(4, 4, GL_UNSIGNED_INT, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, glyphX)));
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, unionX)));
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, fillCoordOffsetX)));
+	glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, outlineCoordOffsetX)));
+	glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, fillBandScaleX)));
+	glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, outlineBandScaleX)));
+	glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, fillColorR)));
+	glVertexAttribPointer(7, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, outlineColorR)));
+	glVertexAttribIPointer(8, 4, GL_UNSIGNED_INT, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, fillGlyphX)));
+	glVertexAttribIPointer(9, 4, GL_UNSIGNED_INT, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, outlineGlyphX)));
 
 	bufferResources.vbo->Unbind();
 
@@ -878,19 +958,22 @@ void SlugFontRenderer::EnsureBufferCapacity(RenderBatch& batch, BufferResources&
 
 void SlugFontRenderer::QueueQuad(RenderBatch& batch, const PreparedGlyphQuad& quad)
 {
+	const SlugGlyphInfo& fillInfo = quad.fillSlugInfo;
+	const SlugGlyphInfo& outlineInfo = quad.outlineSlugInfo.Empty() ? quad.fillSlugInfo : quad.outlineSlugInfo;
+
 	float x0 = quad.position.x;
 	float y0 = quad.position.y;
 	float x1 = quad.position.x + quad.position.w;
 	float y1 = quad.position.y + quad.position.h;
 
-	const GlyphRect& coordRect = quad.slugCoordRect.Empty()
-		? GlyphRect(0.0f, 0.0f, quad.slugInfo.width, quad.slugInfo.height)
-		: quad.slugCoordRect;
-
-	float u0 = coordRect.x;
-	float v0 = coordRect.y + coordRect.h;
-	float u1 = coordRect.x + coordRect.w;
-	float v1 = coordRect.y;
+	const float unionMinX = std::min(fillInfo.offsetX, outlineInfo.offsetX);
+	const float unionMinY = std::min(fillInfo.offsetY, outlineInfo.offsetY);
+	const float unionMaxX = std::max(fillInfo.offsetX + fillInfo.width, outlineInfo.offsetX + outlineInfo.width);
+	const float unionMaxY = std::max(fillInfo.offsetY + fillInfo.height, outlineInfo.offsetY + outlineInfo.height);
+	float u0 = 0.0f;
+	float v0 = unionMaxY - unionMinY;
+	float u1 = unionMaxX - unionMinX;
+	float v1 = 0.0f;
 
 	if (x1 < x0) {
 		std::swap(x0, x1);
@@ -902,16 +985,65 @@ void SlugFontRenderer::QueueQuad(RenderBatch& batch, const PreparedGlyphQuad& qu
 		std::swap(v0, v1);
 	}
 
-	if (!quad.visible || x0 == x1 || y0 == y1 || quad.slugInfo.Empty()) {
+	if (!quad.visible || x0 == x1 || y0 == y1 || fillInfo.Empty()) {
 		if (createOptions.enableStatistics)
 			stats.droppedQuads += 1;
 		return;
 	}
 
-	const Vertex tl {x0, y0, quad.z, u0, v0, quad.slugInfo.bandScaleX, quad.slugInfo.bandScaleY, quad.slugInfo.bandOffsetX, quad.slugInfo.bandOffsetY, quad.color.r, quad.color.g, quad.color.b, quad.color.a, quad.slugInfo.bandTexelX, quad.slugInfo.bandTexelY, quad.slugInfo.bandMaxX, quad.slugInfo.bandMaxY};
-	const Vertex tr {x1, y0, quad.z, u1, v0, quad.slugInfo.bandScaleX, quad.slugInfo.bandScaleY, quad.slugInfo.bandOffsetX, quad.slugInfo.bandOffsetY, quad.color.r, quad.color.g, quad.color.b, quad.color.a, quad.slugInfo.bandTexelX, quad.slugInfo.bandTexelY, quad.slugInfo.bandMaxX, quad.slugInfo.bandMaxY};
-	const Vertex br {x1, y1, quad.z, u1, v1, quad.slugInfo.bandScaleX, quad.slugInfo.bandScaleY, quad.slugInfo.bandOffsetX, quad.slugInfo.bandOffsetY, quad.color.r, quad.color.g, quad.color.b, quad.color.a, quad.slugInfo.bandTexelX, quad.slugInfo.bandTexelY, quad.slugInfo.bandMaxX, quad.slugInfo.bandMaxY};
-	const Vertex bl {x0, y1, quad.z, u0, v1, quad.slugInfo.bandScaleX, quad.slugInfo.bandScaleY, quad.slugInfo.bandOffsetX, quad.slugInfo.bandOffsetY, quad.color.r, quad.color.g, quad.color.b, quad.color.a, quad.slugInfo.bandTexelX, quad.slugInfo.bandTexelY, quad.slugInfo.bandMaxX, quad.slugInfo.bandMaxY};
+	const float fillOffsetX = fillInfo.offsetX - unionMinX;
+	const float fillOffsetY = fillInfo.offsetY - unionMinY;
+	const float outlineOffsetX = outlineInfo.offsetX - unionMinX;
+	const float outlineOffsetY = outlineInfo.offsetY - unionMinY;
+
+	const Vertex tl {
+		x0, y0, quad.z,
+		u0, v0,
+		fillOffsetX, fillOffsetY,
+		outlineOffsetX, outlineOffsetY,
+		fillInfo.bandScaleX, fillInfo.bandScaleY, fillInfo.bandOffsetX, fillInfo.bandOffsetY,
+		outlineInfo.bandScaleX, outlineInfo.bandScaleY, outlineInfo.bandOffsetX, outlineInfo.bandOffsetY,
+		quad.fillColor.r, quad.fillColor.g, quad.fillColor.b, quad.fillColor.a,
+		quad.outlineColor.r, quad.outlineColor.g, quad.outlineColor.b, quad.outlineColor.a,
+		fillInfo.bandTexelX, fillInfo.bandTexelY, fillInfo.bandMaxX, fillInfo.bandMaxY,
+		outlineInfo.bandTexelX, outlineInfo.bandTexelY, outlineInfo.bandMaxX, outlineInfo.bandMaxY
+	};
+	const Vertex tr {
+		x1, y0, quad.z,
+		u1, v0,
+		fillOffsetX, fillOffsetY,
+		outlineOffsetX, outlineOffsetY,
+		fillInfo.bandScaleX, fillInfo.bandScaleY, fillInfo.bandOffsetX, fillInfo.bandOffsetY,
+		outlineInfo.bandScaleX, outlineInfo.bandScaleY, outlineInfo.bandOffsetX, outlineInfo.bandOffsetY,
+		quad.fillColor.r, quad.fillColor.g, quad.fillColor.b, quad.fillColor.a,
+		quad.outlineColor.r, quad.outlineColor.g, quad.outlineColor.b, quad.outlineColor.a,
+		fillInfo.bandTexelX, fillInfo.bandTexelY, fillInfo.bandMaxX, fillInfo.bandMaxY,
+		outlineInfo.bandTexelX, outlineInfo.bandTexelY, outlineInfo.bandMaxX, outlineInfo.bandMaxY
+	};
+	const Vertex br {
+		x1, y1, quad.z,
+		u1, v1,
+		fillOffsetX, fillOffsetY,
+		outlineOffsetX, outlineOffsetY,
+		fillInfo.bandScaleX, fillInfo.bandScaleY, fillInfo.bandOffsetX, fillInfo.bandOffsetY,
+		outlineInfo.bandScaleX, outlineInfo.bandScaleY, outlineInfo.bandOffsetX, outlineInfo.bandOffsetY,
+		quad.fillColor.r, quad.fillColor.g, quad.fillColor.b, quad.fillColor.a,
+		quad.outlineColor.r, quad.outlineColor.g, quad.outlineColor.b, quad.outlineColor.a,
+		fillInfo.bandTexelX, fillInfo.bandTexelY, fillInfo.bandMaxX, fillInfo.bandMaxY,
+		outlineInfo.bandTexelX, outlineInfo.bandTexelY, outlineInfo.bandMaxX, outlineInfo.bandMaxY
+	};
+	const Vertex bl {
+		x0, y1, quad.z,
+		u0, v1,
+		fillOffsetX, fillOffsetY,
+		outlineOffsetX, outlineOffsetY,
+		fillInfo.bandScaleX, fillInfo.bandScaleY, fillInfo.bandOffsetX, fillInfo.bandOffsetY,
+		outlineInfo.bandScaleX, outlineInfo.bandScaleY, outlineInfo.bandOffsetX, outlineInfo.bandOffsetY,
+		quad.fillColor.r, quad.fillColor.g, quad.fillColor.b, quad.fillColor.a,
+		quad.outlineColor.r, quad.outlineColor.g, quad.outlineColor.b, quad.outlineColor.a,
+		fillInfo.bandTexelX, fillInfo.bandTexelY, fillInfo.bandMaxX, fillInfo.bandMaxY,
+		outlineInfo.bandTexelX, outlineInfo.bandTexelY, outlineInfo.bandMaxX, outlineInfo.bandMaxY
+	};
 
 	batch.vertices.emplace_back(tl);
 	batch.vertices.emplace_back(bl);
@@ -963,25 +1095,24 @@ void SlugFontRenderer::SubmitBatch(const RenderBatch& batch, const BufferResourc
 		glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &prevArrayBuffer);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-		glEnableVertexAttribArray(0);
-		glEnableVertexAttribArray(1);
-		glEnableVertexAttribArray(2);
-		glEnableVertexAttribArray(3);
-		glEnableVertexAttribArray(4);
+		for (GLuint attribIndex = 0; attribIndex < 10u; ++attribIndex)
+			glEnableVertexAttribArray(attribIndex);
 
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), &(batch.vertices[0].posX));
-		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), &(batch.vertices[0].localX));
-		glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), &(batch.vertices[0].bandScaleX));
-		glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), &(batch.vertices[0].colorR));
-		glVertexAttribIPointer(4, 4, GL_UNSIGNED_INT, sizeof(Vertex), &(batch.vertices[0].glyphX));
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), &(batch.vertices[0].unionX));
+		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), &(batch.vertices[0].fillCoordOffsetX));
+		glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), &(batch.vertices[0].outlineCoordOffsetX));
+		glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), &(batch.vertices[0].fillBandScaleX));
+		glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), &(batch.vertices[0].outlineBandScaleX));
+		glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), &(batch.vertices[0].fillColorR));
+		glVertexAttribPointer(7, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), &(batch.vertices[0].outlineColorR));
+		glVertexAttribIPointer(8, 4, GL_UNSIGNED_INT, sizeof(Vertex), &(batch.vertices[0].fillGlyphX));
+		glVertexAttribIPointer(9, 4, GL_UNSIGNED_INT, sizeof(Vertex), &(batch.vertices[0].outlineGlyphX));
 
 		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(batch.vertices.size()));
 
-		glDisableVertexAttribArray(0);
-		glDisableVertexAttribArray(1);
-		glDisableVertexAttribArray(2);
-		glDisableVertexAttribArray(3);
-		glDisableVertexAttribArray(4);
+		for (GLuint attribIndex = 0; attribIndex < 10u; ++attribIndex)
+			glDisableVertexAttribArray(attribIndex);
 		glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(prevArrayBuffer));
 	} else if (bufferResources.vao != nullptr) {
 		bufferResources.vao->Bind();
@@ -993,25 +1124,24 @@ void SlugFontRenderer::SubmitBatch(const RenderBatch& batch, const BufferResourc
 
 		bufferResources.vbo->Bind();
 
-		glEnableVertexAttribArray(0);
-		glEnableVertexAttribArray(1);
-		glEnableVertexAttribArray(2);
-		glEnableVertexAttribArray(3);
-		glEnableVertexAttribArray(4);
+		for (GLuint attribIndex = 0; attribIndex < 10u; ++attribIndex)
+			glEnableVertexAttribArray(attribIndex);
 
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, posX)));
-		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, localX)));
-		glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, bandScaleX)));
-		glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, colorR)));
-		glVertexAttribIPointer(4, 4, GL_UNSIGNED_INT, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, glyphX)));
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, unionX)));
+		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, fillCoordOffsetX)));
+		glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, outlineCoordOffsetX)));
+		glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, fillBandScaleX)));
+		glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, outlineBandScaleX)));
+		glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, fillColorR)));
+		glVertexAttribPointer(7, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, outlineColorR)));
+		glVertexAttribIPointer(8, 4, GL_UNSIGNED_INT, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, fillGlyphX)));
+		glVertexAttribIPointer(9, 4, GL_UNSIGNED_INT, sizeof(Vertex), reinterpret_cast<const void*>(offsetof(Vertex, outlineGlyphX)));
 
 		glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(batch.vertices.size()));
 
-		glDisableVertexAttribArray(0);
-		glDisableVertexAttribArray(1);
-		glDisableVertexAttribArray(2);
-		glDisableVertexAttribArray(3);
-		glDisableVertexAttribArray(4);
+		for (GLuint attribIndex = 0; attribIndex < 10u; ++attribIndex)
+			glDisableVertexAttribArray(attribIndex);
 		bufferResources.vbo->Unbind();
 		glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(prevArrayBuffer));
 	}
@@ -1057,13 +1187,9 @@ void SlugFontRenderer::BindTextures() const
 
 void SlugFontRenderer::ClearQueuedBatches()
 {
-	primaryBatch.vertices.clear();
-	primaryBatch.quadCount = 0;
-	primaryBatch.dirty = false;
-
-	outlineBatch.vertices.clear();
-	outlineBatch.quadCount = 0;
-	outlineBatch.dirty = false;
+	slugBatch.vertices.clear();
+	slugBatch.quadCount = 0;
+	slugBatch.dirty = false;
 }
 
 } // namespace fonts::render

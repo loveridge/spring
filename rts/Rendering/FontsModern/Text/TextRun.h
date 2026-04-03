@@ -128,7 +128,8 @@ struct LaidOutGlyph {
 	ShapedGlyph shaped{};
 	GlyphRect atlasUV{};
 	GlyphRect outlineAtlasUV{};
-	SlugGlyphInfo slugInfo{};
+	SlugGlyphInfo slugFillInfo{};
+	SlugGlyphInfo slugOutlineInfo{};
 
 	float x = 0.0f;
 	float y = 0.0f;

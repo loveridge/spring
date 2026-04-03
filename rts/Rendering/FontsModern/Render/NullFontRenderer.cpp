@@ -34,7 +34,7 @@ void NullFontRenderer::AddOutlineQuad(const PreparedGlyphQuad& quad)
 
 void NullFontRenderer::AddPrimaryGlyph(const fonts::text::LaidOutGlyph& glyph)
 {
-	if (!glyph.visible || (glyph.atlasUV.Empty() && glyph.slugInfo.Empty())) {
+	if (!glyph.visible || (glyph.atlasUV.Empty() && glyph.slugFillInfo.Empty())) {
 		stats.droppedQuads += 1;
 		return;
 	}
@@ -44,7 +44,7 @@ void NullFontRenderer::AddPrimaryGlyph(const fonts::text::LaidOutGlyph& glyph)
 
 void NullFontRenderer::AddOutlineGlyph(const fonts::text::LaidOutGlyph& glyph)
 {
-	if (!glyph.visible || !glyph.usesOutline || (glyph.outlineAtlasUV.Empty() && glyph.slugInfo.Empty())) {
+	if (!glyph.visible || !glyph.usesOutline || (glyph.outlineAtlasUV.Empty() && glyph.slugFillInfo.Empty())) {
 		stats.droppedQuads += 1;
 		return;
 	}

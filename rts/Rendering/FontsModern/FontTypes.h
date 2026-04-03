@@ -54,10 +54,13 @@ struct FontMetrics {
 /**
  * Per-glyph metadata for Slug-style vector rendering.
  *
- * The glyph-local render coordinates span [0, width] x [0, height], matching
- * the control-point data stored in the Slug curve texture.
+ * offsetX/offsetY locate the glyph's packed bbox in the shared glyph-local
+ * coordinate space used by layout and renderer placement. width/height are the
+ * bbox dimensions for the specific packed representation.
  */
 struct SlugGlyphInfo {
+	float offsetX = 0.0f;
+	float offsetY = 0.0f;
 	float width = 0.0f;
 	float height = 0.0f;
 	float bandScaleX = 0.0f;
@@ -74,6 +77,11 @@ struct SlugGlyphInfo {
 	constexpr bool Empty() const noexcept
 	{
 		return (width <= 0.0f) || (height <= 0.0f);
+	}
+
+	constexpr GlyphRect Bounds() const noexcept
+	{
+		return GlyphRect(offsetX, offsetY, width, height);
 	}
 };
 

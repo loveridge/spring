@@ -663,7 +663,8 @@ LaidOutLine TextLayouter::PositionRuns(std::span<const ShapedRun> runs, const La
 
 				glyph.atlasUV = glyphInfo.atlasUV;
 				glyph.outlineAtlasUV = glyphInfo.shadowAtlasUV;
-				glyph.slugInfo = glyphInfo.slugInfo;
+				glyph.slugFillInfo = glyphInfo.slugFillInfo;
+				glyph.slugOutlineInfo = glyphInfo.slugOutlineInfo;
 
 				if (glyph.shaped.metrics.Empty())
 					glyph.shaped.metrics = glyphInfo.GetMetrics();
