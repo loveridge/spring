@@ -1202,13 +1202,15 @@ bool GlyphAtlasCache::BuildSlugOutlineGlyph(const FacePtr& face, std::uint32_t g
 	(void)glyph;
 	return false;
 #else
-	glyph.slugOutlineInfo = glyph.slugFillInfo;
+	glyph.slugOutlineInfo = {};
 
 	if (!slugDataEnabled || face == nullptr)
 		return false;
 
-	if (outlineSize <= 0)
+	if (outlineSize <= 0) {
+		glyph.slugOutlineInfo = glyph.slugFillInfo;
 		return !glyph.slugOutlineInfo.Empty();
+	}
 
 	FT_Face ftFace = face->GetFTFace();
 	if (ftFace == nullptr)
