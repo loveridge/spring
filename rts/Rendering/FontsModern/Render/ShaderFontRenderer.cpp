@@ -439,18 +439,20 @@ void ShaderFontRenderer::HandleGlyphCacheUpdate(fonts::GlyphAtlasCache& glyphCac
 {
 	auto& primaryAtlas = glyphCache.GetAtlasTexture();
 	auto& outlineAtlas = glyphCache.GetShadowAtlasTexture();
+	GLint listIndex = 0;
 
 #ifndef HEADLESS
 	GLint prevTextureBinding = 0;
 	glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevTextureBinding);
+	glGetIntegerv(GL_LIST_INDEX, &listIndex);
 #endif
 
 	if (createOptions.autoUploadTextures) {
-		if (onlyUpload || primaryAtlas.NeedsUpload() || !primaryAtlas.HasTexture()) {
+		if (listIndex == 0 && (onlyUpload || primaryAtlas.NeedsUpload() || !primaryAtlas.HasTexture())) {
 			primaryAtlas.Upload();
 		}
 
-		if (onlyUpload || outlineAtlas.NeedsUpload() || !outlineAtlas.HasTexture()) {
+		if (listIndex == 0 && (onlyUpload || outlineAtlas.NeedsUpload() || !outlineAtlas.HasTexture())) {
 			outlineAtlas.Upload();
 		}
 	}

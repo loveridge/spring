@@ -682,7 +682,12 @@ void SlugFontRenderer::DrawQueued()
 
 void SlugFontRenderer::HandleGlyphCacheUpdate(fonts::GlyphAtlasCache& glyphCache, bool onlyUpload)
 {
-	if (createOptions.autoUploadTextures && (onlyUpload || glyphCache.NeedsSlugUpload()))
+	GLint listIndex = 0;
+#ifndef HEADLESS
+	glGetIntegerv(GL_LIST_INDEX, &listIndex);
+#endif
+
+	if (createOptions.autoUploadTextures && listIndex == 0 && (onlyUpload || glyphCache.NeedsSlugUpload()))
 		glyphCache.UploadSlugTextures();
 
 	const auto textureInfo = glyphCache.GetSlugTextureInfo();
