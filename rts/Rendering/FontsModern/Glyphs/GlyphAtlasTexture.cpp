@@ -42,6 +42,16 @@ namespace {
 	return 1;
 }
 
+[[nodiscard]] GlyphAtlasTexture::PixelFormat GetPixelFormatForChannelCount(int channels)
+{
+	switch (channels) {
+		case 1: return GlyphAtlasTexture::PixelFormat::Alpha;
+		case 4: return GlyphAtlasTexture::PixelFormat::BGRA;
+	}
+
+	throw std::invalid_argument("GlyphAtlasTexture only supports 1-channel alpha and 4-channel BGRA bitmaps");
+}
+
 void ClearBitmap(CBitmap& bitmap)
 {
 	if (bitmap.Empty())
@@ -284,19 +294,32 @@ void GlyphAtlasTexture::UpdateBitmapRegion(const CBitmap& bitmap, const Region& 
 
 	ValidateRegion(region);
 
-	if (bitmap.channels != GetChannelCount())
-		throw std::invalid_argument("GlyphAtlasTexture::UpdateBitmapRegion channel count mismatch");
-
 	if (bitmap.xsize < region.width || bitmap.ysize < region.height)
 		throw std::out_of_range("GlyphAtlasTexture::UpdateBitmapRegion source bitmap is smaller than requested region");
 
+	CBitmap convertedBitmap;
+	const CBitmap* sourceBitmap = &bitmap;
+
+	if (bitmap.channels != GetChannelCount()) {
+		convertedBitmap.Alloc(region.width, region.height, GetChannelCount());
+		ConvertBitmapRegion(
+			convertedBitmap,
+			bitmap,
+			region.width,
+			region.height,
+			format,
+			GetPixelFormatForChannelCount(bitmap.channels)
+		);
+		sourceBitmap = &convertedBitmap;
+	}
+
 	const std::size_t channels = static_cast<std::size_t>(GetChannelCount());
 	const std::size_t rowBytes = static_cast<std::size_t>(region.width) * channels;
-	const std::uint8_t* src = bitmap.GetRawMem();
+	const std::uint8_t* src = sourceBitmap->GetRawMem();
 	std::uint8_t* dst = atlasBitmap.GetRawMem();
 
 	for (int row = 0; row < region.height; ++row) {
-		const std::size_t srcOffset = static_cast<std::size_t>(row) * bitmap.xsize * channels;
+		const std::size_t srcOffset = static_cast<std::size_t>(row) * sourceBitmap->xsize * channels;
 		const std::size_t dstOffset = (static_cast<std::size_t>(region.y + row) * atlasSize.width + region.x) * channels;
 		std::memcpy(dst + dstOffset, src + srcOffset, rowBytes);
 	}
@@ -313,10 +336,14 @@ void GlyphAtlasTexture::UpdateBitmapRegion(const std::uint8_t* pixels, int srcWi
 	if (pixels == nullptr)
 		throw std::invalid_argument("GlyphAtlasTexture::UpdateBitmapRegion requires a non-null pixel buffer");
 
-	if (channels != GetChannelCount())
-		throw std::invalid_argument("GlyphAtlasTexture::UpdateBitmapRegion channel count mismatch");
-
 	const Region region{dstX, dstY, srcWidth, srcHeight};
+
+	if (channels != GetChannelCount()) {
+		const CBitmap bitmap(pixels, srcWidth, srcHeight, channels);
+		UpdateBitmapRegion(bitmap, region);
+		return;
+	}
+
 	ValidateRegion(region);
 
 	const std::size_t rowBytes = static_cast<std::size_t>(srcWidth) * channels;
