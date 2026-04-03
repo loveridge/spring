@@ -869,29 +869,31 @@ void CglFont::ReallocSystemFontAtlases(bool pre)
 void CglFont::Begin(bool userDefinedBlending)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	std::scoped_lock lock(impl->mutex);
+	impl->mutex.lock();
+	impl->beginUserDefinedBlending = userDefinedBlending;
 
-	if (impl->inBeginEndBlock)
+	if (impl->inBeginEndBlock) {
+		impl->mutex.unlock();
 		return;
+	}
 
 	impl->inBeginEndBlock = true;
-	impl->beginUserDefinedBlending = userDefinedBlending;
 }
 
 void CglFont::End()
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	std::scoped_lock lock(impl->mutex);
-
 	if (!impl->inBeginEndBlock) {
 		LOG_L(L_ERROR, "called End() without Begin()");
 		return;
 	}
 
+	impl->inBeginEndBlock = false;
 	impl->FlushScreenCommands(impl->beginUserDefinedBlending);
 	impl->FlushWorldCommands(impl->beginUserDefinedBlending);
-	impl->inBeginEndBlock = false;
 	impl->beginUserDefinedBlending = false;
+
+	impl->mutex.unlock();
 }
 
 void CglFont::DrawBuffered(bool userDefinedBlending)
