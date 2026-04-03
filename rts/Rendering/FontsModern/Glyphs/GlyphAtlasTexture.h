@@ -76,7 +76,7 @@ public:
 	bool IsAllocated() const noexcept { return !atlasSize.Empty(); }
 
 	PixelFormat GetPixelFormat() const noexcept { return format; }
-	void SetPixelFormat(PixelFormat pixelFormat) noexcept;
+	void SetPixelFormat(PixelFormat pixelFormat);
 	ContentType GetContentType() const noexcept { return contentType; }
 	void SetContentType(ContentType type) noexcept;
 

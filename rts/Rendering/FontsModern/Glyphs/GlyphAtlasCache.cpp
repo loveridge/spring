@@ -1046,6 +1046,19 @@ bool GlyphAtlasCache::BuildSlugGlyphFromFTOutline(const FT_Outline& outline, Slu
 	if (builder.curves.empty())
 		return false;
 
+	const std::size_t initialCurveTexelCount = slugCurveTexels.size();
+	const std::size_t initialBandTexelCount = slugBandTexels.size();
+	const std::uint32_t initialCurveTextureHeight = slugCurveTextureHeight;
+	const std::uint32_t initialBandTextureHeight = slugBandTextureHeight;
+	const bool initialSlugTexturesDirty = slugTexturesDirty;
+	const auto rollbackSlugData = [this, initialCurveTexelCount, initialBandTexelCount, initialCurveTextureHeight, initialBandTextureHeight, initialSlugTexturesDirty]() {
+		slugCurveTexels.resize(initialCurveTexelCount);
+		slugBandTexels.resize(initialBandTexelCount);
+		slugCurveTextureHeight = initialCurveTextureHeight;
+		slugBandTextureHeight = initialBandTextureHeight;
+		slugTexturesDirty = initialSlugTexturesDirty;
+	};
+
 	auto storeCurve = [this](SlugCurveData& curve) {
 		std::uint32_t texelIndex = static_cast<std::uint32_t>(slugCurveTexels.size() / 4u);
 
@@ -1083,14 +1096,20 @@ bool GlyphAtlasCache::BuildSlugGlyphFromFTOutline(const FT_Outline& outline, Slu
 		slugBandTexels[header + 1u] = relativeOffset;
 	};
 
-	auto appendBandCurves = [this, glyphBaseTexel](const std::vector<SlugCurveData*>& sortedCurves, bool horizontal, float bandSize, float glyphExtent) -> std::vector<std::pair<std::uint16_t, std::uint16_t>> {
+	auto appendBandCurves = [this, glyphBaseTexel](const std::vector<SlugCurveData*>& sortedCurves, bool horizontal, float bandSize, float glyphExtent, bool& overflowed) -> std::vector<std::pair<std::uint16_t, std::uint16_t>> {
 		std::vector<std::pair<std::uint16_t, std::uint16_t>> descriptors;
 		descriptors.reserve(SlugBandCount);
 
 		for (std::uint32_t band = 0; band < SlugBandCount; ++band) {
 			const float bandMin = band * bandSize;
 			const float bandMax = (band == (SlugBandCount - 1u)) ? glyphExtent : ((band + 1u) * bandSize);
-			const std::uint16_t relativeOffset = static_cast<std::uint16_t>(slugBandTexels.size() / 2u - glyphBaseTexel);
+			const std::size_t relativeOffsetValue = slugBandTexels.size() / 2u - glyphBaseTexel;
+			if (relativeOffsetValue > std::numeric_limits<std::uint16_t>::max()) {
+				overflowed = true;
+				return {};
+			}
+
+			const std::uint16_t relativeOffset = static_cast<std::uint16_t>(relativeOffsetValue);
 			std::uint16_t curveCount = 0u;
 
 			for (const SlugCurveData* curve: sortedCurves) {
@@ -1103,6 +1122,11 @@ bool GlyphAtlasCache::BuildSlugGlyphFromFTOutline(const FT_Outline& outline, Slu
 
 				if (Min3(c1, c2, c3) > bandMax || Max3(c1, c2, c3) < bandMin)
 					continue;
+
+				if (curveCount == std::numeric_limits<std::uint16_t>::max()) {
+					overflowed = true;
+					return {};
+				}
 
 				const std::uint16_t curveX = static_cast<std::uint16_t>(curve->texelIndex % SlugTextureWidth);
 				const std::uint16_t curveY = static_cast<std::uint16_t>(curve->texelIndex / SlugTextureWidth);
@@ -1134,8 +1158,18 @@ bool GlyphAtlasCache::BuildSlugGlyphFromFTOutline(const FT_Outline& outline, Slu
 		return Max3(lhs->y1, lhs->y2, lhs->y3) > Max3(rhs->y1, rhs->y2, rhs->y3);
 	});
 
-	const auto horizontalBands = appendBandCurves(horizontalCurves, true, bandDimY, height);
-	const auto verticalBands = appendBandCurves(verticalCurves, false, bandDimX, width);
+	bool bandDescriptorOverflowed = false;
+	const auto horizontalBands = appendBandCurves(horizontalCurves, true, bandDimY, height, bandDescriptorOverflowed);
+	if (bandDescriptorOverflowed) {
+		rollbackSlugData();
+		return false;
+	}
+
+	const auto verticalBands = appendBandCurves(verticalCurves, false, bandDimX, width, bandDescriptorOverflowed);
+	if (bandDescriptorOverflowed) {
+		rollbackSlugData();
+		return false;
+	}
 
 	for (std::uint32_t i = 0; i < bandCount; ++i) {
 		writeBandHeader(i, horizontalBands[i].first, horizontalBands[i].second);

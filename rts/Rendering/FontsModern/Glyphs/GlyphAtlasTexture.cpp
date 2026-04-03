@@ -162,7 +162,7 @@ GlyphAtlasTexture& GlyphAtlasTexture::operator=(GlyphAtlasTexture&& other) noexc
 	return *this;
 }
 
-void GlyphAtlasTexture::SetPixelFormat(PixelFormat pixelFormat) noexcept
+void GlyphAtlasTexture::SetPixelFormat(PixelFormat pixelFormat)
 {
 	if (format == pixelFormat)
 		return;
