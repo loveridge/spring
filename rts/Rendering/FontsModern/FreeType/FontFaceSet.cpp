@@ -35,6 +35,11 @@ void FontFaceSet::Clear() noexcept
 void FontFaceSet::SetPrimaryFace(FacePtr face)
 {
 	primary = std::move(face);
+
+	if (primary == nullptr)
+		return;
+
+	fallbacks.erase(std::remove(fallbacks.begin(), fallbacks.end(), primary), fallbacks.end());
 }
 
 const FontFaceSet::FacePtr& FontFaceSet::GetPrimaryFace() const noexcept
@@ -109,11 +114,23 @@ FontFaceSet::FacePtr FontFaceSet::FindFaceForCodepoint(char32_t codepoint) const
 
 std::pair<FontFaceSet::FacePtr, std::uint32_t> FontFaceSet::FindGlyphForCodepoint(char32_t codepoint) const
 {
-	FacePtr face = FindFaceForCodepoint(codepoint);
-	if (face == nullptr)
-		return {nullptr, 0u};
+	const auto findGlyph = [codepoint](const FacePtr& face) -> std::pair<FacePtr, std::uint32_t> {
+		if (face == nullptr)
+			return {nullptr, 0u};
 
-	return {face, face->GetCharIndex(codepoint)};
+		const std::uint32_t glyphIndex = face->GetCharIndex(codepoint);
+		return (glyphIndex != 0u) ? std::pair<FacePtr, std::uint32_t>{face, glyphIndex} : std::pair<FacePtr, std::uint32_t>{nullptr, 0u};
+	};
+
+	if (auto result = findGlyph(primary); result.first != nullptr)
+		return result;
+
+	for (const FacePtr& face: fallbacks) {
+		if (auto result = findGlyph(face); result.first != nullptr)
+			return result;
+	}
+
+	return {nullptr, 0u};
 }
 
 FontFaceSet::FacePtr FontFaceSet::FindFaceForGlyphName(const std::string& glyphName) const

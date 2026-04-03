@@ -38,12 +38,21 @@ public:
 	explicit operator bool() const noexcept;
 
 	void Clear() noexcept;
+
+	/**
+	 * Sets the primary face and removes matching entries from the fallback list
+	 * so the same wrapper instance cannot appear in both roles.
+	 */
 	void SetPrimaryFace(FacePtr face);
 
 	const FacePtr& GetPrimaryFace() const noexcept;
 	FacePtr& GetPrimaryFace() noexcept;
 
 	void AddFallbackFace(FacePtr face);
+	/**
+	 * Replaces fallbacks with a normalized list that omits null entries,
+	 * duplicate wrapper instances, and the current primary face.
+	 */
 	void SetFallbackFaces(FaceList faces);
 
 	const FaceList& GetFallbackFaces() const noexcept;

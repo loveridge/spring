@@ -50,6 +50,8 @@ private:
  *
  * This type owns the FreeType face handle and guarantees that any memory used
  * with FT_New_Memory_Face remains alive for at least as long as the face.
+ * The process-wide FontLibrary must outlive all FontFace instances because
+ * FT_Done_Face requires the originating FT_Library to remain valid.
  *
  * It intentionally knows nothing about glyph atlases, rendering, shaping, or
  * text wrapping.
@@ -68,10 +70,7 @@ public:
 
 	FontFace& operator=(FontFace&& other) noexcept;
 
-	void Reset(FT_Face newFace = nullptr, std::shared_ptr<const FontFileBytes> newMemory = {}) noexcept;
-
 	FT_Face GetFTFace() const noexcept;
-	operator FT_Face() const noexcept { return face; }
 
 	bool IsValid() const noexcept { return face != nullptr; }
 	explicit operator bool() const noexcept { return IsValid(); }
@@ -99,6 +98,8 @@ public:
 	FT_Error LoadGlyph(FT_UInt glyphIndex, FT_Int32 loadFlags) const noexcept;
 
 private:
+	void Reset(FT_Face newFace = nullptr, std::shared_ptr<const FontFileBytes> newMemory = {}) noexcept;
+
 	FT_Face face = nullptr;
 	std::shared_ptr<const FontFileBytes> memory;
 };

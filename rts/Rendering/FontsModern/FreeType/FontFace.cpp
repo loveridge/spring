@@ -58,6 +58,9 @@ FontFace& FontFace::operator=(FontFace&& other) noexcept
 
 void FontFace::Reset(FT_Face newFace, std::shared_ptr<const FontFileBytes> newMemory) noexcept
 {
+	if (face == newFace && memory == newMemory)
+		return;
+
 	if (face != nullptr)
 		FT_Done_Face(face);
 

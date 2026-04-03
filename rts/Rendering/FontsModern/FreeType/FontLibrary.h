@@ -63,8 +63,8 @@ public:
 		});
 	}
 
-	void ClearGameFontSet();
-	void ClearBasePattern();
+	bool ClearGameFontSet();
+	bool ClearBasePattern();
 
 	bool GetSearchSystemFonts() const noexcept { return searchSystemFonts; }
 	bool GetSearchFontAttributes() const noexcept { return searchFontAttributes; }
@@ -80,6 +80,7 @@ public:
 private:
 	void DestroyFontconfig() noexcept;
 	void DestroyFontconfigUnlocked() noexcept;
+	bool HasPartialFontconfigStateUnsafe() const noexcept;
 
 	FT_Library ftLibrary = nullptr;
 
