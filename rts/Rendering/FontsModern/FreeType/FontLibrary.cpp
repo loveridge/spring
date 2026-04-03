@@ -214,8 +214,9 @@ bool FontLibrary::InitializeFontconfig(bool consoleOutput)
 bool FontLibrary::HasFontconfig() const noexcept
 {
 #ifdef USE_FONTCONFIG
-	std::lock_guard<std::mutex> lock(fontconfigMutex);
-	return (fcConfig != nullptr) && fontconfigInitialized;
+	return WithFontconfigStateLocked([this](const FontconfigStateView& state) {
+		return (state.config != nullptr) && fontconfigInitialized;
+	});
 #else
 	return false;
 #endif
@@ -256,8 +257,9 @@ bool FontLibrary::CheckFontconfig()
 	if (!library.InitializeFontconfig(false))
 		return false;
 
-	std::lock_guard<std::mutex> lock(library.fontconfigMutex);
-	return (library.fcConfig != nullptr) && FcConfigUptoDate(library.fcConfig);
+	return library.WithFontconfigStateLocked([](const FontconfigStateView& state) {
+		return (state.config != nullptr) && FcConfigUptoDate(state.config);
+	});
 }
 #endif
 

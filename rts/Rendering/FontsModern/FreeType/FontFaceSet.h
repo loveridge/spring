@@ -77,7 +77,6 @@ public:
 	bool SupportsCodepoint(char32_t codepoint) const;
 
 	static bool SupportsCodepoint(const FacePtr& face, char32_t codepoint);
-	static bool SupportsGlyphIndex(const FacePtr& face, std::uint32_t glyphIndex);
 	static bool SupportsGlyphName(const FacePtr& face, const std::string& glyphName);
 
 private:

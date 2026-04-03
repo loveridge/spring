@@ -136,11 +136,6 @@ bool FontFaceSet::SupportsCodepoint(const FacePtr& face, char32_t codepoint)
 	return (face != nullptr) && (face->GetCharIndex(codepoint) != 0u);
 }
 
-bool FontFaceSet::SupportsGlyphIndex(const FacePtr& face, std::uint32_t glyphIndex)
-{
-	return (face != nullptr) && (glyphIndex > 0u) && (glyphIndex < face->GetNumGlyphs());
-}
-
 bool FontFaceSet::SupportsGlyphName(const FacePtr& face, const std::string& glyphName)
 {
 	if (face == nullptr || glyphName.empty())
@@ -152,7 +147,7 @@ bool FontFaceSet::SupportsGlyphName(const FacePtr& face, const std::string& glyp
 		return false;
 
 	char buffer[128] = {0};
-	for (FT_UInt glyphIndex = 0; glyphIndex < face->GetNumGlyphs(); ++glyphIndex) {
+	for (FT_UInt glyphIndex = 1; glyphIndex < face->GetNumGlyphs(); ++glyphIndex) {
 		buffer[0] = '\0';
 		if (FT_Get_Glyph_Name(ftFace, glyphIndex, buffer, sizeof(buffer)) != 0)
 			continue;

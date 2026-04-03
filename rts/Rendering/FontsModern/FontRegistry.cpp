@@ -35,6 +35,57 @@ namespace {
 
 	return std::string(reinterpret_cast<const char*>(value));
 }
+
+[[nodiscard]] std::string FindSystemFontLocked(const FontLibrary::FontconfigStateView& state,
+                                               std::string_view family,
+                                               std::string_view style,
+                                               bool allowSubstitutions)
+{
+	if (state.config == nullptr)
+		return {};
+
+	FcPattern* query = FcPatternCreate();
+	if (query == nullptr)
+		return {};
+
+	if (!family.empty()) {
+		FcPatternAddString(query, FC_FAMILY, reinterpret_cast<const FcChar8*>(family.data()));
+	}
+	if (!style.empty()) {
+		FcPatternAddString(query, FC_STYLE, reinterpret_cast<const FcChar8*>(style.data()));
+	}
+
+	FcConfigSubstitute(state.config, query, FcMatchPattern);
+	FcDefaultSubstitute(query);
+
+	FcResult matchResult = FcResultNoMatch;
+	FcPattern* match = FcFontMatch(state.config, query, &matchResult);
+	FcPatternDestroy(query);
+
+	if (match == nullptr || matchResult != FcResultMatch)
+		return {};
+
+	std::string resolvedFile = StringFromFcPattern(match, FC_FILE);
+
+	if (!allowSubstitutions && !family.empty()) {
+		const std::string matchedFamily = StringFromFcPattern(match, FC_FAMILY);
+		if (!matchedFamily.empty() && matchedFamily != family) {
+			FcPatternDestroy(match);
+			return {};
+		}
+	}
+
+	if (!allowSubstitutions && !style.empty()) {
+		const std::string matchedStyle = StringFromFcPattern(match, FC_STYLE);
+		if (!matchedStyle.empty() && matchedStyle != style) {
+			FcPatternDestroy(match);
+			return {};
+		}
+	}
+
+	FcPatternDestroy(match);
+	return resolvedFile;
+}
 #endif
 
 } // namespace
@@ -158,47 +209,9 @@ std::string FontRegistry::FindSystemFont(std::string_view family,
 	if (!library.HasFontconfig())
 		return {};
 
-	FcPattern* query = FcPatternCreate();
-	if (query == nullptr)
-		return {};
-
-	if (!family.empty()) {
-		FcPatternAddString(query, FC_FAMILY, reinterpret_cast<const FcChar8*>(family.data()));
-	}
-	if (!style.empty()) {
-		FcPatternAddString(query, FC_STYLE, reinterpret_cast<const FcChar8*>(style.data()));
-	}
-
-	FcConfigSubstitute(library.GetFontconfig(), query, FcMatchPattern);
-	FcDefaultSubstitute(query);
-
-	FcResult matchResult = FcResultNoMatch;
-	FcPattern* match = FcFontMatch(library.GetFontconfig(), query, &matchResult);
-	FcPatternDestroy(query);
-
-	if (match == nullptr || matchResult != FcResultMatch)
-		return {};
-
-	std::string resolvedFile = StringFromFcPattern(match, FC_FILE);
-
-	if (!allowSubstitutions && !family.empty()) {
-		const std::string matchedFamily = StringFromFcPattern(match, FC_FAMILY);
-		if (!matchedFamily.empty() && matchedFamily != family) {
-			FcPatternDestroy(match);
-			return {};
-		}
-	}
-
-	if (!allowSubstitutions && !style.empty()) {
-		const std::string matchedStyle = StringFromFcPattern(match, FC_STYLE);
-		if (!matchedStyle.empty() && matchedStyle != style) {
-			FcPatternDestroy(match);
-			return {};
-		}
-	}
-
-	FcPatternDestroy(match);
-	return resolvedFile;
+	return library.WithFontconfigStateLocked([family, style, allowSubstitutions](const FontLibrary::FontconfigStateView& state) {
+		return FindSystemFontLocked(state, family, style, allowSubstitutions);
+	});
 #else
 	(void)family;
 	(void)style;
@@ -220,4 +233,4 @@ std::string FontRegistry::MakeRegistryKey(const FontDescriptor& descriptor)
 	return key.str();
 }
 
-} // namespace font
+} // namespace fonts

@@ -89,6 +89,7 @@ public:
 
 	long GetFaceIndex() const noexcept;
 
+	// Returns a non-negative glyph count clamped to FT_UInt range for safe index checks.
 	FT_UInt GetNumGlyphs() const noexcept;
 
 	bool HasKerning() const noexcept;

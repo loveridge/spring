@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <mutex>
+#include <utility>
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -39,9 +40,28 @@ public:
 	bool HasFontconfig() const noexcept;
 
 #ifdef USE_FONTCONFIG
-	FcConfig* GetFontconfig() const noexcept { return fcConfig; }
-	FcFontSet* GetGameFontSet() const noexcept { return gameFontSet; }
-	FcPattern* GetBasePattern() const noexcept { return basePattern; }
+	struct FontconfigStateView {
+		FcConfig* config = nullptr;
+		FcFontSet* gameFontSet = nullptr;
+		FcPattern* basePattern = nullptr;
+	};
+
+	/**
+	 * Executes a callback while holding the Fontconfig state lock.
+	 *
+	 * The callback must not retain any raw Fontconfig pointers beyond its own
+	 * execution because mutation and teardown may invalidate them later.
+	 */
+	template <typename Callback>
+	decltype(auto) WithFontconfigStateLocked(Callback&& callback) const
+	{
+		std::lock_guard<std::mutex> lock(fontconfigMutex);
+		return std::forward<Callback>(callback)(FontconfigStateView {
+			.config = fcConfig,
+			.gameFontSet = gameFontSet,
+			.basePattern = basePattern,
+		});
+	}
 
 	void ClearGameFontSet();
 	void ClearBasePattern();
