@@ -125,16 +125,33 @@ std::vector<std::weak_ptr<CglFont>>& GetLoadedFonts()
 	if (HasOption(options, FontOption::Scale))
 		size *= std::max(descriptor.pixelSize, 1);
 
+	if (HasOption(options, FontOption::Norm) && globalRendering != nullptr)
+		size *= globalRendering->pixelY;
+
 	return size;
 }
 
-void ConvertNormalizedToPixels(float& x, float& y)
+[[nodiscard]] float GetNormalizedCoordinateXScale()
 {
-	if (globalRendering == nullptr)
-		return;
+	if (globalRendering == nullptr || globalRendering->viewSizeX <= 0 || globalRendering->viewSizeY <= 0)
+		return 1.0f;
 
-	x *= globalRendering->viewSizeX;
-	y *= globalRendering->viewSizeY;
+	return (globalRendering->pixelX / globalRendering->pixelY);
+}
+
+void ConvertNormalizedToLegacyCoordinates(float& x)
+{
+	const float xScale = GetNormalizedCoordinateXScale();
+
+	if (xScale != 0.0f)
+		x /= xScale;
+}
+
+[[nodiscard]] CMatrix44f MakeNormalizedCoordinateTransform()
+{
+	CMatrix44f transform = CMatrix44f::Identity();
+	transform.Scale(GetNormalizedCoordinateXScale(), 1.0f, 1.0f);
+	return transform;
 }
 
 [[nodiscard]] std::string NormalizeFontPath(std::string fontFile)
@@ -503,7 +520,7 @@ public:
 
 		fonts::text::LayoutOptions layoutOptions;
 		layoutOptions.options = NormalizeOptions(options);
-		layoutOptions.fontSize = std::max(size, 1.0f);
+		layoutOptions.fontSize = size;
 		layoutOptions.x = x;
 		layoutOptions.y = y;
 		layoutOptions.z = 0.0f;
@@ -522,13 +539,19 @@ public:
 		state.outlineColor = ToFontColor(outlineColor);
 		state.depth = depth;
 		state.useWorldSpace = false;
-		state.normalizedCoordinates = false;
+		state.normalizedCoordinates = HasOption(options, FontOption::Norm);
 		state.useColorAtlas = glyphCache->HasColorGlyphs();
 		state.useOutline = HasOption(options, FontOption::Outline);
 		state.useShadow = HasOption(options, FontOption::Shadow);
 		state.buffered = buffered;
 		state.rawPrimaryColor = nullptr;
 		state.rawOutlineColor = nullptr;
+
+		if (state.normalizedCoordinates) {
+			state.localTransformMatrix = MakeNormalizedCoordinateTransform();
+			state.hasLocalTransformMatrix = !state.localTransformMatrix.IsIdentity();
+		}
+
 		return state;
 	}
 
@@ -900,7 +923,7 @@ void CglFont::Print(float x, float y, float size, FontOption options, const std:
 		return;
 
 	if (HasOption(options, FontOption::Norm))
-		ConvertNormalizedToPixels(x, y);
+		ConvertNormalizedToLegacyCoordinates(x);
 
 	fonts::text::LayoutOptions layoutOptions = impl->MakeLayoutOptions(x, y, renderSize, options);
 	fonts::text::TextLayout layout = impl->layouter->LayoutText(text, layoutOptions);
@@ -1041,7 +1064,7 @@ void CglFont::PrintTable(float x, float y, float size, FontOption options, const
 	if (renderSize <= 0.0f)
 		return;
 	if (HasOption(options, FontOption::Norm))
-		ConvertNormalizedToPixels(x, y);
+		ConvertNormalizedToLegacyCoordinates(x);
 
 	options = NormalizeOptions(options);
 	if (HasOption(options, FontOption::Center))
