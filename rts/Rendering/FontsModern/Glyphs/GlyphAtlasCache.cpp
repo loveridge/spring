@@ -645,7 +645,9 @@ float GlyphAtlasCache::GetKerning(const GlyphInfo& leftGlyph, const GlyphInfo& r
 	if (!leftGlyph.face->HasKerning())
 		return leftGlyph.advance;
 
-	if (leftGlyph.sourceCodepoint < 128u && rightGlyph.sourceCodepoint < 128u) {
+	const FacePtr primaryFace = (faces != nullptr) ? faces->GetPrimaryFace() : nullptr;
+	if (leftGlyph.sourceCodepoint < 128u && rightGlyph.sourceCodepoint < 128u &&
+	    leftGlyph.face == primaryFace && rightGlyph.face == primaryFace) {
 		return kerningPrecached[MakeAsciiKerningHash(leftGlyph.sourceCodepoint, rightGlyph.sourceCodepoint)];
 	}
 
