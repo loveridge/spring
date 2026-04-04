@@ -414,6 +414,7 @@ class CglFont::Impl
 {
 public:
 	struct RenderCommand {
+		std::string sourceText;
 		fonts::text::TextLayout layout;
 		fonts::render::FontRenderState state{};
 		float4 baseTextColor = WhiteColor;
@@ -939,10 +940,10 @@ void CglFont::Print(float x, float y, float size, FontOption options, const std:
 		ConvertNormalizedToLegacyCoordinates(x);
 
 	fonts::text::LayoutOptions layoutOptions = impl->MakeLayoutOptions(x, y, renderSize, options);
-	fonts::text::TextLayout layout = impl->layouter->LayoutText(text, layoutOptions);
 
 	CglFont::Impl::RenderCommand command;
-	command.layout = std::move(layout);
+	command.sourceText = text;
+	command.layout = impl->layouter->LayoutText(command.sourceText, layoutOptions);
 	command.state = impl->MakeScreenState(options, buffered);
 	command.baseTextColor = impl->textColor;
 	command.baseOutlineColor = impl->outlineColor;
@@ -1130,10 +1131,10 @@ void CglFont::PrintWorld(const float3& position, float size, const std::string& 
 
 	fonts::text::LayoutOptions layoutOptions = impl->MakeLayoutOptions(billboardPosition.x, billboardPosition.y, renderSize, options);
 	layoutOptions.z = billboardPosition.z;
-	fonts::text::TextLayout layout = impl->layouter->LayoutText(text, layoutOptions);
 
 	CglFont::Impl::RenderCommand command;
-	command.layout = std::move(layout);
+	command.sourceText = text;
+	command.layout = impl->layouter->LayoutText(command.sourceText, layoutOptions);
 	command.state = impl->MakeWorldState(options, buffered);
 	command.baseTextColor = impl->textColor;
 	command.baseOutlineColor = impl->outlineColor;
