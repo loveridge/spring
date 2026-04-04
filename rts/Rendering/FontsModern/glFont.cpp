@@ -542,6 +542,7 @@ public:
 		state.depth = depth;
 		state.useWorldSpace = false;
 		state.normalizedCoordinates = HasOption(options, FontOption::Norm);
+		state.usePixelAlignedCoordinates = HasOption(options, FontOption::Nearest);
 		state.useColorAtlas = glyphCache->HasColorGlyphs();
 		state.useOutline = HasOption(options, FontOption::Outline);
 		state.useShadow = HasOption(options, FontOption::Shadow);
@@ -567,6 +568,7 @@ public:
 		state.depth = depth;
 		state.useWorldSpace = true;
 		state.normalizedCoordinates = false;
+		state.usePixelAlignedCoordinates = HasOption(options, FontOption::Nearest);
 		state.useColorAtlas = glyphCache->HasColorGlyphs();
 		state.useOutline = HasOption(options, FontOption::Outline);
 		state.useShadow = HasOption(options, FontOption::Shadow);

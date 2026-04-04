@@ -1159,7 +1159,7 @@ void SlugFontRenderer::ApplyUniforms()
 		? state->localTransformMatrix
 		: CMatrix44f::Identity();
 	const bool usePixelAlignedCoordinates = uniformState.usePixelAlignedCoordinates ||
-		(state != nullptr && !state->useWorldSpace && !state->normalizedCoordinates);
+		(state != nullptr && state->usePixelAlignedCoordinates);
 
 	programResources.program->SetUniformMatrix4x4("uLocalTransform", false, localTransform.m);
 	programResources.program->SetUniform("uDepthBias", uniformState.depth);

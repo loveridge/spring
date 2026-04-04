@@ -847,7 +847,7 @@ void ShaderFontRenderer::ApplyUniforms(const TextureBinding& binding, bool outli
 		? state->localTransformMatrix
 		: CMatrix44f::Identity();
 	const bool usePixelAlignedCoordinates = uniformState.usePixelAlignedCoordinates ||
-		(state != nullptr && !state->useWorldSpace && !state->normalizedCoordinates);
+		(state != nullptr && state->usePixelAlignedCoordinates);
 	const bool useColorAtlas = !binding.alphaOnly;
 	// SDF shading is only valid for atlases explicitly tagged as distance fields.
 	const bool enableSDF = uniformState.enableSDF && binding.sdf;

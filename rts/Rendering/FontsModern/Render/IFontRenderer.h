@@ -76,6 +76,7 @@ struct FontRenderState {
 
 	bool useWorldSpace = false;
 	bool normalizedCoordinates = false;
+	bool usePixelAlignedCoordinates = false;
 	bool useColorAtlas = false;
 	bool useOutline = false;
 	bool useShadow = false;
