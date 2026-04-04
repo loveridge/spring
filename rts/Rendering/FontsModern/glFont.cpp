@@ -414,7 +414,9 @@ class CglFont::Impl
 {
 public:
 	struct RenderCommand {
-		std::string sourceText;
+		// TextLayout stores string_views into this text, so keep the storage on the
+		// heap to preserve pointer stability when RenderCommand instances move.
+		std::shared_ptr<std::string> sourceText;
 		fonts::text::TextLayout layout;
 		fonts::render::FontRenderState state{};
 		float4 baseTextColor = WhiteColor;
@@ -942,8 +944,8 @@ void CglFont::Print(float x, float y, float size, FontOption options, const std:
 	fonts::text::LayoutOptions layoutOptions = impl->MakeLayoutOptions(x, y, renderSize, options);
 
 	CglFont::Impl::RenderCommand command;
-	command.sourceText = text;
-	command.layout = impl->layouter->LayoutText(command.sourceText, layoutOptions);
+	command.sourceText = std::make_shared<std::string>(text);
+	command.layout = impl->layouter->LayoutText(*command.sourceText, layoutOptions);
 	command.state = impl->MakeScreenState(options, buffered);
 	command.baseTextColor = impl->textColor;
 	command.baseOutlineColor = impl->outlineColor;
@@ -1133,8 +1135,8 @@ void CglFont::PrintWorld(const float3& position, float size, const std::string& 
 	layoutOptions.z = billboardPosition.z;
 
 	CglFont::Impl::RenderCommand command;
-	command.sourceText = text;
-	command.layout = impl->layouter->LayoutText(command.sourceText, layoutOptions);
+	command.sourceText = std::make_shared<std::string>(text);
+	command.layout = impl->layouter->LayoutText(*command.sourceText, layoutOptions);
 	command.state = impl->MakeWorldState(options, buffered);
 	command.baseTextColor = impl->textColor;
 	command.baseOutlineColor = impl->outlineColor;
