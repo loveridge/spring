@@ -36,6 +36,7 @@
 #include "Game/Camera.h"
 #include "Rendering/Fonts/FontHandler.h"
 #include "Rendering/Fonts/FontLogSection.h"
+#include "Rendering/GL/myGL.h"
 #include "Rendering/GlobalRendering.h"
 #include "System/Color.h"
 #include "System/Config/ConfigHandler.h"
@@ -573,13 +574,6 @@ public:
 		state.useOutline = HasOption(options, FontOption::Outline);
 		state.useShadow = HasOption(options, FontOption::Shadow);
 		state.buffered = buffered;
-
-		CCamera* activeCam = CCamera::GetActive();
-		if (activeCam != nullptr) {
-			state.localTransformMatrix = activeCam->GetBillBoardMatrix();
-			state.hasLocalTransformMatrix = true;
-		}
-
 		return state;
 	}
 
@@ -892,7 +886,6 @@ void CglFont::End()
 
 	impl->inBeginEndBlock = false;
 	impl->FlushScreenCommands(impl->beginUserDefinedBlending);
-	impl->FlushWorldCommands(impl->beginUserDefinedBlending);
 	impl->beginUserDefinedBlending = false;
 
 	impl->mutex.unlock();
@@ -909,7 +902,19 @@ void CglFont::DrawWorldBuffered(bool userDefinedBlending)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	std::scoped_lock lock(impl->mutex);
+
+#ifndef HEADLESS
+	glPushMatrix();
+
+	if (CCamera* activeCam = CCamera::GetActive(); activeCam != nullptr)
+		glMultMatrixf(activeCam->GetBillBoardMatrix());
+#endif
+
 	impl->FlushWorldCommands(userDefinedBlending);
+
+#ifndef HEADLESS
+	glPopMatrix();
+#endif
 }
 
 void CglFont::Print(float x, float y, float size, int options, const std::string& text)
@@ -1144,8 +1149,20 @@ void CglFont::PrintWorld(const float3& position, float size, const std::string& 
 	command.drawShadow = HasOption(options, FontOption::Shadow);
 
 	if (!buffered) {
+#ifndef HEADLESS
+		glPushMatrix();
+
+		if (activeCam != nullptr)
+			glMultMatrixf(activeCam->GetBillBoardMatrix());
+#endif
+
 		impl->QueueCommand(std::move(command), true);
 		impl->FlushWorldCommands(false);
+
+#ifndef HEADLESS
+		glPopMatrix();
+#endif
+
 		return;
 	}
 
