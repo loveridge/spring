@@ -905,9 +905,7 @@ void CglFont::DrawWorldBuffered(bool userDefinedBlending)
 
 #ifndef HEADLESS
 	glPushMatrix();
-
-	if (CCamera* activeCam = CCamera::GetActive(); activeCam != nullptr)
-		glMultMatrixf(activeCam->GetBillBoardMatrix());
+	glMultMatrixf(camera->GetBillBoardMatrix());
 #endif
 
 	impl->FlushWorldCommands(userDefinedBlending);
@@ -1126,13 +1124,9 @@ void CglFont::PrintWorld(const float3& position, float size, const std::string& 
 	if (renderSize <= 0.0f)
 		return;
 
-	CCamera* activeCam = CCamera::GetActive();
-	float3 billboardPosition = position;
 
-	if (activeCam != nullptr) {
-		CMatrix44f billboardMatrix = activeCam->GetBillBoardMatrix();
-		billboardPosition = billboardMatrix.Transpose() * position;
-	}
+	CMatrix44f billboardMatrix = camera->GetBillBoardMatrix();
+	float3 billboardPosition = billboardMatrix.Transpose() * position;
 
 	fonts::text::LayoutOptions layoutOptions = impl->MakeLayoutOptions(billboardPosition.x, billboardPosition.y, renderSize, options);
 	layoutOptions.z = billboardPosition.z;
@@ -1151,9 +1145,7 @@ void CglFont::PrintWorld(const float3& position, float size, const std::string& 
 	if (!buffered) {
 #ifndef HEADLESS
 		glPushMatrix();
-
-		if (activeCam != nullptr)
-			glMultMatrixf(activeCam->GetBillBoardMatrix());
+		glMultMatrixf(camera->GetBillBoardMatrix());
 #endif
 
 		impl->QueueCommand(std::move(command), true);
