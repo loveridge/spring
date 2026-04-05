@@ -175,6 +175,7 @@ protected:
 	struct LayoutContext {
 		LayoutOptions options{};
 		float defaultLineHeight = 0.0f;
+		float defaultAscender = 0.0f;
 		float defaultDescender = 0.0f;
 		bool hadMissingGlyphs = false;
 	};
@@ -188,9 +189,9 @@ protected:
 	LaidOutLine PositionRuns(std::span<const ShapedRun> runs, const LayoutContext& ctx, std::size_t sourceOffset, std::size_t sourceLength, bool explicitBreak) const;
 
 	float ComputeHorizontalLineOffset(float lineWidth, const LayoutOptions& options) const;
-	float ComputeVerticalBlockOffset(const TextMeasurement& measurement, const LayoutOptions& options, float fontDescender) const;
+	float ComputeVerticalBlockOffset(const TextMeasurement& measurement, const LayoutOptions& options, float fontAscender, float fontDescender) const;
 	void ApplyHorizontalAlignment(std::vector<LaidOutLine>& lines, const LayoutOptions& options) const;
-	void ApplyVerticalAlignment(std::vector<LaidOutLine>& lines, const TextMeasurement& measurement, const LayoutOptions& options, float fontDescender) const;
+	void ApplyVerticalAlignment(std::vector<LaidOutLine>& lines, const TextMeasurement& measurement, const LayoutOptions& options, float fontAscender, float fontDescender) const;
 
 	TextMeasurement BuildMeasurement(std::span<const LaidOutLine> lines, const ParsedSpanBuffer& parsed, const LayoutOptions& options) const;
 

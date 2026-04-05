@@ -783,6 +783,7 @@ void GlyphAtlasCache::ResetKerningCaches()
 void GlyphAtlasCache::ConfigureFaceMetrics()
 {
 	lineHeight = 0.0f;
+	fontAscender = 0.0f;
 	fontDescender = 0.0f;
 	normScale = 1.0f / std::max(fontSize, 1);
 
@@ -811,6 +812,7 @@ void GlyphAtlasCache::ConfigureFaceMetrics()
 		}
 	}
 
+	fontAscender = normScale * FT_MulFix(ftFace->ascender, ftFace->size->metrics.y_scale);
 	fontDescender = normScale * FT_MulFix(ftFace->descender, ftFace->size->metrics.y_scale);
 	lineHeight = (ftFace->units_per_EM > 0) ? (static_cast<float>(ftFace->height) / ftFace->units_per_EM) : 0.0f;
 
@@ -818,6 +820,7 @@ void GlyphAtlasCache::ConfigureFaceMetrics()
 		lineHeight = 1.25f * (ftFace->bbox.yMax - ftFace->bbox.yMin);
 
 	if (canScale) {
+		fontAscender *= (pixelScale / normScale);
 		fontDescender *= (pixelScale / normScale);
 		lineHeight *= pixelScale;
 	}

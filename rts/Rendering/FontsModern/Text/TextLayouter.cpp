@@ -174,6 +174,7 @@ TextLayout TextLayouter::LayoutText(std::string_view utf8, const LayoutOptions& 
 	ctx.options = options;
 	if (glyphCache != nullptr) {
 		ctx.defaultLineHeight = glyphCache->GetLineHeight();
+		ctx.defaultAscender = glyphCache->GetAscender();
 		ctx.defaultDescender = glyphCache->GetDescender();
 	}
 
@@ -196,7 +197,7 @@ TextLayout TextLayouter::LayoutText(std::string_view utf8, const LayoutOptions& 
 
 	layout.measurement = BuildMeasurement(layout.lines, parsed, options);
 	ApplyHorizontalAlignment(layout.lines, options);
-	ApplyVerticalAlignment(layout.lines, layout.measurement, options, ctx.defaultDescender);
+	ApplyVerticalAlignment(layout.lines, layout.measurement, options, ctx.defaultAscender, ctx.defaultDescender);
 	layout.valid = true;
 	return layout;
 }
@@ -462,6 +463,7 @@ LaidOutLine TextLayouter::LayoutSingleLine(std::span<const TextSpan> lineSpans, 
 	ctx.options = options;
 	if (glyphCache != nullptr) {
 		ctx.defaultLineHeight = glyphCache->GetLineHeight();
+		ctx.defaultAscender = glyphCache->GetAscender();
 		ctx.defaultDescender = glyphCache->GetDescender();
 	}
 
@@ -715,8 +717,9 @@ float TextLayouter::ComputeHorizontalLineOffset(float lineWidth, const LayoutOpt
 	return 0.0f;
 }
 
-float TextLayouter::ComputeVerticalBlockOffset(const TextMeasurement& measurement, const LayoutOptions& options, float fontDescender) const
+float TextLayouter::ComputeVerticalBlockOffset(const TextMeasurement& measurement, const LayoutOptions& options, float fontAscender, float fontDescender) const
 {
+	const float baselineAscender = (fontAscender != 0.0f) ? fontAscender : ((measurement.ascent > 0.0f) ? measurement.ascent : (fontDescender + 1.0f));
 	const float baselineDescender = (fontDescender != 0.0f) ? fontDescender : measurement.descent;
 
 	if (HasOption(options.options, FontOption::Descender)) {
@@ -726,7 +729,7 @@ float TextLayouter::ComputeVerticalBlockOffset(const TextMeasurement& measuremen
 	} else if (HasOption(options.options, FontOption::Top)) {
 		return -measurement.height;
 	} else if (HasOption(options.options, FontOption::Ascender)) {
-		return -(baselineDescender + 1.0f);
+		return -baselineAscender;
 	} else if (HasOption(options.options, FontOption::Bottom)) {
 		return -measurement.descent;
 	}
@@ -750,9 +753,9 @@ void TextLayouter::ApplyHorizontalAlignment(std::vector<LaidOutLine>& lines, con
 	}
 }
 
-void TextLayouter::ApplyVerticalAlignment(std::vector<LaidOutLine>& lines, const TextMeasurement& measurement, const LayoutOptions& options, float fontDescender) const
+void TextLayouter::ApplyVerticalAlignment(std::vector<LaidOutLine>& lines, const TextMeasurement& measurement, const LayoutOptions& options, float fontAscender, float fontDescender) const
 {
-	const float blockOffsetY = ComputeVerticalBlockOffset(measurement, options, fontDescender);
+	const float blockOffsetY = ComputeVerticalBlockOffset(measurement, options, fontAscender, fontDescender);
 	float penY = blockOffsetY;
 
 	for (LaidOutLine& line : lines) {

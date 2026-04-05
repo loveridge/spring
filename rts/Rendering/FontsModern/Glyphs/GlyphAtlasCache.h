@@ -105,6 +105,7 @@ public:
 	void SetOutlineWeight(float weight) noexcept { outlineWeight = weight; }
 
 	float GetLineHeight() const noexcept { return lineHeight; }
+	float GetAscender() const noexcept { return fontAscender; }
 	float GetDescender() const noexcept { return fontDescender; }
 	float GetNormScale() const noexcept { return normScale; }
 	bool HasColorGlyphs() const noexcept { return needsColor; }
@@ -178,6 +179,7 @@ private:
 	int outlineSize = 0;
 	float outlineWeight = 0.0f;
 	float lineHeight = 0.0f;
+	float fontAscender = 0.0f;
 	float fontDescender = 0.0f;
 	float normScale = 1.0f;
 	bool needsColor = false;

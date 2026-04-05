@@ -59,6 +59,7 @@ CONFIG(int, SmallFontOutlineWidth).defaultValue(2).description("see FontOutlineW
 CONFIG(float,      FontOutlineWeight).defaultValue(25.0f).description("Sets the opacity of Spring engine text, such as the title screen version number, clock, and basic UI. Does not affect LuaUI elements.");
 CONFIG(float, SmallFontOutlineWeight).defaultValue(10.0f).description("see FontOutlineWeight");
 CONFIG(std::string, FontRendererBackend).defaultValue("slug").description("Selects the modern font renderer backend: opengl, slug, auto, or null.");
+CONFIG(bool, FontDebugVerticalAlignmentLines).defaultValue(true).description("Draw debug guide lines for ascender, top, baseline, descender, and bottom anchors in modern font rendering.");
 
 std::shared_ptr<CglFont> font = nullptr;
 std::shared_ptr<CglFont> smallFont = nullptr;
@@ -70,6 +71,12 @@ namespace {
 static constexpr float4 WhiteColor(1.00f, 1.00f, 1.00f, 0.95f);
 static constexpr float4 DarkOutlineColor(0.05f, 0.05f, 0.05f, 0.95f);
 static constexpr float4 LightOutlineColor(0.95f, 0.95f, 0.95f, 0.80f);
+static constexpr float4 DebugTopColor(1.0f, 0.00f, 0.0f, 0.8f);
+static constexpr float4 DebugAscenderColor(1.f,1.f,0.f, .8f);
+static constexpr float4 DebugVCenterColor(0.00f, 1.0f, 0.0f, 0.8f);
+static constexpr float4 DebugBaselineColor(0.00f, 1.00f, 1.00f, 0.8f);
+static constexpr float4 DebugDescenderColor(0.f,.5f,1.f, 0.8f);
+static constexpr float4 DebugBottomColor(0.f,0.f,1.f, 0.8f);
 static std::atomic<std::uint32_t> nextFontDebugId = 1u;
 
 std::vector<std::weak_ptr<CglFont>>& GetLoadedFonts()
@@ -153,6 +160,19 @@ void ConvertNormalizedToLegacyCoordinates(float& x)
 	CMatrix44f transform = CMatrix44f::Identity();
 	transform.Scale(GetNormalizedCoordinateXScale(), 1.0f, 1.0f);
 	return transform;
+}
+
+[[nodiscard]] bool ShouldDrawDebugVerticalAlignmentLines()
+{
+	return (configHandler != nullptr) && configHandler->GetBool("FontDebugVerticalAlignmentLines");
+}
+
+[[nodiscard]] float3 TransformDebugVertex(const fonts::render::FontRenderState& state, const float3& vertex)
+{
+	if (!state.hasLocalTransformMatrix)
+		return vertex;
+
+	return state.localTransformMatrix * vertex;
 }
 
 [[nodiscard]] std::string NormalizeFontPath(std::string fontFile)
@@ -499,6 +519,7 @@ public:
 			renderer->PushState(state);
 			QueueLayout(command);
 			renderer->DrawQueued();
+			DrawDebugAlignmentGuides(command, state);
 			renderer->PopState();
 		}
 
@@ -722,6 +743,72 @@ public:
 				renderer->AddOutlineQuad(decoratedQuad);
 			}
 		}
+	}
+
+	void DrawDebugAlignmentGuides(const RenderCommand& command, const fonts::render::FontRenderState& state) const
+	{
+#ifdef HEADLESS
+		(void)command;
+		(void)state;
+#else
+		if (!ShouldDrawDebugVerticalAlignmentLines() || glyphCache == nullptr || command.layout.lines.empty())
+			return;
+
+		const float faceAscender = command.renderSize * glyphCache->GetAscender();
+		const float faceDescender = command.renderSize * glyphCache->GetDescender();
+		const float lineExtentPadding = std::max(command.renderSize * 0.5f, 1.0f);
+		const float z = command.layout.options.z + state.depth.text;
+		float blockMinX = std::numeric_limits<float>::max();
+		float blockMaxX = std::numeric_limits<float>::lowest();
+
+		GLint prevProgram = 0;
+		glGetIntegerv(GL_CURRENT_PROGRAM, &prevProgram);
+		glPushAttrib(GL_ENABLE_BIT | GL_CURRENT_BIT | GL_DEPTH_BUFFER_BIT | GL_LINE_BIT | GL_TEXTURE_BIT);
+		glUseProgram(0);
+		glDisable(GL_DEPTH_TEST);
+		glDisable(GL_ALPHA_TEST);
+		glDisable(GL_TEXTURE_2D);
+		glEnable(GL_BLEND);
+		glLineWidth(1.0f);
+
+		if (!state.userDefinedBlending)
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+		auto emitGuide = [&state, z](float x0, float x1, float y, const float4& color) {
+			const float3 left = TransformDebugVertex(state, float3(x0, y, z));
+			const float3 right = TransformDebugVertex(state, float3(x1, y, z));
+
+			glColorf4(color);
+			glVertexf3(left);
+			glVertexf3(right);
+		};
+
+		for (const auto& line: command.layout.lines) {
+			const float x0 = line.originX;
+			const float x1 = line.originX + std::max(line.width, lineExtentPadding);
+			blockMinX = std::min(blockMinX, x0);
+			blockMaxX = std::max(blockMaxX, x1);
+		}
+
+		if (blockMinX <= blockMaxX) {
+			const float firstBaselineY = command.layout.lines.front().originY;
+			const float topY = firstBaselineY + command.layout.measurement.height;
+			const float blockCenterY = firstBaselineY + (0.5f * (command.layout.measurement.height + command.layout.measurement.descent));
+			const float bottomY = firstBaselineY + command.layout.measurement.descent;
+
+			glBegin(GL_LINES);
+			emitGuide(blockMinX, blockMaxX, firstBaselineY + faceAscender, DebugAscenderColor);
+			emitGuide(blockMinX, blockMaxX, topY, DebugTopColor);
+			emitGuide(blockMinX, blockMaxX, blockCenterY, DebugVCenterColor);
+			emitGuide(blockMinX, blockMaxX, firstBaselineY, DebugBaselineColor);
+			emitGuide(blockMinX, blockMaxX, firstBaselineY + faceDescender, DebugDescenderColor);
+			emitGuide(blockMinX, blockMaxX, bottomY, DebugBottomColor);
+			glEnd();
+		}
+
+		glUseProgram(static_cast<GLuint>(prevProgram));
+		glPopAttrib();
+#endif
 	}
 
 public:
@@ -1096,7 +1183,7 @@ void CglFont::PrintTable(float x, float y, float size, FontOption options, const
 	} else if (HasOption(options, FontOption::Top)) {
 		y -= renderSize * maxHeight;
 	} else if (HasOption(options, FontOption::Ascender)) {
-		y -= renderSize * (impl->glyphCache->GetDescender() + 1.0f);
+		y -= renderSize * impl->glyphCache->GetAscender();
 	} else if (HasOption(options, FontOption::Bottom)) {
 		y -= renderSize * minDescender;
 	}
