@@ -77,6 +77,7 @@ static constexpr float4 DebugVCenterColor(0.00f, 1.0f, 0.0f, 0.8f);
 static constexpr float4 DebugBaselineColor(0.00f, 1.00f, 1.00f, 0.8f);
 static constexpr float4 DebugDescenderColor(0.f,.5f,1.f, 0.8f);
 static constexpr float4 DebugBottomColor(0.f,0.f,1.f, 0.8f);
+static constexpr float4 DebugOutlineBoxColor(1.0f, 0.65f, 0.0f, 0.85f);
 static std::atomic<std::uint32_t> nextFontDebugId = 1u;
 
 std::vector<std::weak_ptr<CglFont>>& GetLoadedFonts()
@@ -783,6 +784,28 @@ public:
 			glVertexf3(right);
 		};
 
+		auto emitRect = [&state, z](const GlyphRect& rect, const float4& color) {
+			const float minX = std::min(rect.x0(), rect.x1());
+			const float maxX = std::max(rect.x0(), rect.x1());
+			const float minY = std::min(rect.y0(), rect.y1());
+			const float maxY = std::max(rect.y0(), rect.y1());
+
+			const float3 topLeft = TransformDebugVertex(state, float3(minX, maxY, z));
+			const float3 topRight = TransformDebugVertex(state, float3(maxX, maxY, z));
+			const float3 bottomRight = TransformDebugVertex(state, float3(maxX, minY, z));
+			const float3 bottomLeft = TransformDebugVertex(state, float3(minX, minY, z));
+
+			glColorf4(color);
+			glVertexf3(topLeft);
+			glVertexf3(topRight);
+			glVertexf3(topRight);
+			glVertexf3(bottomRight);
+			glVertexf3(bottomRight);
+			glVertexf3(bottomLeft);
+			glVertexf3(bottomLeft);
+			glVertexf3(topLeft);
+		};
+
 		for (const auto& line: command.layout.lines) {
 			const float x0 = line.originX;
 			const float x1 = line.originX + std::max(line.width, lineExtentPadding);
@@ -795,6 +818,9 @@ public:
 			const float topY = firstBaselineY + command.layout.measurement.height;
 			const float blockCenterY = firstBaselineY + (0.5f * (command.layout.measurement.height + command.layout.measurement.descent));
 			const float bottomY = firstBaselineY + command.layout.measurement.descent;
+			const float outlineExpand = (descriptor.pixelSize > 0)
+				? (command.renderSize * descriptor.outlineSize / static_cast<float>(descriptor.pixelSize))
+				: 0.0f;
 
 			glBegin(GL_LINES);
 			emitGuide(blockMinX, blockMaxX, firstBaselineY + faceAscender, DebugAscenderColor);
@@ -803,6 +829,60 @@ public:
 			emitGuide(blockMinX, blockMaxX, firstBaselineY, DebugBaselineColor);
 			emitGuide(blockMinX, blockMaxX, firstBaselineY + faceDescender, DebugDescenderColor);
 			emitGuide(blockMinX, blockMaxX, bottomY, DebugBottomColor);
+
+			for (const auto& line: command.layout.lines) {
+				for (const auto& run: line.runs) {
+					for (const auto& glyph: run.glyphs) {
+						const bool useSlugRendering = glyphCache->IsSlugEnabled() && !glyph.slugFillInfo.Empty();
+
+						if (!glyph.visible)
+							continue;
+
+						if (useSlugRendering) {
+							const SlugGlyphInfo& fillInfo = glyph.slugFillInfo;
+							const SlugGlyphInfo& outlineInfo = glyph.slugOutlineInfo.Empty() ? fillInfo : glyph.slugOutlineInfo;
+
+							if (outlineInfo.Empty() && fillInfo.Empty())
+								continue;
+
+							const float unionMinX = std::min(fillInfo.offsetX, outlineInfo.offsetX);
+							const float unionMinY = std::min(fillInfo.offsetY, outlineInfo.offsetY);
+							const float unionMaxX = std::max(fillInfo.offsetX + fillInfo.width, outlineInfo.offsetX + outlineInfo.width);
+							const float unionMaxY = std::max(fillInfo.offsetY + fillInfo.height, outlineInfo.offsetY + outlineInfo.height);
+
+							emitRect(
+								GlyphRect(
+									glyph.x + (command.renderSize * unionMinX),
+									glyph.y + (command.renderSize * unionMaxY),
+									command.renderSize * (unionMaxX - unionMinX),
+									-command.renderSize * (unionMaxY - unionMinY)
+								),
+								DebugOutlineBoxColor
+							);
+							continue;
+						}
+
+						if (glyph.outlineAtlasUV.Empty())
+							continue;
+
+						const GlyphRect& bounds = glyph.shaped.metrics.bounds;
+						const float x0 = glyph.x + (command.renderSize * bounds.x0());
+						const float y0 = glyph.y + (command.renderSize * bounds.y0());
+						const float w = command.renderSize * bounds.w;
+						const float h = command.renderSize * bounds.h;
+
+						emitRect(
+							GlyphRect(
+								x0 - outlineExpand,
+								y0 + outlineExpand,
+								w + (2.0f * outlineExpand),
+								h - (2.0f * outlineExpand)
+							),
+							DebugOutlineBoxColor
+						);
+					}
+				}
+			}
 			glEnd();
 		}
 
