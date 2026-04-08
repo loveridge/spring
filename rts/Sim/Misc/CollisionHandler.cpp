@@ -14,6 +14,8 @@
 unsigned int CCollisionHandler::numDiscTests = 0;
 unsigned int CCollisionHandler::numContTests = 0;
 
+
+
 void CCollisionHandler::PrintStats()
 {
 	LOG("[CCollisionHandler] dis-/continuous tests: %i/%i", numDiscTests, numContTests);

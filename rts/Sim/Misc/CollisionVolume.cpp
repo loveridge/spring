@@ -235,6 +235,8 @@ float3 CollisionVolume::GetWorldSpacePos(const CSolidObject* o, const float3& ex
 	return (o->midPos + o->GetObjectSpaceVec(axisOffsets + extOffsets));
 }
 
+
+
 float CollisionVolume::GetPointSurfaceDistance(const CUnit* u, const LocalModelPiece* lmp, const float3& pos) const {
 	RECOIL_DETAILED_TRACY_ZONE;
 	return (GetPointSurfaceDistance(u, lmp, u->GetTransformMatrix(true), pos));
@@ -356,6 +358,7 @@ float CollisionVolume::GetCylinderDistance(const float3& pv, size_t axisA, size_
 
 	return d;
 }
+
 #define MAX_ITERATIONS 10
 #define THRESHOLD 0.001
 
@@ -427,3 +430,4 @@ float CollisionVolume::GetEllipsoidDistance(const float3& pv) const
 
 	return currDist;
 }
+
