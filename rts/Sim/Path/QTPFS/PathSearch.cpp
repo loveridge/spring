@@ -56,7 +56,7 @@ int GetNextBitShift(int n)
     int c = 0;
 	n = (n > 0) ? n - 1 : 0;
     while (n >>= 1) {
-        c = c << 1;
+        c++;
     }
     return c + 1;
 }
@@ -538,7 +538,7 @@ bool QTPFS::PathSearch::Execute(unsigned int searchStateOffset) {
 
 	// early-out, but not for a repair path because it needs to build out the remaining path, but not if there is no
 	// further path to build out.
-	if (haveFullPath && (!doPathRepair || bwd.tgtSearchNode != nullptr)) {
+	if (haveFullPath && (!doPathRepair || bwd.srcSearchNode->prevNode == nullptr)) {
 		// Ensure the node data is pulled
 		{
 		auto* curNode = nodeLayer->GetPoolNode(fwd.srcSearchNode->GetIndex());
@@ -905,6 +905,25 @@ bool QTPFS::PathSearch::ExecutePathSearch() {
 	// 			, bwd.tgtPoint.x, bwd.tgtPoint.z
 	// 			);
 	// }
+
+	// The early out check didn't apply to path repairs because it needs to build out the rest of the path. Check for
+	// it now and trigger a reverse path build. We don't need to go through the search loop.
+	if (doPathRepair) {
+		// If true, this means the forward and reverse searches are staring on the same node.
+		if (haveFullPath) {
+			const float2& searchTransitionPoint = bwd.srcSearchNode->GetNeighborEdgeTransitionPoint();
+
+			// step back into the exist reverse path. The forward search needs to point to the current node.
+			bwd.tgtSearchNode = bwd.srcSearchNode->prevNode;
+			fwd.tgtSearchNode->SetNeighborEdgeTransitionPoint(searchTransitionPoint);
+			bwd.tgtPoint = float3(searchTransitionPoint.x, 0.f, searchTransitionPoint.y);
+
+			AssertPointIsOnNodeEdge(bwd.tgtPoint, bwd.tgtSearchNode);
+			AssertPointIsOnNodeEdge(bwd.tgtPoint, fwd.tgtSearchNode);
+
+			continueSearching = false;
+		}
+	}
 
 	while (continueSearching) {
 		if (!(*fwd.openNodes).empty()) {
@@ -1499,7 +1518,7 @@ void QTPFS::PathSearch::IterateNodeNeighbors(const INode* curNode, unsigned int 
 	// Allow units to escape if starting in a closed node - a cost of infinity would prevent them escaping.
 	const float curNodeSanitizedCost = curNode->AllSquaresImpassable() ? QTPFS_CLOSED_NODE_COST : curNode->GetMoveCost();
 
-	const std::vector<INode::NeighbourPoints>& nxtNodes = curNode->GetNeighbours();
+	const auto& nxtNodes = curNode->GetNeighbours();
 	for (unsigned int i = 0; i < nxtNodes.size(); i++) {
 		// NOTE:
 		//   this uses the actual distance that edges of the final path will cover,

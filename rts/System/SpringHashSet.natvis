@@ -14,7 +14,7 @@
        emilib::HashSet
        State enum (uint8_t): INACTIVE=0  ACTIVE=1  FILLED=2
        ================================================================ -->
-  <Type Name="emilib::HashSet&lt;*>">
+  <Type Name="emilib::HashSet&lt;*&gt;">
 
     <!-- Summary line shown inline in the Watch / Locals window -->
     <DisplayString Condition="_num_buckets == 0">{{ empty }}</DisplayString>
@@ -53,15 +53,15 @@
   <!-- ================================================================
        emilib::HashSet::iterator
        ================================================================ -->
-  <Type Name="emilib::HashSet&lt;*>::iterator">
+  <Type Name="emilib::HashSet&lt;*&gt;::iterator">
 
     <!-- Show current key when pointing at a valid FILLED bucket -->
     <DisplayString Condition="_set == 0">{{ invalid }}</DisplayString>
-    <DisplayString Condition="_bucket >= _set->_num_buckets">{{ end() }}</DisplayString>
+    <DisplayString Condition="_bucket &gt;= _set->_num_buckets">{{ end() }}</DisplayString>
     <DisplayString>[bucket {_bucket}]  {_set->_keys[_bucket]}</DisplayString>
 
     <Expand>
-      <Item Name="value"  Condition="_set != 0 && _bucket < _set->_num_buckets">_set->_keys[_bucket]</Item>
+      <Item Name="value"  Condition="_set != 0 &amp;&amp; _bucket &lt; _set->_num_buckets">_set->_keys[_bucket]</Item>
       <Item Name="bucket">_bucket</Item>
       <Item Name="[set]"  ExcludeView="simple">*_set</Item>
     </Expand>
@@ -72,14 +72,14 @@
        emilib::HashSet::const_iterator
        (identical layout to iterator, but _set is const MyType*)
        ================================================================ -->
-  <Type Name="emilib::HashSet&lt;*>::const_iterator">
+  <Type Name="emilib::HashSet&lt;*&gt;::const_iterator">
 
     <DisplayString Condition="_set == 0">{{ invalid }}</DisplayString>
-    <DisplayString Condition="_bucket >= _set->_num_buckets">{{ end() }}</DisplayString>
+    <DisplayString Condition="_bucket &gt;= _set->_num_buckets">{{ end() }}</DisplayString>
     <DisplayString>[bucket {_bucket}]  {_set->_keys[_bucket]}</DisplayString>
 
     <Expand>
-      <Item Name="value"  Condition="_set != 0 && _bucket < _set->_num_buckets">_set->_keys[_bucket]</Item>
+      <Item Name="value"  Condition="_set != 0 &amp;&amp; _bucket &lt; _set->_num_buckets">_set->_keys[_bucket]</Item>
       <Item Name="bucket">_bucket</Item>
       <Item Name="[set]"  ExcludeView="simple">*_set</Item>
     </Expand>

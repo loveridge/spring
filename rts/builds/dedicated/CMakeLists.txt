@@ -1,6 +1,6 @@
 add_definitions    (-DDEDICATED ${PIC_FLAG} -DNOT_USING_CREG)
 add_definitions    (-DHEADLESS -DNO_SOUND)
-remove_definitions (-DSTREFLOP_SSE -DAVI_CAPTURING)
+remove_definitions (-DAVI_CAPTURING)
 remove_definitions (-DTRACE_SYNC -DSYNCDEBUG)
 remove_definitions (-DTHREADPOOL)
 
@@ -40,6 +40,11 @@ list(APPEND engineDedicatedLibraries "prd::base64")
 
 ### smmalloc
 list(APPEND engineDedicatedLibraries "smmalloc")
+
+### mimalloc
+if (USE_MIMALLOC)
+    list(APPEND engineDedicatedLibraries mimalloc-static)
+endif()
 
 if (WIN32)
 	list(APPEND engineDedicatedLibraries ${WINMM_LIBRARY})
@@ -129,6 +134,7 @@ set(system_files
 	${ENGINE_SRC_ROOT_DIR}/System/StringUtil.cpp
 	${ENGINE_SRC_ROOT_DIR}/System/float3.cpp
 	${ENGINE_SRC_ROOT_DIR}/System/float4.cpp
+	${ENGINE_SRC_ROOT_DIR}/System/MemoryOverride.cpp
 	)
 if    (WIN32)
 	list(APPEND system_files ${ENGINE_SRC_ROOT_DIR}/System/Platform/Win/Hardware.cpp)
@@ -181,10 +187,11 @@ add_executable(engine-dedicated
 	)
 target_link_libraries(engine-dedicated ${engineDedicatedLibraries})
 
+# Export symbols for plugin access (replaces CMP0065 OLD behavior)
+set_target_properties(engine-dedicated PROPERTIES ENABLE_EXPORTS TRUE)
+
 if(MSVC)
-    foreach(natvis_file ${RECOIL_NATVIS_FILES})
-        target_sources(engine-dedicated PRIVATE "${natvis_file}")
-    endforeach()
+    target_link_libraries(engine-dedicated engine-natvis)
 endif()
 if    (MINGW)
 	target_link_libraries(engine-dedicated ${WS2_32_LIBRARY} ${IMAGEHLP_LIBRARY} ${IPHLPAPI_LIBRARY} ${WINMM_LIBRARY})

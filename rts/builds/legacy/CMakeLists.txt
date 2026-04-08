@@ -84,10 +84,11 @@ include_directories(${engineIncludes})
 add_executable(engine-legacy ${EXE_FLAGS} ${engineSources} ${ENGINE_ICON} ${engineHeaders})
 target_link_libraries(engine-legacy ${engineLibraries} Game)
 
+# Export symbols for plugin access (replaces CMP0065 OLD behavior)
+set_target_properties(engine-legacy PROPERTIES ENABLE_EXPORTS TRUE)
+
 if(MSVC)
-    foreach(natvis_file ${RECOIL_NATVIS_FILES})
-        target_sources(engine-legacy PRIVATE "${natvis_file}")
-    endforeach()
+    target_link_libraries(engine-legacy engine-natvis)
 endif()
 
 
