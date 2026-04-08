@@ -10,15 +10,13 @@
 #include "System/TimeProfiler.h"
 #include "System/float3.h"
 #include "System/Misc/SpringTime.h"
+#include "System/MathConstants.h"
 
 #include <catch_amalgamated.hpp>
 
 InitSpringTime ist;
 
 namespace {
-
-constexpr float HALF_PI    = 1.57079632679f;
-constexpr float QUARTER_PI = 0.78539816339f;
 
 static CollisionVolume MakeBoxVolume(const float3& scales, const float3& offsets = ZeroVector)
 {
@@ -1147,7 +1145,7 @@ TEST_CASE("CollisionHandler_IntersectBoxVolume_BoxVsEllipsoid")
 
 	SECTION("rotated ellipsoid separates") {
 		// Unrotated, it reaches into the box. Rotated by 90 on Y shrinks its X influence.
-		const CMatrix44f ellipsoidMat = MakeTransform(float3(4.0f, 0.0f, 0.0f), float3(0.0f, HALF_PI, 0.0f));
+		const CMatrix44f ellipsoidMat = MakeTransform(float3(4.0f, 0.0f, 0.0f), float3(0.0f, math::HALFPI, 0.0f));
 		CHECK_FALSE(IntersectsVolume(box, boxMat, ellipsoid, ellipsoidMat));
 	}
 
@@ -1266,7 +1264,7 @@ TEST_CASE("CollisionHandler_IntersectBoxVolume_RespectsRotation")
 	const CollisionVolume boxA = MakeBoxVolume(float3(4.0f, 2.0f, 2.0f));
 	const CollisionVolume boxB = MakeBoxVolume(float3(1.0f, 1.0f, 1.0f));
 
-	const CMatrix44f boxAMat = MakeTransform(ZeroVector, float3(0.0f, QUARTER_PI, 0.0f));
+	const CMatrix44f boxAMat = MakeTransform(ZeroVector, float3(0.0f, math::QUARTERPI, 0.0f));
 
 	SECTION("rotated box intersects") {
 		const CMatrix44f boxBMat = MakeTransform(float3(2.1f, 0.0f, 0.0f));
@@ -1285,15 +1283,15 @@ TEST_CASE("CollisionHandler_IntersectBoxVolume_BothRotated_SAT_EdgeEdge")
 	const CollisionVolume boxB = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f));
 
 	// Rotate A around X, turning its Y/Z faces diagonal.
-	const CMatrix44f aMat = MakeTransform(ZeroVector, float3(QUARTER_PI, 0.0f, 0.0f));
+	const CMatrix44f aMat = MakeTransform(ZeroVector, float3(math::QUARTERPI, 0.0f, 0.0f));
 
 	SECTION("edge-edge crossing") {
 		// Rotate B around Y, turning its X/Z faces diagonal.
 		// Moving it closely on the Z axis forces a cross-product (Edge-vs-Edge) intersection.
-		const CMatrix44f bMatIntersects = MakeTransform(float3(0.0f, 0.0f, 2.8f), float3(0.0f, QUARTER_PI, 0.0f));
+		const CMatrix44f bMatIntersects = MakeTransform(float3(0.0f, 0.0f, 2.8f), float3(0.0f, math::QUARTERPI, 0.0f));
 		CHECK(IntersectsVolume(boxA, aMat, boxB, bMatIntersects));
 
-		const CMatrix44f bMatSeparates = MakeTransform(float3(0.0f, 0.0f, 2.9f), float3(0.0f, QUARTER_PI, 0.0f));
+		const CMatrix44f bMatSeparates = MakeTransform(float3(0.0f, 0.0f, 2.9f), float3(0.0f, math::QUARTERPI, 0.0f));
 		CHECK_FALSE(IntersectsVolume(boxA, aMat, boxB, bMatSeparates));
 	}
 }
@@ -1305,12 +1303,12 @@ TEST_CASE("CollisionHandler_IntersectBoxVolume_HandlesRotatedOtherVolume")
 	const CMatrix44f boxMat = MakeTransform();
 
 	SECTION("rotated cylinder still intersects") {
-		const CMatrix44f cylinderMat = MakeTransform(float3(2.75f, 0.0f, 0.0f), float3(HALF_PI, 0.0f, 0.0f));
+		const CMatrix44f cylinderMat = MakeTransform(float3(2.75f, 0.0f, 0.0f), float3(math::HALFPI, 0.0f, 0.0f));
 		CHECK(IntersectsVolume(box, boxMat, cylinder, cylinderMat));
 	}
 
 	SECTION("rotated cylinder still separates when moved away") {
-		const CMatrix44f cylinderMat = MakeTransform(float3(3.6f, 0.0f, 0.0f), float3(HALF_PI, 0.0f, 0.0f));
+		const CMatrix44f cylinderMat = MakeTransform(float3(3.6f, 0.0f, 0.0f), float3(math::HALFPI, 0.0f, 0.0f));
 		CHECK_FALSE(IntersectsVolume(box, boxMat, cylinder, cylinderMat));
 	}
 }
@@ -1350,7 +1348,7 @@ TEST_CASE("CollisionHandler_IntersectBoxVolume_OffsetAndRotationCoupling")
 	const CollisionVolume offsetBox = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f), float3(10.0f, 0.0f, 0.0f));
 
 	// Rotated 90 degrees around the Y axis
-	const CMatrix44f offsetBoxMat = MakeTransform(ZeroVector, float3(0.0f, HALF_PI, 0.0f));
+	const CMatrix44f offsetBoxMat = MakeTransform(ZeroVector, float3(0.0f, math::HALFPI, 0.0f));
 
 	const CollisionVolume targetBox = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f));
 
@@ -1504,7 +1502,7 @@ TEST_CASE("CollisionHandler_IntersectBoxVolume_SphereVsRotatedBox")
 		// Rotating the box 45 degrees around Z turns its flat X-face into a pointing diamond.
 		// The corner now stretches to X = sqrt(1^2 + 1^2) = 1.414.
 		// Sphere edge is at X = 1.2. Because 1.414 > 1.2, the sharp corner pierces the sphere.
-		const CMatrix44f boxMatRotated = MakeTransform(ZeroVector, float3(0.0f, 0.0f, QUARTER_PI));
+		const CMatrix44f boxMatRotated = MakeTransform(ZeroVector, float3(0.0f, 0.0f, math::QUARTERPI));
 		CHECK(IntersectsVolume(box, boxMatRotated, sphere, sphereMat));
 	}
 }
@@ -1532,14 +1530,14 @@ TEST_CASE("CollisionHandler_IntersectBoxVolume_BoxVsRotatedEllipsoid")
 		// along the diagonal from (4, 4, 0) toward the box.
 		// Distance from (4,4,0) to box corner (1,1,0) is sqrt(3^2 + 3^2) ≈ 4.24.
 		// Since the rotated major radius (5.0) is greater than 4.24, it reaches the corner.
-		const CMatrix44f ellMatAimed = MakeTransform(pos, float3(0.0f, 0.0f, -QUARTER_PI));
+		const CMatrix44f ellMatAimed = MakeTransform(pos, float3(0.0f, 0.0f, -math::QUARTERPI));
 		CHECK(IntersectsVolume(box, boxMat, ellipsoid, ellMatAimed));
 	}
 
 	SECTION("ellipsoid rotated perpendicular to box misses") {
 		// +45 degrees leaves the major axis perpendicular to the diagonal back toward the box.
 		// Only the minor radius (1.0) faces the box, which is much less than the 4.24 distance.
-		const CMatrix44f ellMatAway = MakeTransform(pos, float3(0.0f, 0.0f, QUARTER_PI));
+		const CMatrix44f ellMatAway = MakeTransform(pos, float3(0.0f, 0.0f, math::QUARTERPI));
 		CHECK_FALSE(IntersectsVolume(box, boxMat, ellipsoid, ellMatAway));
 	}
 }
@@ -1564,7 +1562,7 @@ TEST_CASE("CollisionHandler_IntersectBoxVolume_SlantedCylinder")
 		// Tip travel is approx 5.0 * 0.707 = 3.53 units on Y and Z axes.
 		// New tip position: Y = 4.0 - 3.53 = 0.47, Z = 4.0 - 3.53 = 0.47.
 		// Since (0, 0.47, 0.47) is inside the box [-1, 1], it pierces the top face!
-		const CMatrix44f cylMatSlanted = MakeTransform(float3(0.0f, 4.0f, 4.0f), float3(-QUARTER_PI, 0.0f, 0.0f));
+		const CMatrix44f cylMatSlanted = MakeTransform(float3(0.0f, 4.0f, 4.0f), float3(-math::QUARTERPI, 0.0f, 0.0f));
 		CHECK(IntersectsVolume(box, boxMat, cylinder, cylMatSlanted));
 	}
 
@@ -1572,7 +1570,7 @@ TEST_CASE("CollisionHandler_IntersectBoxVolume_SlantedCylinder")
 		// Same 45 degree slant, but moved further out.
 		// Tip reaches Y = 6.0 - 3.53 = 2.47. Z = 6.0 - 3.53 = 2.47.
 		// Box max is 1.0, so it stops short.
-		const CMatrix44f cylMatSlantedFar = MakeTransform(float3(0.0f, 6.0f, 6.0f), float3(-QUARTER_PI, 0.0f, 0.0f));
+		const CMatrix44f cylMatSlantedFar = MakeTransform(float3(0.0f, 6.0f, 6.0f), float3(-math::QUARTERPI, 0.0f, 0.0f));
 		CHECK_FALSE(IntersectsVolume(box, boxMat, cylinder, cylMatSlantedFar));
 	}
 }
@@ -1584,7 +1582,7 @@ TEST_CASE("CollisionHandler_IntersectBoxVolume_MultiAxisObliqueBoxes")
 	const CMatrix44f matA = MakeTransform();
 
 	// Rotate boxB by 45 degrees on ALL three axes.
-	const float3 crazyRotation(QUARTER_PI, QUARTER_PI, QUARTER_PI);
+	const float3 crazyRotation(math::QUARTERPI, math::QUARTERPI, math::QUARTERPI);
 
 	SECTION("deep multi-axis overlap") {
 		const CMatrix44f matB_Hits = MakeTransform(float3(2.5f, 2.5f, 2.5f), crazyRotation);
@@ -1614,7 +1612,7 @@ TEST_CASE("CollisionHandler_IntersectBoxVolume_RotatedLineContactCountsAsInterse
 	const CollisionVolume boxB = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f));
 	const CMatrix44f boxAMat = MakeTransform();
 	const CMatrix44f boxBMat =
-		MakeTransform(float3(2.41421356f, 0.0f, 0.0f), float3(0.0f, 0.0f, QUARTER_PI));
+		MakeTransform(float3(2.41421356f, 0.0f, 0.0f), float3(0.0f, 0.0f, math::QUARTERPI));
 
 	CHECK(IntersectsVolume(boxA, boxAMat, boxB, boxBMat));
 }
@@ -1658,15 +1656,15 @@ TEST_CASE("CollisionHandler_IntersectBoxVolume_RotatedLineContactCountsAsInterse
 // {
 // 	const CollisionVolume box = MakeBoxVolume(float3(2.0f, 2.0f, 2.0f));
 // 	const CollisionVolume cylinder = MakeCylinderVolume(float3(2.0f, 2.0f, 6.0f), CollisionVolume::COLVOL_AXIS_Z);
-// 	const CMatrix44f boxMat = MakeTransform(ZeroVector, float3(0.0f, QUARTER_PI, 0.0f));
+// 	const CMatrix44f boxMat = MakeTransform(ZeroVector, float3(0.0f, math::QUARTERPI, 0.0f));
 
 // 	std::array<CMatrix44f, 64> hitMats;
 // 	std::array<CMatrix44f, 64> missMats;
 
 // 	for (std::size_t i = 0; i < hitMats.size(); ++i) {
 // 		const float y = 0.75f + ((i % 8) * 0.05f);
-// 		hitMats[i] = MakeTransform(float3(2.75f, y, 0.0f), float3(HALF_PI, 0.0f, 0.0f));
-// 		missMats[i] = MakeTransform(float3(3.6f, y, 0.0f), float3(HALF_PI, 0.0f, 0.0f));
+// 		hitMats[i] = MakeTransform(float3(2.75f, y, 0.0f), float3(math::HALFPI, 0.0f, 0.0f));
+// 		missMats[i] = MakeTransform(float3(3.6f, y, 0.0f), float3(math::HALFPI, 0.0f, 0.0f));
 // 	}
 
 // 	const std::int64_t iterations = 10000000;
