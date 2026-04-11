@@ -26,8 +26,12 @@
 #include "FreeType/FontFace.h"
 #include "FreeType/FontFaceSet.h"
 #include "FreeType/FontLibrary.h"
-#include "Glyphs/GlyphAtlasCache.h"
+#include "Glyphs/GlyphCacheCore.h"
+#include "Glyphs/ShaderGlyphAtlasCache.h"
+#include "Glyphs/SlugGlyphAtlasCache.h"
 #include "Render/FontRendererFactory.h"
+#include "Render/ShaderFontRenderer.h"
+#include "Render/SlugFontRenderer.h"
 #include "Text/HarfBuzzTextShaper.h"
 #include "Text/TextControlCodes.h"
 #include "Text/TextLayouter.h"
@@ -462,14 +466,30 @@ public:
 		fonts::render::FontRendererCreateOptions rendererOptions;
 		rendererOptions.backend = ResolveRendererBackend();
 
-		const bool enableSlugRendering = (rendererOptions.backend == fonts::render::FontRendererBackend::Slug);
-		glyphCache = std::make_shared<fonts::GlyphAtlasCache>(faceSet, descriptor.pixelSize, descriptor.outlineSize, descriptor.outlineWeight, enableSlugRendering);
+		glyphCacheCore = std::make_shared<fonts::GlyphCacheCore>(faceSet, descriptor.pixelSize, descriptor.outlineSize, descriptor.outlineWeight);
 		shaper = std::make_shared<fonts::text::HarfBuzzTextShaper>(faceSet);
-		layouter = std::make_shared<fonts::text::TextLayouter>(shaper, glyphCache);
+		layouter = std::make_shared<fonts::text::TextLayouter>(shaper, glyphCacheCore);
 		wrapper = std::make_shared<fonts::text::TextWrapper>(std::make_shared<fonts::text::TextLayouterMeasurer>(layouter));
 		renderer = fonts::render::FontRendererFactory::Create(rendererOptions);
 		if (renderer == nullptr)
 			throw content_error("Failed to create modern font renderer");
+
+		rendererBackend = renderer->GetBackend();
+
+		switch (fonts::render::FontRendererFactory::GetRequiredCacheKind(rendererBackend)) {
+			case fonts::render::FontRendererCacheKind::ShaderBitmap:
+				shaderGlyphCache = std::make_shared<fonts::ShaderGlyphAtlasCache>(*glyphCacheCore);
+				layouter->SetShaderGlyphCache(shaderGlyphCache);
+				break;
+
+			case fonts::render::FontRendererCacheKind::SlugVector:
+				slugGlyphCache = std::make_shared<fonts::SlugGlyphAtlasCache>(*glyphCacheCore);
+				layouter->SetSlugGlyphCache(slugGlyphCache);
+				break;
+
+			case fonts::render::FontRendererCacheKind::None:
+				break;
+		}
 
 		textColor = WhiteColor;
 		outlineColor = DarkOutlineColor;
@@ -488,6 +508,74 @@ public:
 			screenCommands.emplace_back(std::move(command));
 	}
 
+	void PrepareRendererResources()
+	{
+#ifdef HEADLESS
+		return;
+#else
+		switch (rendererBackend) {
+			case fonts::render::FontRendererBackend::OpenGL: {
+				if (shaderGlyphCache == nullptr)
+					return;
+
+				shaderGlyphCache->UploadAtlases();
+				auto* shaderRenderer = static_cast<fonts::render::ShaderFontRenderer*>(renderer.get());
+
+				fonts::render::ShaderFontRenderer::TextureBinding primaryBinding;
+				const auto& primaryAtlas = shaderGlyphCache->GetAtlasTexture();
+				primaryBinding.textureId = primaryAtlas.GetTextureId();
+				primaryBinding.textureUnit = 0;
+				primaryBinding.width = std::max(primaryAtlas.GetWidth(), 0);
+				primaryBinding.height = std::max(primaryAtlas.GetHeight(), 0);
+				primaryBinding.alphaOnly = (primaryAtlas.GetPixelFormat() == GlyphAtlasTexture::PixelFormat::Alpha);
+				primaryBinding.sdf = (primaryAtlas.GetContentType() == GlyphAtlasTexture::ContentType::SDF);
+
+				fonts::render::ShaderFontRenderer::TextureBinding outlineBinding;
+				const auto& outlineAtlas = shaderGlyphCache->GetShadowAtlasTexture();
+				outlineBinding.textureId = outlineAtlas.GetTextureId();
+				outlineBinding.textureUnit = 1;
+				outlineBinding.width = std::max(outlineAtlas.GetWidth(), 0);
+				outlineBinding.height = std::max(outlineAtlas.GetHeight(), 0);
+				outlineBinding.alphaOnly = (outlineAtlas.GetPixelFormat() == GlyphAtlasTexture::PixelFormat::Alpha);
+				outlineBinding.sdf = (outlineAtlas.GetContentType() == GlyphAtlasTexture::ContentType::SDF);
+
+				shaderRenderer->SetPrimaryTextureBinding(primaryBinding);
+				shaderRenderer->SetOutlineTextureBinding(outlineBinding);
+				return;
+			}
+
+			case fonts::render::FontRendererBackend::Slug: {
+				if (slugGlyphCache == nullptr)
+					return;
+
+				slugGlyphCache->UploadTextures();
+				auto* slugRenderer = static_cast<fonts::render::SlugFontRenderer*>(renderer.get());
+				const auto textureInfo = slugGlyphCache->GetTextureInfo();
+
+				fonts::render::SlugFontRenderer::TextureBinding curveBinding;
+				curveBinding.textureId = textureInfo.curveTextureId;
+				curveBinding.textureUnit = 0;
+				curveBinding.width = textureInfo.curveTextureWidth;
+				curveBinding.height = textureInfo.curveTextureHeight;
+
+				fonts::render::SlugFontRenderer::TextureBinding bandBinding;
+				bandBinding.textureId = textureInfo.bandTextureId;
+				bandBinding.textureUnit = 1;
+				bandBinding.width = textureInfo.bandTextureWidth;
+				bandBinding.height = textureInfo.bandTextureHeight;
+
+				slugRenderer->SetCurveTextureBinding(curveBinding);
+				slugRenderer->SetBandTextureBinding(bandBinding);
+				return;
+			}
+
+			case fonts::render::FontRendererBackend::Auto:
+			case fonts::render::FontRendererBackend::Null:
+				return;
+		}
+#endif
+	}
+
 	void FlushCommands(std::vector<RenderCommand>& commands, bool userDefinedBlending)
 	{
 		RECOIL_DETAILED_TRACY_ZONE;
@@ -500,18 +588,24 @@ public:
 		if (commands.empty())
 			return;
 
-		auto& primaryAtlas = glyphCache->GetAtlasTexture();
-		auto& outlineAtlas = glyphCache->GetShadowAtlasTexture();
-		const bool dumpPrimaryAtlas = primaryAtlas.NeedsUpload() || !primaryAtlas.HasTexture();
-		const bool dumpOutlineAtlas = outlineAtlas.NeedsUpload() || !outlineAtlas.HasTexture();
+		bool dumpPrimaryAtlas = false;
+		bool dumpOutlineAtlas = false;
 
-		glyphCache->UpdateAtlases();
-		renderer->HandleGlyphCacheUpdate(*glyphCache, false);
+		if (shaderGlyphCache != nullptr) {
+			const auto& primaryAtlas = shaderGlyphCache->GetAtlasTexture();
+			const auto& outlineAtlas = shaderGlyphCache->GetShadowAtlasTexture();
+			dumpPrimaryAtlas = primaryAtlas.NeedsUpload() || !primaryAtlas.HasTexture();
+			dumpOutlineAtlas = outlineAtlas.NeedsUpload() || !outlineAtlas.HasTexture();
+		}
 
-		if (debug_DumpAtlases && dumpPrimaryAtlas)
-			DumpAtlasBitmap(primaryAtlas, descriptor, debugId, "primary");
-		if (debug_DumpAtlases && dumpOutlineAtlas)
-			DumpAtlasBitmap(outlineAtlas, descriptor, debugId, "outline");
+		PrepareRendererResources();
+
+		if (debug_DumpAtlases && shaderGlyphCache != nullptr) {
+			if (dumpPrimaryAtlas)
+				DumpAtlasBitmap(shaderGlyphCache->GetAtlasTexture(), descriptor, debugId, "primary");
+			if (dumpOutlineAtlas)
+				DumpAtlasBitmap(shaderGlyphCache->GetShadowAtlasTexture(), descriptor, debugId, "outline");
+		}
 
 		for (const RenderCommand& command: commands) {
 			fonts::render::FontRenderState state = command.state;
@@ -569,7 +663,7 @@ public:
 		state.useWorldSpace = false;
 		state.normalizedCoordinates = HasOption(options, FontOption::Norm);
 		state.usePixelAlignedCoordinates = HasOption(options, FontOption::Nearest);
-		state.useColorAtlas = glyphCache->HasColorGlyphs();
+		state.useColorAtlas = (shaderGlyphCache != nullptr) && shaderGlyphCache->HasColorGlyphs();
 		state.useOutline = HasOption(options, FontOption::Outline);
 		state.useShadow = HasOption(options, FontOption::Shadow);
 		state.buffered = buffered;
@@ -595,7 +689,7 @@ public:
 		state.useWorldSpace = true;
 		state.normalizedCoordinates = false;
 		state.usePixelAlignedCoordinates = HasOption(options, FontOption::Nearest);
-		state.useColorAtlas = glyphCache->HasColorGlyphs();
+		state.useColorAtlas = (shaderGlyphCache != nullptr) && shaderGlyphCache->HasColorGlyphs();
 		state.useOutline = HasOption(options, FontOption::Outline);
 		state.useShadow = HasOption(options, FontOption::Shadow);
 		state.buffered = buffered;
@@ -664,7 +758,7 @@ public:
 		const float shadowShift = command.drawShadow ? (command.renderSize * 0.1f) : 0.0f;
 
 		for (const auto& glyph: run.glyphs) {
-			const bool useSlugRendering = glyphCache->IsSlugEnabled() && !glyph.slugFillInfo.Empty();
+			const bool useSlugRendering = (slugGlyphCache != nullptr) && !glyph.slugFillInfo.Empty();
 
 			if (!glyph.visible || (!useSlugRendering && glyph.atlasUV.Empty()))
 				continue;
@@ -688,14 +782,14 @@ public:
 				const float unionMaxX = std::max(fillInfo.offsetX + fillInfo.width, outlineInfo.offsetX + outlineInfo.width);
 				const float unionMaxY = std::max(fillInfo.offsetY + fillInfo.height, outlineInfo.offsetY + outlineInfo.height);
 
-				auto makeSlugQuad = [&](float offsetX, float offsetY, FontColor quadFillColor, FontColor quadOutlineColor) {
-					fonts::render::PreparedGlyphQuad quad;
-					quad.position = GlyphRect(
-						glyph.x + offsetX + (command.renderSize * unionMinX),
-						glyph.y + offsetY + (command.renderSize * unionMaxY),
-						command.renderSize * (unionMaxX - unionMinX),
-						-command.renderSize * (unionMaxY - unionMinY)
-					);
+					auto makeSlugQuad = [&](float offsetX, float offsetY, FontColor quadFillColor, FontColor quadOutlineColor) {
+						fonts::render::PreparedGlyphQuad quad;
+						quad.position = GlyphRect(
+							glyph.x + offsetX + (command.renderSize * unionMinX),
+							glyph.y + offsetY + (command.renderSize * unionMaxY),
+							command.renderSize * (unionMaxX - unionMinX),
+							-command.renderSize * (unionMaxY - unionMinY)
+						);
 					quad.fillSlugInfo = fillInfo;
 					quad.outlineSlugInfo = outlineInfo;
 					quad.fillColor = quadFillColor;
@@ -752,11 +846,11 @@ public:
 		(void)command;
 		(void)state;
 #else
-		if (!ShouldDrawDebugVerticalAlignmentLines() || glyphCache == nullptr || command.layout.lines.empty())
+		if (!ShouldDrawDebugVerticalAlignmentLines() || glyphCacheCore == nullptr || command.layout.lines.empty())
 			return;
 
-		const float faceAscender = command.renderSize * glyphCache->GetAscender();
-		const float faceDescender = command.renderSize * glyphCache->GetDescender();
+		const float faceAscender = command.renderSize * glyphCacheCore->GetAscender();
+		const float faceDescender = command.renderSize * glyphCacheCore->GetDescender();
 		const float lineExtentPadding = std::max(command.renderSize * 0.5f, 1.0f);
 		const float z = command.layout.options.z + state.depth.text;
 		float blockMinX = std::numeric_limits<float>::max();
@@ -833,7 +927,7 @@ public:
 			for (const auto& line: command.layout.lines) {
 				for (const auto& run: line.runs) {
 					for (const auto& glyph: run.glyphs) {
-						const bool useSlugRendering = glyphCache->IsSlugEnabled() && !glyph.slugFillInfo.Empty();
+						const bool useSlugRendering = (slugGlyphCache != nullptr) && !glyph.slugFillInfo.Empty();
 
 						if (!glyph.visible)
 							continue;
@@ -850,15 +944,15 @@ public:
 							const float unionMaxX = std::max(fillInfo.offsetX + fillInfo.width, outlineInfo.offsetX + outlineInfo.width);
 							const float unionMaxY = std::max(fillInfo.offsetY + fillInfo.height, outlineInfo.offsetY + outlineInfo.height);
 
-							emitRect(
-								GlyphRect(
-									glyph.x + (command.renderSize * unionMinX),
-									glyph.y + (command.renderSize * unionMaxY),
-									command.renderSize * (unionMaxX - unionMinX),
-									-command.renderSize * (unionMaxY - unionMinY)
-								),
-								DebugOutlineBoxColor
-							);
+								emitRect(
+									GlyphRect(
+										glyph.x + (command.renderSize * unionMinX),
+										glyph.y + (command.renderSize * unionMaxY),
+										command.renderSize * (unionMaxX - unionMinX),
+										-command.renderSize * (unionMaxY - unionMinY)
+									),
+									DebugOutlineBoxColor
+								);
 							continue;
 						}
 
@@ -894,11 +988,14 @@ public:
 public:
 	FontDescriptor descriptor;
 	std::shared_ptr<fonts::FontFaceSet> faceSet;
-	std::shared_ptr<fonts::GlyphAtlasCache> glyphCache;
+	std::shared_ptr<fonts::GlyphCacheCore> glyphCacheCore;
+	std::shared_ptr<fonts::ShaderGlyphAtlasCache> shaderGlyphCache;
+	std::shared_ptr<fonts::SlugGlyphAtlasCache> slugGlyphCache;
 	std::shared_ptr<fonts::text::HarfBuzzTextShaper> shaper;
 	std::shared_ptr<fonts::text::TextLayouter> layouter;
 	std::shared_ptr<fonts::text::TextWrapper> wrapper;
 	fonts::render::FontRendererPtr renderer;
+	fonts::render::FontRendererBackend rendererBackend = fonts::render::FontRendererBackend::Null;
 
 	mutable std::recursive_mutex mutex;
 	std::vector<RenderCommand> screenCommands;
@@ -1026,10 +1123,12 @@ void CglFont::ReallocSystemFontAtlases(bool pre)
 	RECOIL_DETAILED_TRACY_ZONE;
 
 	if (font != nullptr)
-		font->impl->glyphCache->ReallocAtlases(pre);
+		if (font->impl->shaderGlyphCache != nullptr)
+			font->impl->shaderGlyphCache->ReallocAtlases(pre);
 
 	if (smallFont != nullptr && smallFont != font)
-		smallFont->impl->glyphCache->ReallocAtlases(pre);
+		if (smallFont->impl->shaderGlyphCache != nullptr)
+			smallFont->impl->shaderGlyphCache->ReallocAtlases(pre);
 }
 
 void CglFont::Begin(bool userDefinedBlending)
@@ -1256,14 +1355,14 @@ void CglFont::PrintTable(float x, float y, float size, FontOption options, const
 		x -= renderSize * totalWidth;
 
 	if (HasOption(options, FontOption::Descender)) {
-		y -= renderSize * impl->glyphCache->GetDescender();
+		y -= renderSize * impl->glyphCacheCore->GetDescender();
 	} else if (HasOption(options, FontOption::VCenter)) {
 		y -= renderSize * 0.5f * maxHeight;
 		y -= renderSize * 0.5f * minDescender;
 	} else if (HasOption(options, FontOption::Top)) {
 		y -= renderSize * maxHeight;
 	} else if (HasOption(options, FontOption::Ascender)) {
-		y -= renderSize * impl->glyphCache->GetAscender();
+		y -= renderSize * impl->glyphCacheCore->GetAscender();
 	} else if (HasOption(options, FontOption::Bottom)) {
 		y -= renderSize * minDescender;
 	}
@@ -1335,7 +1434,7 @@ float CglFont::GetCharacterWidth(char32_t c) const
 {
 	RECOIL_DETAILED_TRACY_ZONE;
 	std::scoped_lock lock(impl->mutex);
-	return impl->glyphCache->GetGlyphByCodepoint(c).advance;
+	return impl->glyphCacheCore->GetGlyphByCodepoint(c).advance;
 }
 
 int CglFont::GetSize() const
@@ -1346,13 +1445,13 @@ int CglFont::GetSize() const
 int CglFont::GetTextureWidth() const
 {
 	std::scoped_lock lock(impl->mutex);
-	return impl->glyphCache->GetAtlasTexture().GetWidth();
+	return (impl->shaderGlyphCache != nullptr) ? impl->shaderGlyphCache->GetAtlasTexture().GetWidth() : 0;
 }
 
 int CglFont::GetTextureHeight() const
 {
 	std::scoped_lock lock(impl->mutex);
-	return impl->glyphCache->GetAtlasTexture().GetHeight();
+	return (impl->shaderGlyphCache != nullptr) ? impl->shaderGlyphCache->GetAtlasTexture().GetHeight() : 0;
 }
 
 int CglFont::GetOutlineWidth() const
@@ -1368,19 +1467,19 @@ float CglFont::GetOutlineWeight() const
 float CglFont::GetLineHeight() const
 {
 	std::scoped_lock lock(impl->mutex);
-	return impl->glyphCache->GetLineHeight();
+	return impl->glyphCacheCore->GetLineHeight();
 }
 
 float CglFont::GetDescender() const
 {
 	std::scoped_lock lock(impl->mutex);
-	return impl->glyphCache->GetDescender();
+	return impl->glyphCacheCore->GetDescender();
 }
 
 int CglFont::GetTexture() const
 {
 	std::scoped_lock lock(impl->mutex);
-	return impl->glyphCache->GetAtlasTexture().GetTextureId();
+	return (impl->shaderGlyphCache != nullptr) ? impl->shaderGlyphCache->GetAtlasTexture().GetTextureId() : 0;
 }
 
 const std::string& CglFont::GetFamily() const
@@ -1648,8 +1747,20 @@ void CglFont::ScanForWantedGlyphs(const spring::u8string& text)
 		codepoints.emplace_back(cp);
 	}
 
-	if (!codepoints.empty())
-		impl->glyphCache->EnsureGlyphs(codepoints);
+	if (!codepoints.empty()) {
+		impl->glyphCacheCore->EnsureGlyphs(codepoints);
+
+		std::vector<const GlyphInfo*> glyphInfos;
+		glyphInfos.reserve(codepoints.size());
+
+		for (char32_t codepoint: codepoints)
+			glyphInfos.emplace_back(&impl->glyphCacheCore->GetGlyphByCodepoint(codepoint));
+
+		if (impl->shaderGlyphCache != nullptr)
+			impl->shaderGlyphCache->EnsureGlyphPayloads(glyphInfos);
+		if (impl->slugGlyphCache != nullptr)
+			impl->slugGlyphCache->EnsureGlyphPayloads(glyphInfos);
+	}
 }
 
 void CglFont::GetStats(std::array<size_t, 8>& stats) const

@@ -1,8 +1,7 @@
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
 #include "NullFontRenderer.h"
-
-#include "Rendering/FontsModern/Glyphs/GlyphAtlasCache.h"
+#include "FontRendererFactory.h"
 
 namespace fonts::render {
 
@@ -56,17 +55,6 @@ void NullFontRenderer::DrawQueued()
 {
 }
 
-void NullFontRenderer::HandleGlyphCacheUpdate(fonts::GlyphAtlasCache& glyphCache, bool onlyUpload)
-{
-	stats.primaryTextureUploads += 1;
-
-	if (glyphCache.GetShadowAtlasTexture().HasTexture() || glyphCache.GetShadowAtlasTexture().NeedsUpload())
-		stats.outlineTextureUploads += 1;
-
-	(void)glyphCache;
-	(void)onlyUpload;
-}
-
 void NullFontRenderer::PushState(const FontRenderState& state)
 {
 	stateStackDepth += 1;
@@ -80,6 +68,11 @@ void NullFontRenderer::PopState()
 		stateStackDepth -= 1;
 		stats.statePops += 1;
 	}
+}
+
+FontRendererBackend NullFontRenderer::GetBackend() const noexcept
+{
+	return FontRendererBackend::Null;
 }
 
 bool NullFontRenderer::IsValid() const

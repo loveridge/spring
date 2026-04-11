@@ -143,4 +143,23 @@ FontRendererBackend FontRendererFactory::GetDefaultBackend()
 	return FontRendererBackend::Null;
 }
 
+FontRendererCacheKind FontRendererFactory::GetRequiredCacheKind(FontRendererBackend backend)
+{
+	switch (backend) {
+		case FontRendererBackend::Auto:
+			return GetRequiredCacheKind(GetDefaultBackend());
+
+		case FontRendererBackend::OpenGL:
+			return FontRendererCacheKind::ShaderBitmap;
+
+		case FontRendererBackend::Slug:
+			return FontRendererCacheKind::SlugVector;
+
+		case FontRendererBackend::Null:
+			return FontRendererCacheKind::None;
+	}
+
+	return FontRendererCacheKind::None;
+}
+
 } // namespace font::render

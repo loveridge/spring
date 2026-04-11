@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 
 #include "IFontRenderer.h"
@@ -14,11 +15,17 @@ namespace fonts::render {
  * Concrete backend availability is intentionally resolved in the factory
  * implementation rather than encoded into the public renderer interface.
  */
-enum class FontRendererBackend {
+enum class FontRendererBackend : std::uint8_t {
 	Auto,
 	OpenGL,
 	Slug,
 	Null,
+};
+
+enum class FontRendererCacheKind : std::uint8_t {
+	None,
+	ShaderBitmap,
+	SlugVector,
 };
 
 /**
@@ -48,6 +55,7 @@ public:
 
 	[[nodiscard]] static bool IsBackendSupported(FontRendererBackend backend);
 	[[nodiscard]] static FontRendererBackend GetDefaultBackend();
+	[[nodiscard]] static FontRendererCacheKind GetRequiredCacheKind(FontRendererBackend backend);
 };
 
 } // namespace font::render

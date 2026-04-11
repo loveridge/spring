@@ -23,7 +23,6 @@ public:
 	struct CreateOptions {
 		bool bufferedRendering = true;
 		bool enableStatistics = true;
-		bool autoUploadTextures = true;
 		bool autoPushPopState = false;
 	};
 
@@ -57,16 +56,20 @@ public:
 	void AddOutlineGlyph(const fonts::text::LaidOutGlyph& glyph) override;
 	void DrawQueued() override;
 
-	void HandleGlyphCacheUpdate(fonts::GlyphAtlasCache& glyphCache, bool onlyUpload = false) override;
 	void PushState(const FontRenderState& state) override;
 	void PopState() override;
 
+	[[nodiscard]] FontRendererBackend GetBackend() const noexcept override;
 	[[nodiscard]] FontRendererStats GetStats() const override;
 	void ClearStats() override;
 
 	[[nodiscard]] bool IsValid() const override;
 
 	void EnsureInitialized();
+	void SetCurveTextureBinding(const TextureBinding& binding);
+	void SetBandTextureBinding(const TextureBinding& binding);
+	[[nodiscard]] const TextureBinding& GetCurveTextureBinding() const noexcept { return curveTextureBinding; }
+	[[nodiscard]] const TextureBinding& GetBandTextureBinding() const noexcept { return bandTextureBinding; }
 
 private:
 	struct Vertex {

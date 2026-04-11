@@ -24,7 +24,6 @@ public:
 	struct CreateOptions {
 		bool bufferedRendering = true;
 		bool enableStatistics = true;
-		bool autoUploadTextures = true;
 		bool autoPushPopState = false;
 	};
 
@@ -70,10 +69,10 @@ public:
 	void AddOutlineGlyph(const fonts::text::LaidOutGlyph& glyph) override;
 	void DrawQueued() override;
 
-	void HandleGlyphCacheUpdate(fonts::GlyphAtlasCache& glyphCache, bool onlyUpload = false) override;
 	void PushState(const FontRenderState& state) override;
 	void PopState() override;
 
+	[[nodiscard]] FontRendererBackend GetBackend() const noexcept override;
 	[[nodiscard]] FontRendererStats GetStats() const override;
 	void ClearStats() override;
 
@@ -133,7 +132,6 @@ private:
 	void SubmitBatch(const RenderBatch& batch, const BufferResources& bufferResources, const TextureBinding& binding, bool outlinePass);
 	void ApplyUniforms(const TextureBinding& binding, bool outlinePass);
 	void BindTexture(const TextureBinding& binding);
-	void UpdateTextureBindingFromAtlas(TextureBinding& binding, const GlyphAtlasTexture& atlas);
 	void ClearQueuedBatches();
 
 private:

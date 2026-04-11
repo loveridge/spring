@@ -10,8 +10,7 @@
 #include <limits>
 
 #include "Rendering/Fonts/FontLogSection.h"
-#include "Rendering/FontsModern/Glyphs/GlyphAtlasCache.h"
-#include "Rendering/FontsModern/Glyphs/GlyphAtlasTexture.h"
+#include "FontRendererFactory.h"
 #include "Rendering/GL/VAO.h"
 #include "Rendering/GL/VBO.h"
 #include "Rendering/GlobalRendering.h"
@@ -436,42 +435,6 @@ void ShaderFontRenderer::DrawQueued()
 		PopState();
 }
 
-void ShaderFontRenderer::HandleGlyphCacheUpdate(fonts::GlyphAtlasCache& glyphCache, bool onlyUpload)
-{
-	auto& primaryAtlas = glyphCache.GetAtlasTexture();
-	auto& outlineAtlas = glyphCache.GetShadowAtlasTexture();
-	GLint listIndex = 0;
-
-#ifndef HEADLESS
-	GLint prevTextureBinding = 0;
-	glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevTextureBinding);
-	glGetIntegerv(GL_LIST_INDEX, &listIndex);
-#endif
-
-	if (createOptions.autoUploadTextures) {
-		if (listIndex == 0 && (onlyUpload || primaryAtlas.NeedsUpload() || !primaryAtlas.HasTexture())) {
-			primaryAtlas.Upload();
-		}
-
-		if (listIndex == 0 && (onlyUpload || outlineAtlas.NeedsUpload() || !outlineAtlas.HasTexture())) {
-			outlineAtlas.Upload();
-		}
-	}
-
-#ifndef HEADLESS
-	glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(prevTextureBinding));
-#endif
-
-	UpdateTextureBindingFromAtlas(primaryTextureBinding, primaryAtlas);
-	UpdateTextureBindingFromAtlas(outlineTextureBinding, outlineAtlas);
-	outlineTextureBinding.textureUnit = 1;
-
-	if (createOptions.enableStatistics) {
-		stats.primaryTextureUploads += 1;
-		stats.outlineTextureUploads += 1;
-	}
-}
-
 void ShaderFontRenderer::PushState(const FontRenderState& state)
 {
 	stateStack.push_back(state);
@@ -488,6 +451,11 @@ void ShaderFontRenderer::PopState()
 		if (createOptions.enableStatistics)
 			stats.statePops += 1;
 	}
+}
+
+FontRendererBackend ShaderFontRenderer::GetBackend() const noexcept
+{
+	return FontRendererBackend::OpenGL;
 }
 
 FontRendererStats ShaderFontRenderer::GetStats() const
@@ -576,11 +544,17 @@ const ShaderFontRenderer::UniformState& ShaderFontRenderer::GetUniformState() co
 void ShaderFontRenderer::SetPrimaryTextureBinding(const TextureBinding& binding)
 {
 	primaryTextureBinding = binding;
+
+	if (createOptions.enableStatistics)
+		stats.primaryTextureUploads += 1;
 }
 
 void ShaderFontRenderer::SetOutlineTextureBinding(const TextureBinding& binding)
 {
 	outlineTextureBinding = binding;
+
+	if (createOptions.enableStatistics)
+		stats.outlineTextureUploads += 1;
 }
 
 const ShaderFontRenderer::TextureBinding& ShaderFontRenderer::GetPrimaryTextureBinding() const
@@ -891,16 +865,6 @@ void ShaderFontRenderer::BindTexture(const TextureBinding& binding)
 		constexpr GLint swizzleMask[] = {GL_RED, GL_GREEN, GL_BLUE, GL_ALPHA};
 		glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
 	}
-}
-
-void ShaderFontRenderer::UpdateTextureBindingFromAtlas(TextureBinding& binding, const GlyphAtlasTexture& atlas)
-{
-	binding.textureId = atlas.GetTextureId();
-	binding.textureUnit = 0;
-	binding.width = std::max(atlas.GetWidth(), 0);
-	binding.height = std::max(atlas.GetHeight(), 0);
-	binding.alphaOnly = (atlas.GetPixelFormat() == GlyphAtlasTexture::PixelFormat::Alpha);
-	binding.sdf = (atlas.GetContentType() == GlyphAtlasTexture::ContentType::SDF);
 }
 
 void ShaderFontRenderer::ClearQueuedBatches()

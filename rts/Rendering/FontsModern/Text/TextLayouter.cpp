@@ -9,7 +9,9 @@
 #include <utility>
 #include <vector>
 
-#include "Rendering/FontsModern/Glyphs/GlyphAtlasCache.h"
+#include "Rendering/FontsModern/Glyphs/GlyphCacheCore.h"
+#include "Rendering/FontsModern/Glyphs/ShaderGlyphAtlasCache.h"
+#include "Rendering/FontsModern/Glyphs/SlugGlyphAtlasCache.h"
 #include "System/StringUtil.h"
 
 namespace {
@@ -663,15 +665,22 @@ LaidOutLine TextLayouter::PositionRuns(std::span<const ShapedRun> runs, const La
 					? glyphCache->GetGlyphByGlyphIndex(shapedGlyph.glyphKey.glyphIndex, shapedGlyph.face, shapedGlyph.sourceCodepoint)
 					: glyphCache->GetGlyphByCodepoint(shapedGlyph.glyphKey.codepoint);
 
-				glyph.atlasUV = glyphInfo.atlasUV;
-				glyph.outlineAtlasUV = glyphInfo.shadowAtlasUV;
-				glyph.slugFillInfo = glyphInfo.slugFillInfo;
-				glyph.slugOutlineInfo = glyphInfo.slugOutlineInfo;
-
 				if (glyph.shaped.metrics.Empty())
 					glyph.shaped.metrics = glyphInfo.GetMetrics();
 
-				glyph.visible = glyph.visible || glyphInfo.HasAtlasUV() || glyphInfo.HasSlugData();
+				if (shaderGlyphCache != nullptr) {
+					const ShaderGlyphPayload& shaderPayload = shaderGlyphCache->GetPayload(glyphInfo);
+					glyph.atlasUV = shaderPayload.atlasUV;
+					glyph.outlineAtlasUV = shaderPayload.shadowAtlasUV;
+				}
+
+				if (slugGlyphCache != nullptr) {
+					const SlugGlyphPayload& slugPayload = slugGlyphCache->GetPayload(glyphInfo);
+					glyph.slugFillInfo = slugPayload.fill;
+					glyph.slugOutlineInfo = slugPayload.outline;
+				}
+
+				glyph.visible = glyph.visible || !glyph.atlasUV.Empty() || !glyph.slugFillInfo.Empty();
 			}
 
 			runPenX += shapedGlyph.xAdvance * scale;

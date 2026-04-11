@@ -87,6 +87,30 @@ struct SlugGlyphInfo {
 
 
 /**
+ * Per-glyph payload for the bitmap-atlas renderer backend.
+ */
+struct ShaderGlyphPayload {
+	GlyphRect atlasUV;
+	GlyphRect shadowAtlasUV;
+
+	constexpr bool HasAtlasUV() const noexcept { return !atlasUV.Empty(); }
+	constexpr bool HasShadowAtlasUV() const noexcept { return !shadowAtlasUV.Empty(); }
+};
+
+
+/**
+ * Per-glyph payload for the Slug vector renderer backend.
+ */
+struct SlugGlyphPayload {
+	SlugGlyphInfo fill;
+	SlugGlyphInfo outline;
+
+	constexpr bool HasFill() const noexcept { return !fill.Empty(); }
+	constexpr bool HasOutline() const noexcept { return !outline.Empty(); }
+};
+
+
+/**
  * Per-glyph metrics independent from renderer/backend ownership.
  */
 struct GlyphMetrics {

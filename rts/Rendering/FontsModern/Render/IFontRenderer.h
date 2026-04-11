@@ -12,12 +12,12 @@
 #include "System/Matrix44f.h"
 
 class GlyphAtlasTexture;
-namespace fonts { class GlyphAtlasCache; }
 struct SColor;
 struct float3;
 struct float4;
 
 namespace fonts::render {
+enum class FontRendererBackend : std::uint8_t;
 
 /**
  * Small renderer-agnostic vertex payload for a prepared glyph quad.
@@ -37,12 +37,15 @@ struct PreparedGlyphQuad {
 
 	bool Empty() const noexcept
 	{
-		return position.Empty() || (atlasUV.Empty() && fillSlugInfo.Empty()) || !visible;
+		return (position.w == 0.0f) || (position.h == 0.0f) || (atlasUV.Empty() && fillSlugInfo.Empty()) || !visible;
 	}
 };
 
 /**
  * Renderer statistics useful for debugging and instrumentation.
+ *
+ * Texture counters reflect binding/resource refresh notifications from the
+ * caller for the active backend.
  */
 struct FontRendererStats {
 	std::size_t queuedPrimaryQuads = 0;
@@ -87,8 +90,9 @@ struct FontRenderState {
 /**
  * Renderer interface only.
  *
- * Implementations consume already-prepared quads or laid-out glyphs and own the
- * backend-specific GL state handling. They do not shape, wrap, or cache glyphs.
+ * Implementations consume already-prepared quads or laid-out glyphs plus
+ * explicit texture bindings, and own the backend-specific GL state needed to
+ * submit them. They do not shape, wrap, or cache glyphs.
  */
 class IFontRenderer {
 public:
@@ -105,11 +109,10 @@ public:
 
 	virtual void DrawQueued() = 0;
 
-	virtual void HandleGlyphCacheUpdate(fonts::GlyphAtlasCache& glyphCache, bool onlyUpload = false) = 0;
-
 	virtual void PushState(const FontRenderState& state) = 0;
 	virtual void PopState() = 0;
 
+	virtual FontRendererBackend GetBackend() const noexcept = 0;
 	virtual bool IsValid() const = 0;
 	virtual bool IsLegacy() const { return false; }
 

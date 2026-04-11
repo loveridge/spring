@@ -11,7 +11,7 @@
 #include <utility>
 
 #include "Rendering/Fonts/FontLogSection.h"
-#include "Rendering/FontsModern/Glyphs/GlyphAtlasCache.h"
+#include "FontRendererFactory.h"
 #include "Rendering/GL/VAO.h"
 #include "Rendering/GL/VBO.h"
 #include "Rendering/GlobalRendering.h"
@@ -257,11 +257,11 @@ void main()
 
 	float rawFillCoverage = clamp(SlugRender(fillRenderCoord, vFillBandTransform, vFillGlyphData), 0.0, 1.0);
 	float rawOuterCoverage = clamp(SlugRender(outlineRenderCoord, vOutlineBandTransform, vOutlineGlyphData), 0.0, 1.0);
-	float rawOutlineCoverage = clamp(rawOuterCoverage - rawFillCoverage, 0.0, 1.0);
 	float invGamma = 1.0 / max(uGamma, 0.0001);
 
 	float fillCoverage = pow(rawFillCoverage, invGamma);
-	float outlineCoverage = pow(rawOutlineCoverage, invGamma);
+	float outerCoverage = pow(rawOuterCoverage, invGamma);
+	float outlineCoverage = clamp(outerCoverage - fillCoverage, 0.0, 1.0);
 	float fillAlpha = clamp(vFillColor.a * fillCoverage, 0.0, 1.0);
 	float outlineAlpha = clamp(vOutlineColor.a * outlineCoverage, 0.0, 1.0);
 	float compositeAlpha = fillAlpha + outlineAlpha * (1.0 - fillAlpha);
@@ -500,11 +500,11 @@ void main()
 
 	float rawFillCoverage = clamp(SlugRender(fillRenderCoord, vFillBandTransform, vFillGlyphData), 0.0, 1.0);
 	float rawOuterCoverage = clamp(SlugRender(outlineRenderCoord, vOutlineBandTransform, vOutlineGlyphData), 0.0, 1.0);
-	float rawOutlineCoverage = clamp(rawOuterCoverage - rawFillCoverage, 0.0, 1.0);
 	float invGamma = 1.0 / max(uGamma, 0.0001);
 
 	float fillCoverage = pow(rawFillCoverage, invGamma);
-	float outlineCoverage = pow(rawOutlineCoverage, invGamma);
+	float outerCoverage = pow(rawOuterCoverage, invGamma);
+	float outlineCoverage = clamp(outerCoverage - fillCoverage, 0.0, 1.0);
 	float fillAlpha = clamp(vFillColor.a * fillCoverage, 0.0, 1.0);
 	float outlineAlpha = clamp(vOutlineColor.a * outlineCoverage, 0.0, 1.0);
 	float compositeAlpha = fillAlpha + outlineAlpha * (1.0 - fillAlpha);
@@ -754,33 +754,6 @@ void SlugFontRenderer::DrawQueued()
 		PopState();
 }
 
-void SlugFontRenderer::HandleGlyphCacheUpdate(fonts::GlyphAtlasCache& glyphCache, bool onlyUpload)
-{
-	GLint listIndex = 0;
-#ifndef HEADLESS
-	glGetIntegerv(GL_LIST_INDEX, &listIndex);
-#endif
-
-	if (createOptions.autoUploadTextures && listIndex == 0 && (onlyUpload || glyphCache.NeedsSlugUpload()))
-		glyphCache.UploadSlugTextures();
-
-	const auto textureInfo = glyphCache.GetSlugTextureInfo();
-	curveTextureBinding.textureId = textureInfo.curveTextureId;
-	curveTextureBinding.textureUnit = 0;
-	curveTextureBinding.width = textureInfo.curveTextureWidth;
-	curveTextureBinding.height = textureInfo.curveTextureHeight;
-
-	bandTextureBinding.textureId = textureInfo.bandTextureId;
-	bandTextureBinding.textureUnit = 1;
-	bandTextureBinding.width = textureInfo.bandTextureWidth;
-	bandTextureBinding.height = textureInfo.bandTextureHeight;
-
-	if (createOptions.enableStatistics) {
-		stats.primaryTextureUploads += 1;
-		stats.outlineTextureUploads += 1;
-	}
-}
-
 void SlugFontRenderer::PushState(const FontRenderState& state)
 {
 	stateStack.push_back(state);
@@ -797,6 +770,11 @@ void SlugFontRenderer::PopState()
 		if (createOptions.enableStatistics)
 			stats.statePops += 1;
 	}
+}
+
+FontRendererBackend SlugFontRenderer::GetBackend() const noexcept
+{
+	return FontRendererBackend::Slug;
 }
 
 FontRendererStats SlugFontRenderer::GetStats() const
@@ -816,6 +794,22 @@ bool SlugFontRenderer::IsValid() const
 #else
 	return (programResources.program != nullptr) && programResources.program->IsValid();
 #endif
+}
+
+void SlugFontRenderer::SetCurveTextureBinding(const TextureBinding& binding)
+{
+	curveTextureBinding = binding;
+
+	if (createOptions.enableStatistics)
+		stats.primaryTextureUploads += 1;
+}
+
+void SlugFontRenderer::SetBandTextureBinding(const TextureBinding& binding)
+{
+	bandTextureBinding = binding;
+
+	if (createOptions.enableStatistics)
+		stats.outlineTextureUploads += 1;
 }
 
 void SlugFontRenderer::EnsureInitialized()

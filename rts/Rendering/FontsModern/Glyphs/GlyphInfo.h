@@ -20,18 +20,12 @@ class FontFace;
  *  - no atlas allocator / renderer / wrapping dependencies here
  *
  * Notes:
- *  - atlas rectangles are stored separately for the primary glyph image and the
- *    optional shadow/outline image, mirroring current cache behavior
  *  - sourceCodepoint is retained for legacy Unicode-driven lookup, while
  *    glyphIndex is the stable face-local identifier used by shaping/raster
  *  - face is the owning face reference that produced this cached glyph
  */
 struct GlyphInfo {
 	GlyphRect bitmapBounds;      //!< Glyph bitmap quad bounds in font-local space.
-	GlyphRect atlasUV;           //!< Atlas coordinates/UV rect for the primary glyph.
-	GlyphRect shadowAtlasUV;     //!< Atlas coordinates/UV rect for shadow/outline pass.
-	SlugGlyphInfo slugFillInfo;  //!< Slug vector-render payload for the glyph fill.
-	SlugGlyphInfo slugOutlineInfo; //!< Slug vector-render payload for the glyph outline.
 
 	float advance   = 0.0f;      //!< Horizontal advance in font-local units.
 	float descender = 0.0f;      //!< Glyph descender in font-local units.
@@ -45,10 +39,6 @@ struct GlyphInfo {
 	constexpr bool HasGlyphIndex() const noexcept { return glyphIndex != 0; }
 	constexpr bool HasSourceCodepoint() const noexcept { return sourceCodepoint != 0; }
 	constexpr bool HasBitmap() const noexcept { return !bitmapBounds.Empty(); }
-	constexpr bool HasAtlasUV() const noexcept { return !atlasUV.Empty(); }
-	constexpr bool HasShadowAtlasUV() const noexcept { return !shadowAtlasUV.Empty(); }
-	constexpr bool HasSlugData() const noexcept { return !slugFillInfo.Empty(); }
-	constexpr bool HasSlugOutlineData() const noexcept { return !slugOutlineInfo.Empty(); }
 	bool HasFace() const noexcept { return static_cast<bool>(face); }
 
 	GlyphMetrics GetMetrics() const noexcept

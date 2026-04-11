@@ -16,7 +16,9 @@
 #include "TextShaper.h"
 
 namespace fonts {
-class GlyphAtlasCache;
+class GlyphCacheCore;
+class ShaderGlyphAtlasCache;
+class SlugGlyphAtlasCache;
 }
 
 namespace fonts::text {
@@ -115,17 +117,20 @@ struct MeasuredBreakFragment {
  *  - parse UTF-8 input into printable spans while recognizing Spring control codes
  *  - split spans into explicit lines and optional wrap words/segments
  *  - shape printable spans through TextShaper
- *  - ensure shaped glyphs exist in GlyphAtlasCache
+ *  - ensure shaped glyphs exist in GlyphCacheCore
+ *  - attach backend-specific payloads from optional atlas/vector caches
  *  - compute text measurements and aligned line positions
  *  - emit positioned glyphs for render backends
  *
  * Non-responsibilities:
  *  - GL state ownership or draw submission
- *  - glyph raster cache ownership policy beyond using GlyphAtlasCache
+ *  - owning renderer resources or GPU uploads
  */
 class TextLayouter {
 public:
-	using GlyphCachePtr = std::shared_ptr<GlyphAtlasCache>;
+	using GlyphCachePtr = std::shared_ptr<GlyphCacheCore>;
+	using ShaderGlyphCachePtr = std::shared_ptr<ShaderGlyphAtlasCache>;
+	using SlugGlyphCachePtr = std::shared_ptr<SlugGlyphAtlasCache>;
 
 public:
 	TextLayouter() = default;
@@ -144,6 +149,14 @@ public:
 	void SetGlyphCache(GlyphCachePtr cache) { glyphCache = std::move(cache); }
 	const GlyphCachePtr& GetGlyphCache() const noexcept { return glyphCache; }
 	bool HasGlyphCache() const noexcept { return static_cast<bool>(glyphCache); }
+
+	void SetShaderGlyphCache(ShaderGlyphCachePtr cache) { shaderGlyphCache = std::move(cache); }
+	const ShaderGlyphCachePtr& GetShaderGlyphCache() const noexcept { return shaderGlyphCache; }
+	bool HasShaderGlyphCache() const noexcept { return static_cast<bool>(shaderGlyphCache); }
+
+	void SetSlugGlyphCache(SlugGlyphCachePtr cache) { slugGlyphCache = std::move(cache); }
+	const SlugGlyphCachePtr& GetSlugGlyphCache() const noexcept { return slugGlyphCache; }
+	bool HasSlugGlyphCache() const noexcept { return static_cast<bool>(slugGlyphCache); }
 
 	TextMeasurement MeasureText(std::string_view utf8, const LayoutOptions& options = {}) const;
 	TextLayout LayoutText(std::string_view utf8, const LayoutOptions& options = {}) const;
@@ -202,6 +215,8 @@ protected:
 private:
 	TextShaperPtr textShaper;
 	GlyphCachePtr glyphCache;
+	ShaderGlyphCachePtr shaderGlyphCache;
+	SlugGlyphCachePtr slugGlyphCache;
 };
 
 } // namespace fonts::text
