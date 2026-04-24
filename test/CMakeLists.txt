@@ -551,6 +551,25 @@ endif()
 	# target_include_directories(test_${test_name} PRIVATE ${ENGINE_SOURCE_DIR}/lib/)
 
 ################################################################################
+### BenchmarkMimalloc
+	set(test_name Mimalloc)
+	set(test_src
+			"${CMAKE_CURRENT_SOURCE_DIR}/other/benchmarkMimalloc.cpp"
+			${test_Common_sources}
+		)
+	set(test_libs
+			""
+		)
+	if (USE_MIMALLOC)
+		list(APPEND test_libs mimalloc-static)
+	endif()
+
+	add_spring_test(${test_name} "${test_src}" "${test_libs}" "")
+	if (USE_MIMALLOC)
+		target_compile_definitions(test_${test_name} PRIVATE USE_MIMALLOC)
+	endif()
+
+################################################################################
 
 
 add_subdirectory(headercheck)

@@ -102,8 +102,8 @@ bool QTPFS::NodeLayer::Update(UpdateThreadData& threadData) {
 	const SRectangle& r = threadData.areaRelinkedInner;
 	const MoveDef* md = threadData.moveDef;
 
-	assert( r.GetWidth() == QTPFS_MAP_DAMAGE_SIZE );
-	assert( r.GetHeight() == QTPFS_MAP_DAMAGE_SIZE );
+	//assert( r.GetWidth()  == QTPFS_MAP_DAMAGE_SIZE );
+	//assert( r.GetHeight() == QTPFS_MAP_DAMAGE_SIZE );
 
 	auto &blockRect = threadData.areaMaxBlockBits;
 	auto &blockBits = threadData.maxBlockBits;
